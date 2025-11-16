@@ -1,0 +1,31 @@
+{
+  "rewrites": [
+    { "source": "/key/:key*", "destination": "/" },
+    { "source": "/cancel", "destination": "/" },
+    { "source": "/dashboard", "destination": "/" },
+    { "source": "/profile", "destination": "/" },
+    { "source": "/success", "destination": "/" },
+    { "source": "/s/:hash", "destination": "/" },
+
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/_next/(.*)", "destination": "/_next/$1" },
+    { "source": "/static/(.*)", "destination": "/static/$1" },
+
+    { "source": "/verifier", "destination": "/verifier.html" },
+    { "source": "/verifier.html", "destination": "/verifier.html" },
+    { "source": "/verifier.inline.html", "destination": "/verifier.inline.html" },
+    { "source": "/verifier-core.js", "destination": "/verifier-core.js" },
+
+    { "source": "/(.*)", "destination": "/" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)\\.(js|css|png|jpg|svg|ico|woff2?)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ],
+  "cleanUrls": true,
+  "trailingSlash": false
+}
