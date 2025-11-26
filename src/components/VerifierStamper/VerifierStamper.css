@@ -930,7 +930,7 @@ dialog.glass-modal.fullscreen[data-open="true"] {
   border: 1px solid transparent;
   flex: 0 0 auto;
 
-  font-size: 0.68rem;       /* keep readable */
+  font-size: 0.58rem;       /* keep readable */
   line-height: 1.05;        /* tighter vertical */
 }
 
