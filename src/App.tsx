@@ -233,8 +233,8 @@ function AppChrome() {
                     seal, one origin.
                   </div>
                   <div className="nav-foot__line">
-                    Sigil-Glyphs constitute lawful tender in the Realm of
-                    Kairos. Redeemable upon verification.
+                    Sigil-Glyphs are legal tender in Kairos. 
+                    Redeemable upon verifikation.
                   </div>
                 </div>
               </nav>
