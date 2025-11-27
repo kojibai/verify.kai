@@ -1666,6 +1666,29 @@ dialog.glass-modal.fullscreen[data-open="true"] {
     transform: scale(1.05);
   }
 }
+.brand-lockup .glyph{
+  animation: glyphBreath var(--kai-pulse) ease-in-out infinite;
+  will-change: transform, filter, box-shadow;
+}
+
+@keyframes glyphBreath{
+  0%,100%{
+    transform: translateZ(0) scale(1);
+    filter: brightness(.92) saturate(1.05);
+    box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  50%{
+    transform: translateZ(0) scale(1.06);
+    filter: brightness(1.08) saturate(1.22);
+    box-shadow:
+      0 0 34px color-mix(in srgb, var(--accent) 50%, transparent),
+      0 0 22px color-mix(in srgb, var(--accent-2) 35%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .brand-lockup .glyph{ animation: none; }
+}
 
 
 /* Neon badge pill (no tooltip) */
