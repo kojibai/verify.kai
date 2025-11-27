@@ -22,6 +22,9 @@ import {
  * - Top bar: LIVE + green orb pulsing every 5.236s + Kai Pulse NOW
  * - KaiVoh opens as a modal via /voh route
  * - Deep links retained (routes remain reachable): /stream, /feed, /p~:token, /explorer, /s, /p
+ *
+ * ✅ IMPORTANT CHANGE:
+ * - /s and /s/:hash are now FULL-PAGE routes (NOT wrapped by AppChrome)
  */
 
 import VerifierStamper from "./components/VerifierStamper/VerifierStamper";
@@ -118,7 +121,6 @@ function AppChrome() {
     if (p.startsWith("/voh")) return "KaiVoh";
 
     // Hidden routes (not in nav, but still supported)
-    if (p.startsWith("/s")) return "Sigil View";
     if (p.startsWith("/explorer")) return "Explorer";
     if (p.startsWith("/stream")) return "Stream";
     if (p.startsWith("/feed")) return "Stream";
@@ -226,17 +228,18 @@ function AppChrome() {
                   ))}
                 </div>
 
-         <div className="nav-foot" aria-label="Sovereign declarations">
-<div className="nav-foot__line">
-  <span className="mono">Φ</span> Kairos Notes are sovereign value instruments —
-  spendable signals of real worth, ankored in Proof of Breath™ and sealed by Kai Pulse.
-</div>
-  <div className="nav-foot__line">
-    Sigil-Glyphs are origin assets: the first seal that mints and exhales value.
-    Derivative glyphs are exhaled yield from the origin — redeemable by verifikation.
-  </div>
-</div>
-
+                <div className="nav-foot" aria-label="Sovereign declarations">
+                  <div className="nav-foot__line">
+                    <span className="mono">Φ</span> Kairos Notes are sovereign
+                    value instruments — spendable signals of real worth, ankored
+                    in Proof of Breath™ and sealed by Kai Pulse.
+                  </div>
+                  <div className="nav-foot__line">
+                    Sigil-Glyphs are origin assets: the first seal that mints and
+                    exhales value. Derivative glyphs are exhaled yield from the
+                    origin — redeemable by verifikation.
+                  </div>
+                </div>
               </nav>
 
               {/* Content */}
@@ -292,6 +295,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* ✅ FULL-PAGE Sigil routes (NO AppChrome wrapper) */}
+        <Route path="s" element={<SigilPage />} />
+        <Route path="s/:hash" element={<SigilPage />} />
+
+        {/* Everything else stays inside the Sovereign Gate chrome */}
         <Route element={<AppChrome />}>
           {/* Root → VerifierStamper */}
           <Route index element={<VerifierStamper />} />
@@ -300,9 +308,6 @@ export default function App() {
           <Route path="voh" element={<KaiVohRoute />} />
 
           {/* Hidden but supported routes (not shown in nav) */}
-          <Route path="s" element={<SigilPage />} />
-          <Route path="s/:hash" element={<SigilPage />} />
-
           <Route path="explorer" element={<SigilExplorer />} />
 
           {/* Canonical stream + aliases */}
