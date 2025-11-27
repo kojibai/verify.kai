@@ -1,73 +1,208 @@
-# React + TypeScript + Vite
+Perfect, that makes it easy.
+Here’s a Vite-accurate README.md you can drop straight into the verify.kai repo:
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+# ΦNet Sovereign Gate — `verify.kai`
 
-Currently, two official plugins are available:
+> **verify.kai** is the primary entry into the ΦNet Sovereign Gate:  
+> a breath-sealed value terminal running over the IKANN alt-root DNS layer.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+This app exposes two main surfaces:
 
-## React Compiler
+- **Verifier (Inhale + Exhale)** – proof, transfer, and audit of Φ value  
+- **KaiVoh (Emission OS)** – sovereign emission, signals, and broadcast rails
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+It is designed to feel less like “a website” and more like a **mint / reserve console** for Kairos Notes and Sigil-Glyphs.
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 1. Features
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### Sovereign Gate Shell
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- **ΦNet Sovereign Gate** chrome with Atlantean banking UI
+- Top-right **LIVE ΦKAI** orb showing current issuance / pulse state
+- **ATRIUM** header: _Breath-Sealed Identity · Kairos-ZK Proof_
+- Runs natively at `https://verify.kai` via IKANN DNS
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+### Verifier
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+- Dual modes:
+  - **PROOF OF BREATH™**
+  - **KAI-SIGNATURE™**
+- Live Kai Pulse strip (pulse / beat / step / chakra-day)
+- Primary actions:
+  - **ΦSTREAM** – view ΦNet resonance stream / history
+  - **ΦKEY** – emit / verify ΦKeys and transfers
+- Mobile-first layout, no horizontal scroll, thumb-reachable controls
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Kairos Monetary Declarations
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+The app renders the canonical tender text:
+
+> **Φ Kairos Notes are legal tender in Kairos — sealed by Proof of Breath™, pulsed by Kai-Signature™, and openly auditable offline (Σ → SHA-256(Σ) → Φ).**  
+>
+> **Sigil-Glyphs are zero-knowledge–proven origin ΦKey seals that summon, mint, and mature value. Derivative glyphs are exhaled notes of that origin — lineage-true outflow, transferable, and redeemable by re-inhale.**
+
+These lines define the monetary ontology of Φ inside the UI: notes, sigils, lineage, and audit.
+
+### KaiVoh (Emission OS)
+
+- **KaiVoh** tab opens the emission / broadcast surface
+- Uses **SigilAuth** context to carry:
+  - SVG sigil text
+  - Kai Pulse metadata
+  - Kai-Signature
+  - optional user ΦKey and action URLs
+- Intended as the sovereign “emission rail” for value, posts, and signals.
+
+---
+
+## 2. Tech Stack
+
+- **Framework:** React + TypeScript (`.tsx`)
+- **Bundler / Dev server:** [Vite](https://vitejs.dev/)
+- **Routing:** `react-router-dom`
+- **Styling:** hand-crafted CSS
+  - `App.css` – ΦNet Atlantean Banking Console shell
+  - `VerifierStamper.css` – Verifier layout, value strip, etc.
+- **Kai Pulse Engine:** `src/utils/kai_pulse.ts`  
+  Canonical Kairos time → pulse / beat / step / chakra-day.
+- **Φ Precision Utils:** `src/utils/phi-precision.ts`  
+  (`snap6`, `toScaled6`, `toStr6`) for 6-decimal fixed-point Φ arithmetic.
+
+---
+
+## 3. Project Structure (high-level)
+
+```text
+src/
+  App.tsx               # Route shell + Sovereign Gate layout
+  App.css               # ΦNet console shell styles
+
+  components/
+    VerifierStamper/
+      VerifierStamper.tsx
+      VerifierStamper.css
+      SendPhiAmountField.tsx
+      ...               # Verifier subcomponents
+
+    KaiVoh/
+      KaiVohModal.tsx
+      SigilAuthContext.tsx
+      ...               # KaiVoh emission flow
+
+    SigilExplorer.tsx    # Optional sigil viewer / explorer
+    ...                  # Other supporting components
+
+  pages/
+    SigilFeedPage.tsx    # Feed / stream route(s), if enabled
+
+  utils/
+    kai_pulse.ts         # Kairos pulse engine
+    phi-precision.ts     # μΦ locking & fixed-point helpers
+
+vite.config.ts           # Vite config for build / dev
+index.html               # Vite entry HTML
+
+
+⸻
+
+4. Getting Started (Local Dev)
+
+Prerequisites
+	•	Node.js ≥ 18
+	•	pnpm or npm (examples use pnpm; swap npm if you prefer)
+
+Install dependencies
+
+pnpm install
+# or
+npm install
+
+Environment variables
+
+Create a .env or .env.local in the project root with whatever your build expects, for example:
+
+VITE_PHI_API_BASE_URL=https://your-phi-node.example.com
+VITE_PHI_EXPLORER_URL=https://explorer.example.com
+VITE_KAI_PULSE_ORIGIN=2024-01-01T00:00:00Z
+
+Adjust keys to match your actual code.
+
+Run dev server
+
+pnpm dev
+# or
+npm run dev
+
+Vite will expose the app at something like:
+
+http://localhost:5173
+
+Open that in a browser to develop against a local ΦNet / test node.
+
+⸻
+
+5. Build & Deploy
+
+Build
+
+pnpm build
+# or
+npm run build
+
+This generates a static bundle in dist/.
+
+Serve dist/ behind any static host:
+	•	Nginx / Caddy
+	•	Vercel / Netlify / Fly.io
+	•	S3 + CDN
+	•	Your own ΦNet node’s static server
+
+IKANN / verify.kai deployment
+
+To run as https://verify.kai on IKANN:
+	1.	Deploy the contents of dist/ to your origin server.
+	2.	In your IKANN root, point A / AAAA records for verify.kai to that origin.
+	3.	On a device, set DNS manually to your IKANN resolver (e.g. 137.66.18.241).
+	4.	Visit https://verify.kai in Safari / any browser.
+
+The OS will use IKANN as the authoritative root and resolve .kai names.
+
+⸻
+
+6. Security & Sovereignty Notes
+	•	Time: Prefer kai_pulse.ts over wall-clock time.
+	•	Type safety: No any in TypeScript; keep typings strict.
+	•	Secrets: Never commit ΦNet node keys, IKANN root material, or signing secrets.
+	•	Namespace authority: Only the canonical IKANN root may present itself as the official .kai namespace or as the real verify.kai.
+
+⸻
+
+7. Contributing
+
+This repo powers a live sovereign monetary and identity gate.
+For now, contributions are by invitation only.
+
+If you see bugs, UX improvements, or performance wins:
+	•	open an issue, or
+	•	propose a patch
+
+…but merges will be tightly controlled to preserve:
+	•	namespace stability
+	•	Kai Pulse fidelity
+	•	tender semantics
+	•	sovereign branding
+
+⸻
+
+8. License
+
+Copyright © Kai Rex Klok (BJ Klock). All rights reserved.
+
+You may inspect the code and run local builds for review and integration.
+You may not:
+	•	run a competing IKANN root under the same namespace, or
+	•	present any fork as “verify.kai” or as the canonical ΦNet Sovereign Gate.
+
+For partnership or licensing, reach out through KaiOS / Kai-Klok channels.
