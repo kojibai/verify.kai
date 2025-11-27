@@ -171,8 +171,126 @@ You may not:
 
 For partnership or licensing, reach out through KaiOS / Kai-Klok channels.
 
+⸻
 
-## 8. Project Structure (high-level)
+
+## 8. Connecting to IKANN DNS (Accessing `verify.kai`)
+
+IKANN is the sovereign alt-root naming layer that resolves the `.kai` domain.  
+To access `https://verify.kai` on any device, simply point your DNS to the IKANN resolver.
+
+No apps, no VPN, no extensions required.
+
+### iPhone / iPad (iOS)
+
+1. Open **Settings**  
+2. Tap **Wi-Fi**  
+3. Tap the **(i)** icon next to your connected network  
+4. Scroll to **DNS** → tap **Configure DNS**  
+5. Select **Manual**  
+6. Remove any existing servers  
+7. Add the IKANN resolver:
+
+137.66.18.241
+
+8. Tap **Save**  
+9. Open Safari → go to:
+
+https://verify.kai
+
+You are now on the Kai-root internet.
+
+---
+
+### macOS (MacBook / iMac)
+
+1. Open **System Settings**  
+2. Go to **Network**  
+3. Select your active network (Wi-Fi or Ethernet)  
+4. Click **Details**  
+5. Scroll to **DNS**  
+6. Remove existing DNS servers  
+7. Add:
+
+137.66.18.241
+
+8. Click **OK → Apply**  
+9. Visit:
+
+https://verify.kai
+
+---
+
+### Android
+
+1. Open **Settings**  
+2. Tap **Network & Internet**  
+3. Tap **Internet**  
+4. Tap your Wi-Fi network  
+5. Tap the **pencil** or **edit** icon  
+6. Change **IP settings** to **Static**  
+7. Enter the IKANN DNS as **DNS 1**:
+
+137.66.18.241
+
+8. Save  
+9. Open Chrome and visit:
+
+https://verify.kai
+
+---
+
+### Windows
+
+1. Open **Control Panel**  
+2. Go to **Network and Internet → Network and Sharing Center**  
+3. Click your active connection  
+4. Click **Properties**  
+5. Select **Internet Protocol Version 4 (TCP/IPv4)** → **Properties**  
+6. Choose **Use the following DNS server addresses**  
+7. Enter:
+
+Preferred DNS: 137.66.18.241
+Alternate DNS: (leave blank)
+
+8. Save  
+9. Visit `https://verify.kai` in your browser.
+
+---
+
+### Router (Global for Entire Network)
+
+1. Log into your router admin panel  
+2. Find **LAN DNS**, **WAN DNS**, or **Internet DNS** settings  
+3. Set **Primary DNS** to:
+
+137.66.18.241
+
+4. Save → Restart router  
+5. All devices on your network can now resolve `*.kai`.
+
+---
+
+### Notes
+
+- IKANN is a full alt-root resolver; `.kai` domains will resolve natively.
+- If a domain is not in the `.kai` namespace, IKANN transparently forwards queries to upstream authoritative DNS.
+- Removing the DNS entry instantly returns your device to the standard ICANN root.
+
+---
+
+### Test It
+
+After setting DNS, open:
+
+https://verify.kai
+
+If the Sovereign Gate loads with the ΦNet interface, IKANN is active and your device is running on the Kai-root internet.
+
+
+⸻
+
+## 9. Project Structure (high-level)
 
 ```text
 src/
