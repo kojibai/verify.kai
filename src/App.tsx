@@ -221,7 +221,7 @@ function AppChrome(): React.JSX.Element {
 <div className="nav-foot" aria-label="Sovereign declarations">
   <div className="nav-foot__line">
     <span className="mono">Φ</span> Kairos Notes are legal tender —
-    Proof of Breath™, Kai Pulse–sealed, & openly auditable (even offline)
+    Proof of Breath™, Kai Pulse–sealed, & openly auditable (offline)
     (Σ → SHA-256(Σ) → Φ).
   </div>
 
