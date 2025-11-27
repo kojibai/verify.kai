@@ -120,12 +120,9 @@ const SendPhiAmountField: React.FC<Props> = ({
     }
   };
 
+  // Child (upload) view: no amount field
   if (isChild) {
-    return (
-      <>
-        <ErrorToast msg={toast} />
-      </>
-    );
+    return <ErrorToast msg={toast} />;
   }
 
   return (
@@ -134,7 +131,7 @@ const SendPhiAmountField: React.FC<Props> = ({
         className="phi-send-field"
         data-state={focused ? "focus" : "idle"}
       >
-        {/* label up top */}
+        {/* Label up top */}
         <div className="phi-send-label">
           <span className="label-main">Exhale Amount</span>
           <span className="label-sub">
@@ -143,7 +140,9 @@ const SendPhiAmountField: React.FC<Props> = ({
           </span>
         </div>
 
-        {/* ONE INNER ROW: input + toggle + conversion */}
+        {/* ONE INNER ROW:
+            [Φ input capsule]  +  [side column: converted amount (top) + unit toggle (bottom)]
+        */}
         <div className="phi-send-row">
           {/* Glass capsule input */}
           <div className="phi-send-inputShell" aria-live="polite">
@@ -169,42 +168,45 @@ const SendPhiAmountField: React.FC<Props> = ({
             <i aria-hidden="true" className="phi-input-glow" />
           </div>
 
-          {/* Unit switch — same row */}
-          <div
-            role="tablist"
-            aria-label="Amount unit"
-            className="phi-mode-toggle seg"
-          >
-            <button
-              role="tab"
-              aria-selected={amountMode === "USD"}
-              className={`phi-mode-btn ${
-                amountMode === "USD" ? "is-active" : ""
-              }`}
-              onClick={() => setAmountMode("USD")}
-              title="Enter in dollars"
+          {/* Side column: converted amount ON TOP of the unit selector */}
+          <div className="phi-unit-column">
+            {/* Live conversion readout */}
+            <div
+              className="phi-conv-right convert-readout"
+              aria-live="polite"
             >
-              $
-            </button>
-            <button
-              role="tab"
-              aria-selected={amountMode === "PHI"}
-              className={`phi-mode-btn ${
-                amountMode === "PHI" ? "is-active" : ""
-              }`}
-              onClick={() => setAmountMode("PHI")}
-              title="Enter in Φ"
-            >
-              Φ
-            </button>
-          </div>
+              {convDisplayRight}
+            </div>
 
-          {/* Live conversion readout — same row */}
-          <div
-            className="phi-conv-right convert-readout"
-            aria-live="polite"
-          >
-            {convDisplayRight}
+            {/* Unit switch — below the amount */}
+            <div
+              role="tablist"
+              aria-label="Amount unit"
+              className="phi-mode-toggle seg"
+            >
+              <button
+                role="tab"
+                aria-selected={amountMode === "USD"}
+                className={`phi-mode-btn ${
+                  amountMode === "USD" ? "is-active" : ""
+                }`}
+                onClick={() => setAmountMode("USD")}
+                title="Enter in dollars"
+              >
+                $
+              </button>
+              <button
+                role="tab"
+                aria-selected={amountMode === "PHI"}
+                className={`phi-mode-btn ${
+                  amountMode === "PHI" ? "is-active" : ""
+                }`}
+                onClick={() => setAmountMode("PHI")}
+                title="Enter in Φ"
+              >
+                Φ
+              </button>
+            </div>
           </div>
         </div>
       </div>

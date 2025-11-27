@@ -1,43 +1,44 @@
 /* SendPhiAmountField.css
    Atlantean Decimal Gate
-   This is the small slab where the Sovereign declares the Φ amount.
-
-   Visual goals:
-   - same divine glass language as ModalFooter.css
-   - tight, no wasted vertical space
-   - input looks like a calibrated instrument, not a chat box
+   Sovereign Φ exhale instrument — one row, zero waste, full glow.
 */
 
+/* ─────────────────────────────────────────────
+   Root field
+   ───────────────────────────────────────────── */
+
 .phi-send-field {
-  /* stretch, but leave horizontal room for Send + Attach buttons */
   display: flex;
   flex-direction: column;
   gap: 4px;
 
   flex: 1 1 auto;
   width: 100%;
-  max-width: calc(100% - 120px);  /* ~ space for two round buttons */
   min-width: 0;
+
+  /* Reserve lane for Send + Attach in the outer footer row */
+  max-width: calc(100% - 120px); /* ~ room for two round buttons */
 
   isolation: isolate;
   color: var(--ink);
 }
 
 /* ─────────────────────────────────────────────
-   Single row INSIDE the field:
-   label (above) + [input capsule] + [unit toggle] + [conversion]
+   Inner row: [Φ input capsule] + [side column]
+   side column = converted amount (top) + unit toggle (bottom)
    ───────────────────────────────────────────── */
 
 .phi-send-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: nowrap;      /* keep the internal row on one line */
+  flex-wrap: nowrap;          /* never wrap; keep a single breathing row */
   width: 100%;
   min-width: 0;
 }
 
-/* label stack (stays at top, not in the flex squeeze war) */
+/* label stack (sits above the row) */
+
 .phi-send-label {
   display: flex;
   flex-direction: column;
@@ -75,7 +76,10 @@
   max-width: 100%;
 }
 
-/* input shell = glass capsule */
+/* ─────────────────────────────────────────────
+   Φ input capsule — glass instrument
+   ───────────────────────────────────────────── */
+
 .phi-send-inputShell {
   position: relative;
   display: flex;
@@ -97,10 +101,11 @@
   padding: 10px 12px;
   min-height: 44px;
   min-width: 0;
-  flex: 1 1 auto;            /* main flexible element that shrinks */
+  flex: 1 1 auto;            /* main flexible element that shrinks first */
 }
 
 /* prefix "Φ" glyph */
+
 .phi-prefix {
   font-size: 0.8rem;
   font-weight: 600;
@@ -113,6 +118,7 @@
 }
 
 /* the sacred input itself */
+
 .phi-send-input {
   appearance: none;
   background: transparent;
@@ -133,7 +139,8 @@
   caret-color: color-mix(in srgb, var(--accent) 90%, white 10%);
 }
 
-/* remove iOS number spinner ghosts on some browsers */
+/* remove iOS number spinner ghosts */
+
 .phi-send-input::-webkit-outer-spin-button,
 .phi-send-input::-webkit-inner-spin-button {
   appearance: none;
@@ -141,6 +148,7 @@
 }
 
 /* glowing underbar, breath-synced */
+
 .phi-input-glow {
   position: absolute;
   left: 10px;
@@ -161,7 +169,35 @@
   animation: phiInputBreath 5.236s ease-in-out infinite;
 }
 
-/* Unit toggle (same row) */
+/* ─────────────────────────────────────────────
+   Side column: converted amount (top) + unit toggle (bottom)
+   ───────────────────────────────────────────── */
+
+.phi-unit-column {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+/* Live conversion text */
+
+.phi-conv-right,
+.convert-readout {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--ink);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Unit toggle */
+
 .phi-mode-toggle {
   display: inline-flex;
   flex: 0 0 auto;
@@ -210,20 +246,10 @@
   transform: translateY(0.5px) scale(.97);
 }
 
-/* Live conversion on same row */
-.phi-conv-right,
-.convert-readout {
-  flex: 0 0 auto;
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  color: var(--ink);
-  max-width: 28%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* ─────────────────────────────────────────────
+   Breath animation
+   ───────────────────────────────────────────── */
 
-/* breathing aura under input line, same pulse period as footer */
 @keyframes phiInputBreath {
   0% {
     opacity: 0.4;
@@ -242,7 +268,10 @@
   }
 }
 
-/* compact tweak for ultra-thin screens */
+/* ─────────────────────────────────────────────
+   Compact tweak for ultra-thin screens
+   ───────────────────────────────────────────── */
+
 @media (max-width: 380px) {
   .phi-send-inputShell {
     padding: 8px 10px;
@@ -270,7 +299,10 @@
   }
 }
 
-/* ——— Official ephemeral error toast ——— */
+/* ─────────────────────────────────────────────
+   Official ephemeral error toast
+   ───────────────────────────────────────────── */
+
 .phi-error-toast {
   position: fixed;
   left: 50%;
@@ -331,6 +363,6 @@
 }
 
 @keyframes phiToastIn {
-  from { transform: translate(-50%, 8px); opacity: 0 }
-  to   { transform: translate(-50%, 0);   opacity: 1 }
+  from { transform: translate(-50%, 8px); opacity: 0; }
+  to   { transform: translate(-50%, 0);   opacity: 1; }
 }
