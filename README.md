@@ -177,7 +177,7 @@ For partnership or licensing, reach out through KaiOS / Kai-Klok channels.
 ## 8. Connecting to IKANN DNS (Accessing `verify.kai`)
 
 IKANN is the sovereign alt-root naming layer that resolves the `.kai` domain.  
-To access `https://verify.kai` on any device, simply point your DNS to the IKANN resolver.
+To access `http://verify.kai` on any device, simply point your DNS to the IKANN resolver.
 
 No apps, no VPN, no extensions required.
 
@@ -196,7 +196,7 @@ No apps, no VPN, no extensions required.
 8. Tap **Save**  
 9. Open Safari → go to:
 
-https://verify.kai
+http://verify.kai
 
 You are now on the Kai-root internet.
 
@@ -217,7 +217,7 @@ You are now on the Kai-root internet.
 8. Click **OK → Apply**  
 9. Visit:
 
-https://verify.kai
+http://verify.kai
 
 ---
 
@@ -236,7 +236,7 @@ https://verify.kai
 8. Save  
 9. Open Chrome and visit:
 
-https://verify.kai
+http://verify.kai
 
 ---
 
@@ -254,7 +254,7 @@ Preferred DNS: 137.66.18.241
 Alternate DNS: (leave blank)
 
 8. Save  
-9. Visit `https://verify.kai` in your browser.
+9. Visit `http://verify.kai` in your browser.
 
 ---
 
@@ -283,7 +283,7 @@ Alternate DNS: (leave blank)
 
 After setting DNS, open:
 
-https://verify.kai
+http://verify.kai
 
 If the Sovereign Gate loads with the ΦNet interface, IKANN is active and your device is running on the Kai-root internet.
 
