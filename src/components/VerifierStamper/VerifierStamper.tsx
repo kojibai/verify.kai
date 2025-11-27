@@ -1265,17 +1265,16 @@ const VerifierStamperInner: React.FC = () => {
   ───────────────────────────────────────────────────────────────── */
   const [chartOpen, setChartOpen] = useState(false);
   const [chartFocus, setChartFocus] = useState<"phi" | "usd">("phi");
-// force a remount when opening/switching focus so ResponsiveContainer never measures at 0
-const [chartReflowKey, setChartReflowKey] = useState(0);
-const openChartPopover = useCallback((focus: "phi" | "usd") => {
-  setChartFocus(focus);
-  setChartOpen(true);
-  setChartReflowKey((k) => k + 1);
-}, []);
-useEffect(() => {
-  if (chartOpen) setChartReflowKey((k) => k + 1);
-}, [chartOpen, chartFocus]);
-
+  // force a remount when opening/switching focus so ResponsiveContainer never measures at 0
+  const [chartReflowKey, setChartReflowKey] = useState(0);
+  const openChartPopover = useCallback((focus: "phi" | "usd") => {
+    setChartFocus(focus);
+    setChartOpen(true);
+    setChartReflowKey((k) => k + 1);
+  }, []);
+  useEffect(() => {
+    if (chartOpen) setChartReflowKey((k) => k + 1);
+  }, [chartOpen, chartFocus]);
 
   const closeChartPopover = useCallback(() => {
     setChartOpen(false);
@@ -1456,8 +1455,8 @@ useEffect(() => {
 
         const indexV14 = updated.hardenedTransfers?.length ?? 0;
         prevHeadV14 = await expectedPrevHeadRootV14(updated, indexV14);
-        const nonce = updated.transferNonce!;
         transferLeafHashSend = await hashTransferSenderSide(transfer);
+        const nonce = updated.transferNonce!;
 
         const mod = (await import("./sigilUtils")) as typeof import("./sigilUtils");
         const msg = mod.buildSendMessageV14(updated, {
@@ -1755,161 +1754,178 @@ useEffect(() => {
 
   const { used: childUsed, expired: childExpired } = useMemo(() => getChildLockInfo(meta, pulseNow), [meta, pulseNow]);
   const parentOpenExp = useMemo(() => getParentOpenExpiry(meta, pulseNow).expired, [meta, pulseNow]);
-function useRollingChartSeries({
-  seriesKey,
-  sampleMs,
-  valuePhi,
-  usdPerPhi,
-  maxPoints = 2048,
-  snapKey,
-}: {
-  seriesKey: string;
-  sampleMs: number;
-  valuePhi: number;
-  usdPerPhi: number;
-  maxPoints?: number;
-  snapKey?: number;
-}) {
-  const [data, setData] = React.useState<ChartPoint[]>([]);
-  const dataRef = React.useRef<ChartPoint[]>([]);
-  const vRef = React.useRef(valuePhi);
-  const fxRef = React.useRef(usdPerPhi);
 
-  // keep latest values in refs
-  React.useEffect(() => {
-    if (Number.isFinite(valuePhi)) vRef.current = valuePhi;
-  }, [valuePhi]);
+  function useRollingChartSeries({
+    seriesKey,
+    sampleMs,
+    valuePhi,
+    usdPerPhi,
+    maxPoints = 2048,
+    snapKey,
+  }: {
+    seriesKey: string;
+    sampleMs: number;
+    valuePhi: number;
+    usdPerPhi: number;
+    maxPoints?: number;
+    snapKey?: number;
+  }) {
+    const [data, setData] = React.useState<ChartPoint[]>([]);
+    const dataRef = React.useRef<ChartPoint[]>([]);
+    const vRef = React.useRef(valuePhi);
+    const fxRef = React.useRef(usdPerPhi);
 
-  React.useEffect(() => {
-    if (Number.isFinite(usdPerPhi) && usdPerPhi > 0) fxRef.current = usdPerPhi;
-  }, [usdPerPhi]);
+    // keep latest values in refs
+    React.useEffect(() => {
+      if (Number.isFinite(valuePhi)) vRef.current = valuePhi;
+    }, [valuePhi]);
 
-  const snapNow = React.useCallback(() => {
-    const p = kaiPulseNow();
-    const val = Number.isFinite(vRef.current) ? vRef.current : 0;
-    const fx = Number.isFinite(fxRef.current) && fxRef.current > 0 ? fxRef.current : 0;
+    React.useEffect(() => {
+      if (Number.isFinite(usdPerPhi) && usdPerPhi > 0) fxRef.current = usdPerPhi;
+    }, [usdPerPhi]);
 
-    const prev = dataRef.current;
-    if (!prev.length) {
-      const seed: ChartPoint[] = [
-        { i: p - 1, value: val, fx } as any,
-        { i: p, value: val, fx } as any,
-      ];
-      dataRef.current = seed;
-      setData(seed);
-      return;
-    }
-
-    const last = prev[prev.length - 1] as any;
-    let next: ChartPoint[];
-
-    if (last?.i === p) {
-      // update current pulse point immediately
-      next = [...prev.slice(0, -1), { ...last, value: val, fx } as any];
-    } else if (typeof last?.i === "number" && last.i < p) {
-      // pulse advanced: append
-      next = [...prev, { i: p, value: val, fx } as any];
-    } else {
-      // weird ordering: just replace last
-      next = [...prev.slice(0, -1), { ...last, value: val, fx } as any];
-    }
-
-    if (next.length > maxPoints) next.splice(0, next.length - maxPoints);
-
-    dataRef.current = next;
-    setData(next);
-  }, [maxPoints]);
-
-  // Reset when a new glyph/canonical is loaded (seed with *current* value immediately)
-  React.useEffect(() => {
-    dataRef.current = [];
-    setData([]);
-    snapNow();
-  }, [seriesKey, snapNow]);
-
-  // SNAP IMMEDIATELY on value changes (so you don’t wait for next BREATH tick)
-  React.useEffect(() => {
-    snapNow();
-  }, [valuePhi, usdPerPhi, snapNow]);
-
-  // SNAP when opening / switching focus (use snapKey from your chartReflowKey)
-  React.useEffect(() => {
-    if (typeof snapKey === "number") snapNow();
-  }, [snapKey, snapNow]);
-
-  // Continue appending at breath cadence
-  React.useEffect(() => {
-    const id = window.setInterval(() => {
+    const snapNow = React.useCallback(() => {
       const p = kaiPulseNow();
-      const prev = dataRef.current;
-      const last = prev[prev.length - 1] as any;
-      if (last?.i === p) return;
+      const val = Number.isFinite(vRef.current) ? vRef.current : 0;
+      const fx = Number.isFinite(fxRef.current) && fxRef.current > 0 ? fxRef.current : 0;
 
-      const nextPoint = { i: p, value: vRef.current, fx: fxRef.current } as any;
-      const next = prev.length ? [...prev, nextPoint] : [nextPoint];
+      const prev = dataRef.current;
+      if (!prev.length) {
+        const seed: ChartPoint[] = [
+          { i: p - 1, value: val, fx } as any,
+          { i: p, value: val, fx } as any,
+        ];
+        dataRef.current = seed;
+        setData(seed);
+        return;
+      }
+
+      const last = prev[prev.length - 1] as any;
+      let next: ChartPoint[];
+
+      if (last?.i === p) {
+        // update current pulse point immediately
+        next = [...prev.slice(0, -1), { ...last, value: val, fx } as any];
+      } else if (typeof last?.i === "number" && last.i < p) {
+        // pulse advanced: append
+        next = [...prev, { i: p, value: val, fx } as any];
+      } else {
+        // weird ordering: just replace last
+        next = [...prev.slice(0, -1), { ...last, value: val, fx } as any];
+      }
+
       if (next.length > maxPoints) next.splice(0, next.length - maxPoints);
 
       dataRef.current = next;
       setData(next);
-    }, sampleMs);
+    }, [maxPoints]);
 
-    return () => window.clearInterval(id);
-  }, [sampleMs, maxPoints]);
+    // Reset when a new glyph/canonical is loaded (seed with *current* value immediately)
+    React.useEffect(() => {
+      dataRef.current = [];
+      setData([]);
+      snapNow();
+    }, [seriesKey, snapNow]);
 
-  return data;
-}
+    // SNAP IMMEDIATELY on value changes (so you don’t wait for next BREATH tick)
+    React.useEffect(() => {
+      snapNow();
+    }, [valuePhi, usdPerPhi, snapNow]);
 
-const seriesKey = useMemo(() => {
-  // canonical is best; fallback to core tuple so it still resets correctly
-  if (canonical) return canonical;
-  if (!meta) return "none";
-  return `${meta.pulse ?? "x"}|${meta.beat ?? "x"}|${meta.stepIndex ?? "x"}|${meta.chakraDay ?? "x"}`;
-}, [canonical, meta]);
+    // SNAP when opening / switching focus (use snapKey from your chartReflowKey)
+    React.useEffect(() => {
+      if (typeof snapKey === "number") snapNow();
+    }, [snapKey, snapNow]);
 
-const chartData = useRollingChartSeries({
-  seriesKey,
-  sampleMs: BREATH_MS,
-  valuePhi: headerPhi,
-  usdPerPhi,
-  maxPoints: 4096,
-  snapKey: chartReflowKey, // 👈 ensures “exact price on open”
-});
+    // Continue appending at breath cadence
+    React.useEffect(() => {
+      const id = window.setInterval(() => {
+        const p = kaiPulseNow();
+        const prev = dataRef.current;
+        const last = prev[prev.length - 1] as any;
+        if (last?.i === p) return;
 
+        const nextPoint = { i: p, value: vRef.current, fx: fxRef.current } as any;
+        const next = prev.length ? [...prev, nextPoint] : [nextPoint];
+        if (next.length > maxPoints) next.splice(0, next.length - maxPoints);
 
-// sensible PV: use your initialGlyph seal if present, else current live Φ
-const pvForChart = useMemo(() => {
-  const v = Number(initialGlyph?.value);
-  return Number.isFinite(v) && v > 0 ? v : headerPhi;
-}, [initialGlyph, headerPhi]);
+        dataRef.current = next;
+        setData(next);
+      }, sampleMs);
 
+      return () => window.clearInterval(id);
+    }, [sampleMs, maxPoints]);
+
+    return data;
+  }
+
+  const seriesKey = useMemo(() => {
+    // canonical is best; fallback to core tuple so it still resets correctly
+    if (canonical) return canonical;
+    if (!meta) return "none";
+    return `${meta.pulse ?? "x"}|${meta.beat ?? "x"}|${meta.stepIndex ?? "x"}|${meta.chakraDay ?? "x"}`;
+  }, [canonical, meta]);
+
+  const chartData = useRollingChartSeries({
+    seriesKey,
+    sampleMs: BREATH_MS,
+    valuePhi: headerPhi,
+    usdPerPhi,
+    maxPoints: 4096,
+    snapKey: chartReflowKey, // 👈 ensures “exact price on open”
+  });
+
+  // sensible PV: use your initialGlyph seal if present, else current live Φ
+  const pvForChart = useMemo(() => {
+    const v = Number(initialGlyph?.value);
+    return Number.isFinite(v) && v > 0 ? v : headerPhi;
+  }, [initialGlyph, headerPhi]);
 
   return (
     <div className="verifier-stamper" role="application" style={{ maxWidth: "100vw", overflowX: "hidden" }}>
-      {/* Top toolbar */}
+      {/* Top toolbar — Stream + ΦKey on the same row, with live Kai pulse */}
       <div className="toolbar">
-        <div className="brand-lockup">
-          <span className="glyph" aria-hidden />
-          <h3>Verify</h3>
-        </div>
-        <div className="toolbar-actions">
-          <button className="secondary" onClick={openExplorer} aria-haspopup="dialog" aria-controls="explorer-dialog">
-            ΦStream
-          </button>
-          <button className="primary" onClick={() => svgInput.current?.click()}>
-            <svg
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-              className="ico"
-              width="18"
-              height="18"
-              style={{ marginRight: 8, display: "inline-block", verticalAlign: "middle" }}
+        <div className="toolbar-main">
+          <div className="brand-lockup" aria-label="Kairos live status">
+            <span className="glyph live-dot" aria-hidden />
+            <div className="brand-text">
+              <div className="live-pulse">
+              <span className="now">LIVE</span>
+              <span className="pulse-number"> ☤KAI {pulseNow}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="toolbar-actions" aria-label="Verifier actions">
+            <button
+              className="secondary"
+              onClick={openExplorer}
+              aria-haspopup="dialog"
+              aria-controls="explorer-dialog"
+              type="button"
             >
-              <path d="M12 19V7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-              <path d="M8 11l4-4 4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-              <path d="M4 5h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" opacity=".6" />
-            </svg>
-            <span>Φkey</span>
-          </button>
+              ΦStream
+            </button>
+            <button
+              className="primary"
+              onClick={() => svgInput.current?.click()}
+              type="button"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                className="ico"
+                width="18"
+                height="18"
+                style={{ marginRight: 8, display: "inline-block", verticalAlign: "middle" }}
+              >
+                <path d="M12 19V7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                <path d="M8 11l4-4 4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                <path d="M4 5h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" opacity=".6" />
+              </svg>
+              <span>ΦKey</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2040,19 +2056,18 @@ const pvForChart = useMemo(() => {
 
                     <div className="chart-popover-body" style={S.popBody}>
                       <React.Suspense fallback={<div style={{ padding: 16, color: "var(--dim)" }}>Loading chart…</div>}>
-                 <LiveChart
-  data={chartData}
-  live={headerPhi}
-  pv={pvForChart}
-  premiumX={1}
-  momentX={1}
-  colors={["rgba(167,255,244,1)"]}
-  usdPerPhi={usdPerPhi}
-  mode={chartFocus === "usd" ? "usd" : "phi"}
-  isChildGlyph={canonicalContext === "derivative"}
-  reflowKey={chartReflowKey}
-/>
-
+                        <LiveChart
+                          data={chartData}
+                          live={headerPhi}
+                          pv={pvForChart}
+                          premiumX={1}
+                          momentX={1}
+                          colors={["rgba(167,255,244,1)"]}
+                          usdPerPhi={usdPerPhi}
+                          mode={chartFocus === "usd" ? "usd" : "phi"}
+                          isChildGlyph={canonicalContext === "derivative"}
+                          reflowKey={chartReflowKey}
+                        />
                       </React.Suspense>
                     </div>
                   </div>
@@ -2373,7 +2388,11 @@ const pvForChart = useMemo(() => {
                     boxSizing: "border-box",
                   }}
                 >
-                  {uiState === "unsigned" && <button className="secondary" onClick={sealUnsigned}>Seal content (Σ + Φ)</button>}
+                  {uiState === "unsigned" && (
+                    <button className="secondary" onClick={sealUnsigned}>
+                      Seal content (Σ + Φ)
+                    </button>
+                  )}
 
                   {(uiState === "readySend" || uiState === "verified") && (
                     <>

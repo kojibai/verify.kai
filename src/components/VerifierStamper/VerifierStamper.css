@@ -1667,6 +1667,7 @@ dialog.glass-modal.fullscreen[data-open="true"] {
   }
 }
 
+
 /* Neon badge pill (no tooltip) */
 .chip.icon[data-badge]:not([data-tip])::after {
   content: attr(data-badge);
@@ -1881,6 +1882,105 @@ dialog.glass-modal.fullscreen[data-open="true"] {
 
 .valuation-inline-value-sub .usd-unit {
   color: rgba(190, 242, 100, 0.96);
+}
+/* ───────────────────────────────────────────────────────────────
+   LIVE Kai Pulse Indicator (toolbar) · NOW label + pulse #
+   - breath-synced glow (5.236s)
+   - neon authority halo
+   - compact for toolbar
+──────────────────────────────────────────────────────────────── */
+
+.live-pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  padding: 6px 10px;
+
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+
+  background: radial-gradient(
+      circle at 35% 20%,
+      color-mix(in srgb, var(--accent) 35%, transparent) 0%,
+      transparent 65%
+    ),
+    rgba(255, 255, 255, 0.04);
+
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 0 18px rgba(0, 0, 0, 0.45),
+    0 0 22px color-mix(in srgb, var(--accent) 22%, transparent);
+
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+
+  animation: livePulseBreath 5.236s ease-in-out infinite;
+}
+
+/* glowing dot before "NOW" */
+.live-pulse::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+
+  background: radial-gradient(circle at 40% 40%, #ffffff 0%, #ffffff 25%, transparent 70%),
+    radial-gradient(circle at 70% 70%, color-mix(in srgb, var(--accent) 50%, transparent) 0%, transparent 70%);
+
+  box-shadow:
+    0 0 6px color-mix(in srgb, var(--accent) 60%, transparent),
+    0 0 14px color-mix(in srgb, var(--accent-2) 40%, transparent);
+
+  animation: livePulseDot 5.236s ease-in-out infinite;
+}
+
+/* The word "NOW" */
+.live-pulse .now {
+  color: var(--accent);
+  font-weight: 800;
+  text-shadow:
+    0 0 6px color-mix(in srgb, var(--accent) 65%, transparent),
+    0 0 12px color-mix(in srgb, var(--accent-2) 45%, transparent);
+}
+
+/* The pulse number */
+.live-pulse .pulse-number {
+  color: var(--ink);
+  opacity: 0.92;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* breath animations (aligned with Kai Pulse) */
+@keyframes livePulseBreath {
+  0%, 100% {
+    filter: brightness(0.88);
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 0 16px rgba(0, 0, 0, 0.45),
+      0 0 14px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  50% {
+    filter: brightness(1.06);
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+      0 0 18px rgba(0, 0, 0, 0.5),
+      0 0 26px color-mix(in srgb, var(--accent-3) 40%, transparent);
+  }
+}
+
+@keyframes livePulseDot {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.70;
+  }
+  50% {
+    transform: scale(1.14);
+    opacity: 1;
+  }
 }
 
 @media (max-width: 640px) {
