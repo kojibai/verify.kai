@@ -1,8 +1,8 @@
 {
-  "id": "kaiklok",             
-  "name": "Kai-Klok",
-  "short_name": "KaiKlok",
-  "description": "Kai-Klok — Eternal Timekeeper of the Harmonik Pulse. A presision Eternal Klok, sigil engine, and resonanse toolkit.",
+  "id": "phinetwork",             
+  "name": "PHI-Network",
+  "short_name": "PhiNetwork",
+  "description": "PHI-Network — A sovereign identity and value network: Sigil-Glyphs embed origin metadata, verification seals, and traceable lineage. Built for mobile, offline resilience, and audit-grade clarity.",
   "lang": "en",
   "dir": "ltr",
 
