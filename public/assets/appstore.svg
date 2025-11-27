@@ -1,0 +1,13 @@
+<!-- public/assets/appstore.svg -->
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none"
+     xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
+  <defs>
+    <linearGradient id="a" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8AFEE2"/>
+      <stop offset="1" stop-color="#5AA4FF"/>
+    </linearGradient>
+  </defs>
+  <rect x="10" y="10" width="236" height="236" rx="56" fill="url(#a)"/>
+  <!-- stylized "A" / App symbol -->
+  <path d="M96 168h64M84 188h88M128 60l48 84H80l48-84z" stroke="#0E1318" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

@@ -1,0 +1,23 @@
+ <svg
+      onClick={onToggle}
+      width="150" height="100" viewBox="0 0 150 100"
+      style={{ cursor: "pointer", overflow: "visible" }}
+    >
+      <g transform="translate(5,5)">
+        <rect x="0" y="0" width="60" height="90" rx="6" ry="6"
+              fill="var(--primary-color)"
+              stroke="var(--secondary-color)" strokeWidth="2" />
+        <rect x="60" y="0" width="60" height="90" rx="6" ry="6"
+              fill="var(--primary-color)"
+              stroke="var(--secondary-color)" strokeWidth="2"
+              style={{
+                transformOrigin: "60px 45px",
+                transform       : isOpen ? "rotateY(0)" : "rotateY(-150deg)",
+                transition      : "transform 1s ease-out",
+              }} />
+        <rect x="58" y="0" width="4" height="90" fill="var(--secondary-color)" />
+        <text x="10" y="25" fontFamily="serif" fontSize="10" fill="black">
+          Codex
+        </text>
+      </g>
+    </svg>

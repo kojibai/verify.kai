@@ -1,0 +1,36 @@
+<svg
+  width="24"
+  height="24"
+  viewBox="0 0 64 64"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <!-- Background spiral of resonance -->
+  <circle cx="32" cy="32" r="28" stroke="#00FF99" stroke-width="2" opacity="0.2" />
+  <circle cx="32" cy="32" r="20" stroke="#00FF99" stroke-width="1.5" opacity="0.3" />
+  <circle cx="32" cy="32" r="12" stroke="#00FF99" stroke-width="1" opacity="0.4" />
+
+  <!-- Radiant rays (access/light) -->
+  <g stroke="#00FF99" stroke-width="1.5" stroke-linecap="round">
+    <line x1="32" y1="4" x2="32" y2="10" />
+    <line x1="32" y1="54" x2="32" y2="60" />
+    <line x1="4" y1="32" x2="10" y2="32" />
+    <line x1="54" y1="32" x2="60" y2="32" />
+    <line x1="12" y1="12" x2="17" y2="17" />
+    <line x1="47" y1="47" x2="52" y2="52" />
+    <line x1="12" y1="52" x2="17" y2="47" />
+    <line x1="47" y1="17" x2="52" y2="12" />
+  </g>
+
+  <!-- PhiKey (Φ) core glyph -->
+  <text
+    x="32"
+    y="38"
+    text-anchor="middle"
+    font-size="32"
+    font-family="Georgia, serif"
+    fill="#00FF99"
+  >
+    Φ
+  </text>
+</svg>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none"
+     xmlns="http://www.w3.org/2000/svg">
+  <!-- holographic glow -->
+  <defs>
+    <radialGradient id="g" cx="50%" cy="50%" r="75%">
+      <stop offset="0%"  stop-color="#00faff" />
+      <stop offset="60%" stop-color="#009bff" />
+      <stop offset="100%" stop-color="transparent" />
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- star -->
+  <polygon
+    points="32,6 38.5,24.5 58,24.5 42,37 48.5,56 32,44 15.5,56 22,37 6,24.5 25.5,24.5"
+    fill="url(#g)" stroke="#00faff" stroke-width="2" filter="url(#glow)"
+    stroke-linejoin="round"/>
+</svg>

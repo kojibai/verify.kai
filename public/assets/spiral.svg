@@ -1,0 +1,36 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="spiralGradient" r="80%" cx="50%" cy="50%">
+      <stop offset="0%" stop-color="#6EE7B7" />
+      <stop offset="100%" stop-color="#3B82F6" />
+    </radialGradient>
+  </defs>
+  <path
+    d="M100,100
+       m-5,0
+       a5,5 0 1,0 10,0
+       a5,5 0 1,0 -10,0
+       m-10,0
+       a15,15 0 1,0 30,0
+       a15,15 0 1,0 -30,0
+       m-15,0
+       a30,30 0 1,0 60,0
+       a30,30 0 1,0 -60,0
+       m-20,0
+       a50,50 0 1,0 100,0
+       a50,50 0 1,0 -100,0"
+    fill="none"
+    stroke="url(#spiralGradient)"
+    stroke-width="2"
+  >
+    <animateTransform
+      attributeName="transform"
+      attributeType="XML"
+      type="rotate"
+      from="0 100 100"
+      to="360 100 100"
+      dur="20s"
+      repeatCount="indefinite"
+    />
+  </path>
+</svg>

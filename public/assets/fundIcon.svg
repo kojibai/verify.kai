@@ -1,0 +1,91 @@
+<svg
+  width="24"
+  height="24"
+  viewBox="0 0 64 64"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <defs>
+    <radialGradient id="addFundGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#a5d6a7" />
+      <stop offset="100%" stop-color="#388e3c" />
+    </radialGradient>
+    <linearGradient id="addFundRing" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#66bb6a" />
+      <stop offset="100%" stop-color="#43a047" />
+    </linearGradient>
+  </defs>
+  <circle
+    cx="32"
+    cy="32"
+    r="28"
+    stroke="url(#addFundRing)"
+    stroke-width="4"
+    fill="none"
+  >
+    <animate
+      attributeName="r"
+      values="28;30;28"
+      dur="2.618s"
+      repeatCount="indefinite"
+      begin="0s"
+      calcMode="spline"
+      keySplines="0.42 0 0.58 1"
+    />
+    <animateTransform
+      attributeName="transform"
+      type="rotate"
+      from="0 32 32"
+      to="360 32 32"
+      dur="4.236s"
+      repeatCount="indefinite"
+      additive="sum"
+    />
+  </circle>
+  <circle
+    cx="32"
+    cy="32"
+    r="12"
+    fill="url(#addFundGlow)"
+    opacity="0.8"
+  >
+    <animate
+      attributeName="r"
+      values="12;14;12"
+      dur="1.618s"
+      repeatCount="indefinite"
+      begin="0.2s"
+      calcMode="spline"
+      keySplines="0.42 0 0.58 1"
+    />
+  </circle>
+  <g stroke="#ffffff" stroke-width="4" stroke-linecap="round">
+    <line x1="32" y1="24" x2="32" y2="40">
+      <animate
+        attributeName="y1"
+        values="24;23;24"
+        dur="2.618s"
+        repeatCount="indefinite"
+      />
+      <animate
+        attributeName="y2"
+        values="40;41;40"
+        dur="2.618s"
+        repeatCount="indefinite"
+      />
+    </line>
+    <line x1="24" y1="32" x2="40" y2="32">
+      <animate
+        attributeName="x1"
+        values="24;23;24"
+        dur="2.618s"
+        repeatCount="indefinite"
+      />
+      <animate
+        attributeName="x2"
+        values="40;41;40"
+        dur="2.618s"
+        repeatCount="indefinite"
+      />
+    </line>
+  </g>
+</svg>

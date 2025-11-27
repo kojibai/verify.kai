@@ -1,0 +1,106 @@
+{
+  "id": "kaiklok",             
+  "name": "Kai-Klok",
+  "short_name": "KaiKlok",
+  "description": "Kai-Klok — Eternal Timekeeper of the Harmonik Pulse. A presision Eternal Klok, sigil engine, and resonanse toolkit.",
+  "lang": "en",
+  "dir": "ltr",
+
+  "start_url": "/",                 
+  "scope": "/",
+  "display_override": ["standalone", "window-controls-overlay"],
+  "display": "standalone",
+  "orientation": "portrait",
+
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "categories": ["utilities", "productivity", "lifestyle"],
+  "prefer_related_applications": false,
+
+  "icons": [
+    { "src": "/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/logo-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+
+    { "src": "/android-icon-36x36.png",  "sizes": "36x36",  "type": "image/png", "density": "0.75" },
+    { "src": "/android-icon-48x48.png",  "sizes": "48x48",  "type": "image/png", "density": "1.0" },
+    { "src": "/android-icon-72x72.png",  "sizes": "72x72",  "type": "image/png", "density": "1.5" },
+    { "src": "/android-icon-96x96.png",  "sizes": "96x96",  "type": "image/png", "density": "2.0" },
+    { "src": "/android-icon-144x144.png", "sizes": "144x144", "type": "image/png", "density": "3.0" },
+    { "src": "/android-icon-192x192.png", "sizes": "192x192", "type": "image/png", "density": "4.0" },
+
+    { "src": "/icons/128.png", "sizes": "128x128", "type": "image/png" },
+    { "src": "/icons/192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/256.png", "sizes": "256x256", "type": "image/png" },
+    { "src": "/icons/384.png", "sizes": "384x384", "type": "image/png" },
+    { "src": "/icons/512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+
+  "screenshots": [
+    {
+      "src": "/screenshots/klok-portrait-1242x2688.jpg",
+      "sizes": "1242x2688",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "Kai-Klok — Eternal time in portrait"
+    },
+    {
+      "src": "/screenshots/sigil-portrait-1170x2532.jpg",
+      "sizes": "1170x2532",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "Live Harmonic Sigil"
+    },
+    {
+      "src": "/screenshots/dashboard-wide-2560x1440.jpg",
+      "sizes": "2560x1440",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "Kai dashboard (desktop)"
+    }
+  ],
+
+  "shortcuts": [
+    {
+      "name": "Open Kai-Klok",
+      "short_name": "Klok",
+      "url": "/klok",
+      "description": "Jump to the Eternal timekeeper.",
+      "icons": [{ "src": "/shortcuts/klok.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" }]
+    },
+    {
+      "name": "Create Sigil",
+      "short_name": "Sigil",
+      "url": "/sigil/new",
+      "description": "Forge a new Harmonic Sigil.",
+      "icons": [{ "src": "/shortcuts/sigil.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" }]
+    },
+    {
+      "name": "Kai Pulse",
+      "short_name": "Pulse",
+      "url": "/pulse",
+      "description": "Breathe with the Golden Pulse.",
+      "icons": [{ "src": "/shortcuts/pulse.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" }]
+    }
+  ],
+
+  "protocol_handlers": [
+    { "protocol": "web+kai", "url": "/open?url=%s" }
+  ],
+
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "files",
+          "accept": ["image/*", "application/json", "application/phi.kairos.sigil+svg"]
+        }
+      ]
+    }
+  }
+}

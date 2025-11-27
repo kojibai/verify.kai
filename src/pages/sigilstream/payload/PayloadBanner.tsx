@@ -7,7 +7,8 @@ import type { FeedPostPayload } from "../../../utils/feedPayload";
 import type { KaiMomentStrict } from "../core/types";
 import { pad2 } from "../core/utils";
 import { expandShortAliasToCanonical } from "../core/alias";
-import { useToasts } from "../data/toast/Toasts";
+import { useToasts } from "../data/toast/toast";
+
 import { AttachmentGallery } from "../attachments/gallery";
 import type { AttachmentManifest } from "../attachments/types";
 

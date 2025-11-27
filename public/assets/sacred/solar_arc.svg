@@ -1,0 +1,73 @@
+<svg
+  viewBox="0 0 500 500"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <defs>
+    <!-- Solar Golden Gradient -->
+    <radialGradient id="solarAura" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFD700" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#FFCC00" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Glow Filter -->
+    <filter id="solarGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3.2" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Keyframe animation -->
+    <style>
+      .solar-spin {
+        animation: solarSpin 5.236s linear infinite;
+        transform-origin: 250px 250px;
+      }
+
+      @keyframes solarSpin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </defs>
+
+  <!-- Radiant Aura Background -->
+  <circle
+    cx="250"
+    cy="250"
+    r="210"
+    fill="url(#solarAura)"
+    filter="url(#solarGlow)"
+  />
+
+  <!-- Star Tetrahedron -->
+  <g class="solar-spin">
+    <!-- Upward Triangle -->
+    <polygon
+      points="250,100 390,390 110,390"
+      stroke="#FFD700"
+      stroke-width="2.5"
+      fill="none"
+    />
+
+    <!-- Downward Triangle (inverted) -->
+    <polygon
+      points="250,400 380,140 120,140"
+      stroke="#FFD700"
+      stroke-width="2"
+      fill="none"
+      opacity="0.7"
+    />
+
+    <!-- Inner fire core -->
+    <circle cx="250" cy="250" r="12" fill="#FFF700" opacity="0.8" />
+  </g>
+
+  <!-- Harmonic Orbits -->
+  <g stroke="#FFD700" stroke-opacity="0.15" stroke-width="1.1" fill="none">
+    <circle cx="250" cy="250" r="170" />
+    <circle cx="250" cy="250" r="140" />
+    <circle cx="250" cy="250" r="110" />
+  </g>
+</svg>

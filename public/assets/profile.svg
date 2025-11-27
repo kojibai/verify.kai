@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ────────────────────────────────────────────────────────────────
+     “Neon Nexus” ✦ Final Dashboard Icon Template
+     – Infinite scale (responsive)
+     – Retina sharp (no width/height attributes)
+     – Full cosmic glow, aurora sweep
+────────────────────────────────────────────────────────────────── -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 128 128"
+     preserveAspectRatio="xMidYMid meet"
+     fill="none"
+     stroke="currentColor"
+     stroke-width="4"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+  <!-- ─── Definitions ─────────────────────────────────────────── -->
+  <defs>
+    <!-- Aurora Gradient Sweep -->
+    <linearGradient id="aurora" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#00f5ff" />
+      <stop offset="50%"  stop-color="#7c3aed" />
+      <stop offset="100%" stop-color="#00f5ff" />
+      <animate attributeName="x1" values="0%;100%;0%" dur="8s" repeatCount="indefinite" />
+      <animate attributeName="y1" values="0%;100%;0%" dur="8s" repeatCount="indefinite" />
+      <animate attributeName="x2" values="100%;0%;100%" dur="8s" repeatCount="indefinite" />
+      <animate attributeName="y2" values="100%;0%;100%" dur="8s" repeatCount="indefinite" />
+    </linearGradient>
+
+    <!-- Neon Bloom -->
+    <filter id="neon" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+      <feColorMatrix in="blur" result="bloom" type="matrix"
+        values="0 0 0 0 0
+                0 0 0 0 1
+                0 0 0 0 1
+                0 0 0 0.7 0" />
+      <feBlend in="SourceGraphic" in2="bloom" mode="screen" />
+    </filter>
+  </defs>
+
+  <!-- ─── 1. Cosmic Halo Rings ─────────────────────────────────── -->
+  <g filter="url(#neon)" stroke="url(#aurora)">
+    <circle cx="64" cy="64" r="54" stroke-width="3" />
+    <circle cx="64" cy="64" r="42" stroke-width="3" stroke-dasharray="3 9">
+      <animateTransform attributeName="transform"
+                        type="rotate"
+                        from="0 64 64"
+                        to="360 64 64"
+                        dur="20s"
+                        repeatCount="indefinite" />
+    </circle>
+  </g>
+
+  <!-- ─── 2. (Insert Your Glyph Here) ─────────────────────────── -->
+  <!-- 
+    ✦ For Profile: Head & Shoulders
+    ✦ For Affiliate: Links/Stars
+    ✦ For Prompt: Speech bubble / Spark
+    ✦ Example head/shoulders glyph (you'll replace based on icon type):
+  -->
+  <g stroke="currentColor" fill="url(#aurora)" filter="url(#neon)">
+    <circle cx="64" cy="50" r="14" stroke="none" />
+    <path d="M96 97c0-18-14-32-32-32s-32 14-32 32" fill="none" />
+  </g>
+</svg>

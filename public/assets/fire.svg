@@ -1,0 +1,27 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="fireGradient" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#FB923C" />
+      <stop offset="100%" stop-color="#FACC15" />
+    </linearGradient>
+  </defs>
+  <path
+    d="M100 180 
+       Q90 150 110 130 
+       Q90 110 100 80 
+       Q110 50 100 20 
+       Q120 40 130 70 
+       Q140 100 120 130 
+       Q130 150 100 180 Z"
+    fill="url(#fireGradient)"
+  >
+    <animateTransform
+      attributeName="transform"
+      attributeType="XML"
+      type="scale"
+      values="1;1.05;1"
+      dur="3s"
+      repeatCount="indefinite"
+    />
+  </path>
+</svg>

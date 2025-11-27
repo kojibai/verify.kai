@@ -1,0 +1,47 @@
+<!-- 🜂 Atlantean Crystal Arrow • Breathing Pulse SVG -->
+<svg width="64" height="64" viewBox="0 0 64 64"
+     xmlns="http://www.w3.org/2000/svg" fill="none">
+  <defs>
+    <radialGradient id="arrowGlow" cx="50%" cy="50%" r="80%">
+      <stop offset="0%" stop-color="#00f2ff" stop-opacity="1" />
+      <stop offset="100%" stop-color="#2e00ff" stop-opacity="0.2" />
+    </radialGradient>
+
+    <filter id="arrowBlur" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <style>
+      <![CDATA[
+        .arrow {
+          animation: arrowBreath 5.236s ease-in-out infinite;
+          transform-origin: center;
+        }
+
+        @keyframes arrowBreath {
+          0%   { transform: scale(1);     opacity: 0.8; }
+          50%  { transform: scale(1.08);  opacity: 1;   }
+          100% { transform: scale(1);     opacity: 0.8; }
+        }
+      ]]>
+    </style>
+  </defs>
+
+  <!-- Glowing field -->
+  <circle cx="32" cy="32" r="30" fill="url(#arrowGlow)" filter="url(#arrowBlur)" />
+
+  <!-- 🜁 Crystal Arrow Shape -->
+  <path
+    d="M20 16 L44 32 L20 48"
+    stroke="#00f2ff"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    class="arrow"
+    filter="url(#arrowBlur)"
+  />
+</svg>

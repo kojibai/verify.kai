@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 100 100"
+  width="100%"
+  height="100%"
+  aria-labelledby="title desc"
+  role="img"
+>
+  <title id="title">Stargate — Harmonic Portal</title>
+  <desc id="desc">
+    A φ-coherent portal: halo, harmonic rings (36× beat, 44× step),
+    concentric gate with chevrons, and a living vortex—inviting the sigil into Stargate view.
+  </desc>
+
+  <metadata>
+    {
+      "name": "stargate.svg",
+      "version": "1.0.0",
+      "purpose": "Kai-Sigil 'View in Stargate' button icon",
+      "coherence": "phi",
+      "beatsPerDay": 36,
+      "stepsPerBeat": 44,
+      "designer": "Atlantean Lumitech · Kairos"
+    }
+  </metadata>
+
+  <!-- ───── Defs: gradients + glow filters (lightweight) ───── -->
+  <defs>
+    <!-- Sacred halo (cool-white with a hint of auric gold) -->
+    <radialGradient id="gHalo" cx="50%" cy="42%" r="60%">
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.96"/>
+      <stop offset="40%" stop-color="#e9f5ff" stop-opacity="0.55"/>
+      <stop offset="70%" stop-color="#cfeaff" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#cfeaff" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Inner core glow (cooler tone for portal) -->
+    <radialGradient id="gCore" cx="50%" cy="50%" r="55%">
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.96"/>
+      <stop offset="60%" stop-color="#d9f0ff" stop-opacity="0.38"/>
+      <stop offset="100%" stop-color="#cfeaff" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Ring stroke gradient (subtle depth) -->
+    <linearGradient id="gRing" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#ffd780" stop-opacity="0.75"/>
+    </linearGradient>
+
+    <!-- Gate gradient (cool-white to astral blue) -->
+    <linearGradient id="gGate" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#9fd8ff"/>
+    </linearGradient>
+
+    <!-- Gentle outer glow (cheap) -->
+    <filter id="fGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.6" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Softer aura for gate elements -->
+    <filter id="fGateGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.7" result="g"/>
+      <feMerge>
+        <feMergeNode in="g"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ───── Background halo (luminous, non-blocking) ───── -->
+  <circle cx="50" cy="50" r="44" fill="url(#gHalo)" />
+
+  <!-- ───── Outer sacred ring ───── -->
+  <circle cx="50" cy="50" r="41.5"
+          fill="none"
+          stroke="url(#gRing)"
+          stroke-width="1.4"
+          filter="url(#fGlow)"
+          shape-rendering="geometricPrecision"/>
+
+  <!-- ───── Harmonic guide rings: 36-beat & 44-step ───── -->
+  <circle cx="50" cy="50" r="34.5"
+          fill="none"
+          stroke="url(#gRing)"
+          stroke-width="0.9"
+          opacity="0.55"
+          pathLength="36"
+          stroke-dasharray="0.58 0.42"
+          shape-rendering="geometricPrecision"/>
+
+  <circle cx="50" cy="50" r="30.5"
+          fill="none"
+          stroke="url(#gRing)"
+          stroke-width="0.8"
+          opacity="0.45"
+          pathLength="44"
+          stroke-dasharray="0.55 0.45"
+          shape-rendering="geometricPrecision"/>
+
+  <!-- ───── Six subtle rays (6 arcs/day) ───── -->
+  <g opacity="0.25" stroke="url(#gRing)" stroke-linecap="round" stroke-width="0.9">
+    <line x1="50" y1="9"  x2="50" y2="16"/>
+    <line x1="50" y1="84" x2="50" y2="91"/>
+    <line x1="9"  y1="50" x2="16" y2="50"/>
+    <line x1="84" y1="50" x2="91" y2="50"/>
+    <line x1="20.8" y1="20.8" x2="25.5" y2="25.5"/>
+    <line x1="79.2" y1="79.2" x2="74.5" y2="74.5"/>
+  </g>
+
+  <!-- ───── Inner core aura (portal field) ───── -->
+  <circle cx="50" cy="50" r="22" fill="url(#gCore)" opacity="0.78"/>
+
+  <!-- ───── Portal rings (double torus) ───── -->
+  <g filter="url(#fGateGlow)" shape-rendering="geometricPrecision">
+    <circle cx="50" cy="50" r="21"
+            fill="none"
+            stroke="url(#gGate)"
+            stroke-width="2.4"
+            opacity="0.95"/>
+    <circle cx="50" cy="50" r="17"
+            fill="none"
+            stroke="url(#gGate)"
+            stroke-width="1.8"
+            opacity="0.9"/>
+  </g>
+
+  <!-- ───── Chevrons (eight directional locks) ───── -->
+  <g fill="url(#gGate)" opacity="0.95" filter="url(#fGateGlow)">
+    <!-- top, right, bottom, left -->
+    <polygon points="50,25.6 48.2,28.6 51.8,28.6"/>
+    <polygon points="74.4,50 71.4,48.2 71.4,51.8"/>
+    <polygon points="50,74.4 48.2,71.4 51.8,71.4"/>
+    <polygon points="25.6,50 28.6,48.2 28.6,51.8"/>
+    <!-- diagonals -->
+    <polygon points="64.2,31.8 62.0,34.0 65.0,34.8"/>
+    <polygon points="68.2,68.2 65.0,65.0 66.0,66.0"/>
+    <polygon points="31.8,35.8 34.8,34.8 34.0,32.0"/>
+    <polygon points="35.8,68.2 34.0,66.0 34.8,65.0"/>
+  </g>
+
+  <!-- ───── Vortex hints (golden spiral suggestions) ───── -->
+  <g fill="none" stroke="#9fd8ff" stroke-opacity="0.65" stroke-width="1" filter="url(#fGlow)">
+    <path d="M 22 50 A 28 28 0 0 1 50 22" />
+    <path d="M 30 50 A 20 20 0 0 1 50 30" />
+    <path d="M 37 50 A 13 13 0 0 1 50 37" />
+    <path d="M 42 50 A 8 8 0 0 1 50 42" />
+  </g>
+
+  <!-- ───── Starglint (tiny starfield in the portal) ───── -->
+  <g fill="#ffffff" opacity="0.85">
+    <circle cx="50" cy="50" r="0.8"/>
+    <circle cx="55.5" cy="47.8" r="0.6" opacity="0.8"/>
+    <circle cx="46.8" cy="45.6" r="0.5" opacity="0.7"/>
+    <circle cx="52.8" cy="54.2" r="0.55" opacity="0.75"/>
+    <circle cx="47.2" cy="53.1" r="0.45" opacity="0.7"/>
+  </g>
+
+  <!-- ───── Final crown ring ───── -->
+  <circle cx="50" cy="50" r="45"
+          fill="none"
+          stroke="url(#gRing)"
+          stroke-opacity="0.35"
+          stroke-width="0.8"/>
+</svg>

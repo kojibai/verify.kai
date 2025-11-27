@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" class="flower-of-life">
+	<circle cx="100" cy="100" r="30" stroke="rgba(0,255,255,0.3)" stroke-width="1" fill="none"/>
+	<circle cx="130" cy="100" r="30" stroke="rgba(0,255,255,0.3)" stroke-width="1" fill="none"/>
+	<circle cx="70" cy="100" r="30" stroke="rgba(0,255,255,0.3)" stroke-width="1" fill="none"/>
+	<circle cx="115.0" cy="125.98" r="30" stroke="rgba(0,255,255,0.3)" stroke-width="1" fill="none"/>
+	<circle cx="85.0" cy="125.98" r="30" stroke="rgba(0,255,255,0.3)" stroke-width="1" fill="none"/>
+	<circle cx="115.0" cy="74.02" r="30" stroke="rgba(0,255,255,0.3)" stroke-width="1" fill="none"/>
+	<circle cx="85.0" cy="74.02" r="30" stroke="rgba(0,255,255,0.3)" stroke-width="1" fill="none"/>
+</svg>

@@ -1,0 +1,75 @@
+<svg
+  width="100%"
+  height="100"
+  viewBox="0 0 800 100"
+  xmlns="http://www.w3.org/2000/svg"
+  preserveAspectRatio="xMidYMid meet"
+>
+  <defs>
+    <!-- ✨ Gradient shimmer across time-space -->
+    <linearGradient id="eternalGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#b7f7ff">
+        <animate attributeName="stop-color" values="#b7f7ff;#c18aff;#b7f7ff" dur="6s" repeatCount="indefinite" />
+      </stop>
+      <stop offset="100%" stop-color="#c18aff">
+        <animate attributeName="stop-color" values="#c18aff;#b7f7ff;#c18aff" dur="6s" repeatCount="indefinite" />
+      </stop>
+    </linearGradient>
+
+    <!-- 🌌 Subtle nebular glow -->
+    <filter id="eternalGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="1.6" flood-color="#ffffff" flood-opacity="0.35" />
+      <feDropShadow dx="0" dy="0" stdDeviation="3.2" flood-color="#c18aff" flood-opacity="0.4" />
+    </filter>
+
+    <!-- 🌀 Animated celestial pulse -->
+    <style>
+      .eternal-text {
+        font-family: 'Courier New', monospace;
+        font-weight: bold;
+        font-size: 30px;
+        fill: url(#eternalGradient);
+        filter: url(#eternalGlow);
+        letter-spacing: 1px;
+        animation: textPulse 5.236s ease-in-out infinite;
+      }
+
+      .eternal-icon {
+        fill: url(#eternalGradient);
+        filter: url(#eternalGlow);
+        animation: iconPulse 5.236s ease-in-out infinite;
+      }
+
+      @keyframes textPulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50%      { transform: scale(1.02); opacity: 0.92; }
+      }
+
+      @keyframes iconPulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50%      { transform: scale(1.06); opacity: 0.85; }
+      }
+    </style>
+  </defs>
+
+  <!-- 🧿 Harmonic Sigil (custom radiating star/mandala) -->
+  <g transform="translate(60,50)">
+    <circle r="16" class="eternal-icon" />
+    <path
+      d="M 0,-20 L 5,-6 L 20,-6 L 8,4 L 12,18 L 0,10 L -12,18 L -8,4 L -20,-6 L -5,-6 Z"
+      class="eternal-icon"
+      transform="scale(0.85)"
+    />
+  </g>
+
+  <!-- 🪐 Celestial Title -->
+  <text
+    x="50%"
+    y="55%"
+    text-anchor="middle"
+    alignment-baseline="middle"
+    class="eternal-text"
+  >
+    Eternal
+  </text>
+</svg>

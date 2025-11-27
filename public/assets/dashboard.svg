@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  width="96"
+  height="96"
+  viewBox="0 0 96 96"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+  aria-labelledby="title"
+  role="img"
+>
+  <title id="title">KaiVoh Dashboard Device – Living Frequency Interface</title>
+
+  <!-- DEFINITIONS -->
+  <defs>
+    <!-- Body gradient -->
+    <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f5ff"/>
+      <stop offset="100%" stop-color="#7f00ff"/>
+    </linearGradient>
+
+    <!-- Core pulse radial -->
+    <radialGradient id="corePulse" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#00f5ff" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Plasma glow -->
+    <radialGradient id="plasma" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#22ffff" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#00ffbb" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#00f5ff" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Neon glow filter -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Wave ring style -->
+    <style>
+      <![CDATA[
+        /* Core pulse breathing */
+        .pulse {
+          animation: pulseScale 2.5s ease-in-out infinite alternate;
+          transform-origin: center;
+        }
+        @keyframes pulseScale {
+          0% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        /* Plasma subtle shift */
+        .plasmaGlow {
+          animation: plasmaShift 4s ease-in-out infinite alternate;
+          transform-origin: center;
+        }
+        @keyframes plasmaShift {
+          0% { transform: scale(1); opacity: 0.6; }
+          100% { transform: scale(1.2); opacity: 0.3; }
+        }
+
+        /* Glyph vertical oscillation */
+        .glyph {
+          animation: glyphBounce 1.2s ease-in-out infinite alternate;
+          transform-origin: center;
+        }
+        @keyframes glyphBounce {
+          0% { transform: translateY(-2px); }
+          100% { transform: translateY(2px); }
+        }
+
+        /* Concentric wave rings */
+        .wave {
+          fill: none;
+          stroke: #00ffff;
+          stroke-width: 1.2;
+          opacity: 0;
+          animation: waveExpand 3s ease-out infinite;
+        }
+        .wave:nth-of-type(2) {
+          animation-delay: 0.8s;
+        }
+        .wave:nth-of-type(3) {
+          animation-delay: 1.6s;
+        }
+        @keyframes waveExpand {
+          0% {
+            r: 8;
+            opacity: 0.6;
+          }
+          100% {
+            r: 24;
+            opacity: 0;
+          }
+        }
+      ]]>
+    </style>
+  </defs>
+
+  <!-- DEVICE BODY WITH GLOW -->
+  <g transform="translate(8 8)" filter="url(#glow)">
+    <rect
+      x="0" y="0" width="80" height="80" rx="22"
+      fill="url(#bodyGrad)"
+      stroke="#00f5ff" stroke-width="2"
+    />
+  </g>
+
+  <!-- INNER SCREEN -->
+  <g transform="translate(20 20)">
+    <rect
+      x="0" y="0" width="56" height="56" rx="14"
+      fill="rgba(0,0,0,0.65)"
+      stroke="#22ffff" stroke-width="1.5"
+    />
+
+    <!-- Plasma aura behind everything -->
+    <circle
+      cx="28" cy="28" r="20"
+      fill="url(#plasma)"
+      class="plasmaGlow"
+    />
+
+    <!-- Sound-wave rings -->
+    <circle cx="28" cy="28" class="wave"/>
+    <circle cx="28" cy="28" class="wave"/>
+    <circle cx="28" cy="28" class="wave"/>
+
+    <!-- Core breathing pulse -->
+    <circle
+      cx="28" cy="28" r="14"
+      fill="url(#corePulse)"
+      class="pulse"
+    />
+
+    <!-- Living glyph oscillating -->
+    <g class="glyph">
+      <path
+        d="M28 14 L32.5 28 L28 42 L23.5 28 Z"
+        fill="#ffffff"
+        opacity="0.95"
+      />
+      <circle cx="28" cy="28" r="2.4" fill="#fff" />
+    </g>
+  </g>
+</svg>

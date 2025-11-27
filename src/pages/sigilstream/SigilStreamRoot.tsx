@@ -24,7 +24,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import "./styles/sigilstream.css";
 
 /* Toasts */
-import { ToastsProvider, useToasts } from "./data/toast/Toasts";
+import ToastsProvider from "./data/toast/Toasts";
+import { useToasts } from "./data/toast/toast";
+
 
 /* ✅ Auth provider (required for useSigilAuth + SigilLogin) */
 import { SigilAuthProvider } from "../../components/KaiVoh/SigilAuthProvider";

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ────────────────────────────────────────────────────────────────
+     “Neon Nexus” ✦ Final Affiliate Icon
+     – Fully scalable
+     – Retina-perfect (true vectors, no pixelation)
+     – Cosmic gradient sweep + referral star pulse
+────────────────────────────────────────────────────────────────── -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 128 128"
+     preserveAspectRatio="xMidYMid meet"
+     fill="none"
+     stroke="currentColor"
+     stroke-width="4"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+  <!-- ─── Definitions ─────────────────────────────────────────── -->
+  <defs>
+    <!-- Aurora Gradient Sweep -->
+    <linearGradient id="aurora" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#00f5ff" />
+      <stop offset="50%"  stop-color="#7c3aed" />
+      <stop offset="100%" stop-color="#00f5ff" />
+      <animate attributeName="x1" values="0%;100%;0%" dur="8s" repeatCount="indefinite" />
+      <animate attributeName="y1" values="0%;100%;0%" dur="8s" repeatCount="indefinite" />
+      <animate attributeName="x2" values="100%;0%;100%" dur="8s" repeatCount="indefinite" />
+      <animate attributeName="y2" values="100%;0%;100%" dur="8s" repeatCount="indefinite" />
+    </linearGradient>
+
+    <!-- Neon Bloom Filter -->
+    <filter id="neon" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+      <feColorMatrix in="blur" result="bloom" type="matrix"
+        values="0 0 0 0  0
+                0 0 0 0  1
+                0 0 0 0  1
+                0 0 0 0.7 0" />
+      <feBlend in="SourceGraphic" in2="bloom" mode="screen" />
+    </filter>
+  </defs>
+
+  <!-- ─── 1. Double Halo Rings (Network Aura) ──────────────────── -->
+  <g filter="url(#neon)" stroke="url(#aurora)">
+    <!-- Outer Solid Ring -->
+    <circle cx="64" cy="64" r="54" stroke-width="3" />
+
+    <!-- Inner Dashed Ring -->
+    <circle cx="64" cy="64" r="42" stroke-width="3" stroke-dasharray="3 9">
+      <animateTransform attributeName="transform"
+                        type="rotate"
+                        from="0 64 64"
+                        to="360 64 64"
+                        dur="20s"
+                        repeatCount="indefinite" />
+    </circle>
+  </g>
+
+  <!-- ─── 2. Interlink Glyph (“Affiliate Link”) ────────────────── -->
+  <g stroke="currentColor">
+    <path d="M76 40h10a18 18 0 0 1 0 36h-10" />
+    <path d="M52 88H42a18 18 0 0 1 0-36h10" />
+    <path d="M50 64h28" />
+    <circle cx="76" cy="40" r="3" fill="url(#aurora)" stroke="none" />
+    <circle cx="52" cy="88" r="3" fill="url(#aurora)" stroke="none" />
+  </g>
+
+  <!-- ─── 3. Pulsing 5-Pointed Star (Referral Power) ────────────── -->
+  <polygon points="64 18 69.2 31.5 84.5 32.8 72.8 42.5
+                   76.5 57.6 64 49.7 51.5 57.6 55.2 42.5
+                   43.5 32.8 58.8 31.5"
+           fill="url(#aurora)" filter="url(#neon)">
+    <animate attributeName="opacity" values="1;0.65;1"
+             dur="3.5s" repeatCount="indefinite" />
+    <animateTransform attributeName="transform" type="scale"
+                      values="1;1.12;1"
+                      dur="3.5s" repeatCount="indefinite" />
+  </polygon>
+
+</svg>

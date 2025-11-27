@@ -4,7 +4,8 @@
 import { useCallback, useState } from "react";
 import type React from "react";
 import { isUrl } from "../core/utils";
-import { useToasts } from "../data/toast/Toasts";
+import { useToasts } from "../data/toast/toast";
+
 
 /**
  * Normalize a free-form string into an https URL we accept for inhaling.

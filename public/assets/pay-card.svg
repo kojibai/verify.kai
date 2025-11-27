@@ -1,0 +1,107 @@
+<!-- pay-card.svg — Atlantean Neon Card, φ-breathing (5.236s) -->
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+     xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+
+  <defs>
+    <!-- Aura glow behind card -->
+    <radialGradient id="cardAura" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse"
+      gradientTransform="translate(12 12) scale(10.4)">
+      <stop offset="0"  stop-color="#37FFE4" stop-opacity=".85"/>
+      <stop offset=".45" stop-color="#A78BFA" stop-opacity=".28"/>
+      <stop offset="1"  stop-color="#37FFE4" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Subtle stroke gradient along edges -->
+    <linearGradient id="edgeGrad" x1="2" y1="5" x2="22" y2="19" gradientUnits="userSpaceOnUse">
+      <stop offset="0"   stop-color="currentColor" stop-opacity=".95"/>
+      <stop offset=".55" stop-color="currentColor" stop-opacity=".7"/>
+      <stop offset="1"   stop-color="currentColor" stop-opacity=".95"/>
+    </linearGradient>
+
+    <!-- Neon filter -->
+    <filter id="cardNeon" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="0.7" result="b1"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.4" result="b2"/>
+      <feColorMatrix in="b2" type="matrix"
+        values="0 0 0 0 0.21
+                0 0 0 0 1.00
+                0 0 0 0 0.89
+                0 0 0 1 0" result="tealish"/>
+      <feMerge>
+        <feMergeNode in="tealish"/>
+        <feMergeNode in="b1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Sweep highlight around the card border -->
+    <mask id="borderSweep">
+      <rect x="0" y="0" width="24" height="24" fill="black"/>
+      <rect x="2.25" y="5" width="19.5" height="14" rx="3.2"
+            fill="none" stroke="white" stroke-width="3"
+            stroke-linecap="round" stroke-dasharray="18 72">
+        <animate attributeName="stroke-dashoffset" values="0; -90" dur="5.236s" repeatCount="indefinite"/>
+      </rect>
+    </mask>
+
+    <!-- CSS animations -->
+    <style>
+      :root { --phi: 5.236s; }
+      .aura { animation: breathe var(--phi) ease-in-out infinite; }
+      .card { animation: framePulse var(--phi) ease-in-out infinite; }
+      .chip { animation: microPulse var(--phi) ease-in-out infinite; }
+      .waves { transform-origin: 16px 13.5px; animation: wavePulse var(--phi) ease-in-out infinite; }
+
+      @keyframes breathe {
+        0%   { opacity: .18; transform: scale(1.00); }
+        50%  { opacity: .34; transform: scale(1.06); }
+        100% { opacity: .18; transform: scale(1.00); }
+      }
+      @keyframes framePulse {
+        0%   { opacity: .96; filter: url(#cardNeon); }
+        50%  { opacity: .78; filter: url(#cardNeon); }
+        100% { opacity: .96; filter: url(#cardNeon); }
+      }
+      @keyframes microPulse {
+        0%   { opacity: .95; }
+        50%  { opacity: .80; }
+        100% { opacity: .95; }
+      }
+      @keyframes wavePulse {
+        0%   { transform: scale(1);   opacity: .95; }
+        50%  { transform: scale(1.06); opacity: .8;  }
+        100% { transform: scale(1);   opacity: .95; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .aura, .card, .chip, .waves { animation: none !important; }
+      }
+    </style>
+  </defs>
+
+  <!-- Soft aura -->
+  <circle class="aura" cx="12" cy="12" r="10.2" fill="url(#cardAura)"/>
+
+  <!-- Card body with sweeping highlight -->
+  <g class="card" filter="url(#cardNeon)" mask="url(#borderSweep)">
+    <rect x="2.25" y="5" width="19.5" height="14" rx="3"
+          stroke="url(#edgeGrad)" stroke-width="1.6" fill="none"/>
+  </g>
+
+  <!-- Divider stripe -->
+  <path d="M2.25 9.25H21.75" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity=".55"/>
+
+  <!-- EMV chip -->
+  <g class="chip" stroke="currentColor" fill="none" opacity=".95">
+    <rect x="4.7" y="11.1" width="4.2" height="3.2" rx="0.6" stroke-width="1.2"/>
+    <path d="M6.8 11.1V14.3M4.7 12.7H8.9" stroke-width="1.1" opacity=".8"/>
+  </g>
+
+  <!-- Contactless waves -->
+  <g class="waves" stroke="currentColor" fill="none" stroke-linecap="round">
+    <path d="M16.2 12.6c.7.5.7 1.8 0 2.3" stroke-width="1.4"/>
+    <path d="M17.9 11.6c1.2.9 1.2 3 0 3.9" stroke-width="1.4" opacity=".9"/>
+    <path d="M19.6 10.5c1.8 1.4 1.8 4.7 0 6.1" stroke-width="1.4" opacity=".65"/>
+  </g>
+
+</svg>

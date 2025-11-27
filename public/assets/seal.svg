@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 100 100"
+  width="100%"
+  height="100%"
+  aria-labelledby="title desc"
+  role="img"
+>
+  <title id="title">Seal Moment — Sacred Imprint</title>
+  <desc id="desc">
+    A golden φ-coherent seal: halo, harmonic rings (36× beat, 44× step),
+    and a central stamp pressing an imprint ellipse with a spark—sealing the moment.
+  </desc>
+
+  <metadata>
+    {
+      "name": "seal.svg",
+      "version": "1.0.0",
+      "purpose": "Kai-Sigil 'Seal This Moment' button icon",
+      "coherence": "phi",
+      "beatsPerDay": 36,
+      "stepsPerBeat": 44,
+      "designer": "Atlantean Lumitech · Kairos"
+    }
+  </metadata>
+
+  <defs>
+    <!-- Sacred halo (golden-white) -->
+    <radialGradient id="gHalo" cx="50%" cy="42%" r="60%">
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="35%" stop-color="#ffe7b0" stop-opacity="0.55"/>
+      <stop offset="70%" stop-color="#ffd780" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#ffd780" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Inner core glow -->
+    <radialGradient id="gCore" cx="50%" cy="50%" r="55%">
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="60%" stop-color="#ffe7b0" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#ffd780" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Ring stroke gradient -->
+    <linearGradient id="gRing" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#ffd780" stop-opacity="0.75"/>
+    </linearGradient>
+
+    <!-- Seal gradient (slightly warmer) -->
+    <linearGradient id="gSeal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#ffdb8f"/>
+    </linearGradient>
+
+    <!-- Gentle outer glow (cheap) -->
+    <filter id="fGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.6" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Softer aura for the stamp -->
+    <filter id="fStampGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.6" result="sg"/>
+      <feMerge>
+        <feMergeNode in="sg"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background halo -->
+  <circle cx="50" cy="50" r="44" fill="url(#gHalo)" />
+
+  <!-- Outer sacred ring -->
+  <circle cx="50" cy="50" r="41.5"
+          fill="none"
+          stroke="url(#gRing)"
+          stroke-width="1.4"
+          filter="url(#fGlow)"
+          shape-rendering="geometricPrecision"/>
+
+  <!-- 36-beat ring -->
+  <circle cx="50" cy="50" r="34.5"
+          fill="none"
+          stroke="url(#gRing)"
+          stroke-width="0.9"
+          opacity="0.55"
+          pathLength="36"
+          stroke-dasharray="0.58 0.42"
+          shape-rendering="geometricPrecision"/>
+
+  <!-- 44-step ring -->
+  <circle cx="50" cy="50" r="30.5"
+          fill="none"
+          stroke="url(#gRing)"
+          stroke-width="0.8"
+          opacity="0.45"
+          pathLength="44"
+          stroke-dasharray="0.55 0.45"
+          shape-rendering="geometricPrecision"/>
+
+  <!-- Six subtle rays (6 arcs/day) -->
+  <g opacity="0.25" stroke="url(#gRing)" stroke-linecap="round" stroke-width="0.9">
+    <line x1="50" y1="9"  x2="50" y2="16"/>
+    <line x1="50" y1="84" x2="50" y2="91"/>
+    <line x1="9"  y1="50" x2="16" y2="50"/>
+    <line x1="84" y1="50" x2="91" y2="50"/>
+    <line x1="20.8" y1="20.8" x2="25.5" y2="25.5"/>
+    <line x1="79.2" y1="79.2" x2="74.5" y2="74.5"/>
+  </g>
+
+  <!-- Inner core aura -->
+  <circle cx="50" cy="50" r="22" fill="url(#gCore)" opacity="0.7"/>
+
+  <!-- Golden spiral hints (light touch) -->
+  <g fill="none" stroke="#ffd98a" stroke-opacity="0.55" stroke-width="1" filter="url(#fGlow)">
+    <path d="M 14 50 A 36 36 0 0 1 50 14" />
+    <path d="M 26 50 A 24 24 0 0 1 50 26" />
+    <path d="M 35.8 50 A 14.2 14.2 0 0 1 50 35.8" />
+    <path d="M 42.6 50 A 7.4 7.4 0 0 1 50 42.6" />
+  </g>
+
+  <!-- Central seal ring -->
+  <circle cx="50" cy="50" r="18.5"
+          fill="none"
+          stroke="url(#gRing)"
+          stroke-width="1.1"
+          opacity="0.75"/>
+
+  <!-- ============ The Stamp & Imprint (the Act of Sealing) ============ -->
+  <g filter="url(#fStampGlow)" shape-rendering="geometricPrecision">
+    <!-- Stamp head -->
+    <circle cx="50" cy="41" r="7.2"
+            fill="none"
+            stroke="url(#gSeal)"
+            stroke-width="3.2" />
+
+    <!-- Stamp handle (subtle, sacred) -->
+    <path d="M50 48.8 v7.8"
+          fill="none"
+          stroke="url(#gSeal)"
+          stroke-width="3.2"
+          stroke-linecap="round" />
+
+    <!-- Imprint ellipse (pressed seal) -->
+    <ellipse cx="50" cy="62.5" rx="16" ry="7.2"
+             fill="none"
+             stroke="url(#gSeal)"
+             stroke-width="2.2"
+             opacity="0.95" />
+
+    <!-- Inner imprint detail -->
+    <ellipse cx="50" cy="62.5" rx="11.5" ry="5.2"
+             fill="none"
+             stroke="#ffffff"
+             stroke-opacity="0.65"
+             stroke-width="1.2" />
+
+    <!-- Moment spark (the instant of sealing) -->
+    <g transform="translate(50,33.2)" stroke="url(#gSeal)" stroke-width="1.6" stroke-linecap="round">
+      <line x1="0" y1="-3.8" x2="0" y2="-1.2"/>
+      <line x1="0" y1="1.2" x2="0" y2="3.8"/>
+      <line x1="-3.8" y1="0" x2="-1.2" y2="0"/>
+      <line x1="1.2" y1="0" x2="3.8" y2="0"/>
+      <line x1="-2.8" y1="-2.8" x2="-1.0" y2="-1.0"/>
+      <line x1="1.0" y1="1.0" x2="2.8" y2="2.8"/>
+      <line x1="-2.8" y1="2.8" x2="-1.0" y2="1.0"/>
+      <line x1="1.0" y1="-1.0" x2="2.8" y2="-2.8"/>
+    </g>
+  </g>
+
+  <!-- Final crown ring -->
+  <circle cx="50" cy="50" r="45"
+          fill="none"
+          stroke="url(#gRing)"
+          stroke-opacity="0.35"
+          stroke-width="0.8"/>
+</svg>

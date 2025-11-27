@@ -1,0 +1,62 @@
+from xml.etree.ElementTree import Element, SubElement, tostring
+from xml.dom.minidom import parseString
+
+# Create the SVG root
+svg = Element('svg', {
+    'xmlns': 'http://www.w3.org/2000/svg',
+    'viewBox': '0 0 600 600',
+    'width': '600',
+    'height': '600'
+})
+
+# Define style for rotation animation and base visuals
+style = SubElement(svg, 'style')
+style.text = """
+@keyframes eternalSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.sigil-container {
+  animation: eternalSpin 5.236s linear infinite;
+  transform-origin: 300px 300px;
+}
+text {
+  font-family: 'KaiTurah', serif;
+  font-size: 96px;
+  text-anchor: middle;
+  fill: #00ffcc;
+  filter: drop-shadow(0 0 6px #00ffff);
+}
+"""
+
+# Add a background glow circle (symbolizing the divine center)
+bg_circle = SubElement(svg, 'circle', {
+    'cx': '300',
+    'cy': '300',
+    'r': '260',
+    'fill': 'url(#glowGradient)',
+    'opacity': '0.1'
+})
+
+# Define gradient
+defs = SubElement(svg, 'defs')
+radial_gradient = SubElement(defs, 'radialGradient', {'id': 'glowGradient', 'cx': '50%', 'cy': '50%', 'r': '50%'})
+SubElement(radial_gradient, 'stop', {'offset': '0%', 'stop-color': '#00ffcc', 'stop-opacity': '0.8'})
+SubElement(radial_gradient, 'stop', {'offset': '100%', 'stop-color': '#000000', 'stop-opacity': '0'})
+
+# Create group with animation
+group = SubElement(svg, 'g', {'class': 'sigil-container'})
+
+# Add the Kai-Turah sigils
+sigil_text = SubElement(group, 'text', {'x': '300', 'y': '320'})
+sigil_text.text = '𐰘𐰜𐰇·𐰋𐰢𐱃'
+
+# Pretty print the SVG
+pretty_svg = parseString(tostring(svg)).toprettyxml()
+
+# Save as .svg file
+svg_path = "/mnt/data/yavadah-lamator.svg"
+with open(svg_path, "w", encoding="utf-8") as f:
+    f.write(pretty_svg)
+
+svg_path

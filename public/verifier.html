@@ -1,0 +1,3525 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"
+  />
+  <title>Kairos — Sovereign Portal (Σ → SHA-256 → Φ • Verify • Value • Send)</title>
+  <meta name="color-scheme" content="dark light" />
+  <style>
+    :root{
+      --bg:#070b0e; --bg2:#0a0f12; --ink:#e7fbf7; --dim:#a2bbb6;
+      --line:#ffffff22; --line-strong:#ffffff33;
+      --ok:#28c76f; --bad:#ff4d4f; --accent:#37e6d4; --accent-2:#81fff1;
+      --card:linear-gradient(180deg,#ffffff10,#ffffff06);
+      --focus:0 0 0 3px #37e6d455; --radius:14px;
+
+      /* Banknote palette */
+      --bill-ink:#dff9f2; --bill-ink-2:#b2efe1; --bill-bg:#0a1114;
+      --bill-line:#2ad6c755; --bill-edge:#2ad6c7;
+      --sigil-slot-bg:#0a1114; /* exact preview+print parity */
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Inter,Roboto,Helvetica,Arial;
+      color:var(--ink);
+      background:
+        radial-gradient(140% 180% at 110% -10%, #1a2d2a33 0, transparent 60%),
+        radial-gradient(160% 140% at -20% -20%, #132a2e30 0, transparent 60%),
+        linear-gradient(#0b1518, var(--bg2));
+    }
+
+    /* Header */
+    .wrap{max-width:1000px;margin:24px auto;padding:0 14px 84px}
+    header.app{
+      position:sticky; top:0; z-index:10;
+      backdrop-filter:saturate(140%) blur(8px);
+      background:linear-gradient(180deg,#0b1418aa,#0b141880);
+      border-bottom:1px solid var(--line);
+    }
+    .head-inner{max-width:1000px;margin:0 auto;padding:10px 14px;display:flex;gap:10px;align-items:center}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.04em;font-size:14px}
+    .brand .dot{width:10px;height:10px;border-radius:50%;background:conic-gradient(from 90deg,#37e6d4,#81fff1,#37e6d4)}
+    .head-right{margin-left:auto;display:flex;gap:8px;align-items:center;color:var(--dim);font-size:12px}
+
+    h1{font-size:20px;margin:18px 0 8px}
+    .sub{color:var(--dim);margin:0 0 18px}
+
+    /* Cards + layout */
+    section{
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      padding:14px 12px;
+      margin:12px 0;
+      background:var(--card);
+      box-shadow:0 10px 30px #00000028 inset, 0 1px 0 #ffffff10 inset;
+    }
+    .row{display:grid;grid-template-columns:180px 1fr auto;gap:8px;align-items:center;margin:8px 0;min-width:0}
+    label{color:var(--dim)}
+    input,textarea,select,button{font:inherit;color:inherit}
+    input,textarea,select{
+      width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:#0c1719;outline:none;min-width:0;
+    }
+    input:focus,textarea:focus,select:focus{box-shadow:var(--focus);border-color:#37e6d499}
+    textarea{min-height:92px;resize:vertical;white-space:pre-wrap;overflow-wrap:anywhere}
+    button{padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:#0e1a1c;cursor:pointer;transition:transform .05s ease}
+    button:active{transform:translateY(1px)}
+    button.primary{background:linear-gradient(180deg,#37e6d466,#37e6d420);border-color:#37e6d455}
+    button.ghost{background:transparent;border-color:#ffffff22}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    .out{background:#081113;border:1px dashed var(--line);padding:10px;border-radius:12px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+    .ok{color:var(--ok)} .bad{color:var(--bad)}
+    .pill{display:inline-flex;gap:8px;align-items:center;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:#0c1719;white-space:nowrap}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .hint{color:var(--dim);font-size:12px}
+    .stack{display:grid;gap:8px}
+    .file{display:flex;align-items:center;gap:8px;min-width:0}
+    .badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:#0c1719;color:var(--dim);font-size:12px;white-space:nowrap}
+    .flex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .spacer{flex:1}
+    .copy{border:1px dashed var(--line);background:#101c1e}
+    .hr{height:1px;background:var(--line);margin:12px 0}
+    .steps{display:flex;gap:8px;flex-wrap:wrap}
+    .step{display:flex;gap:8px;align-items:center;padding:4px 8px;border-radius:999px;border:1px solid var(--line);background:#0c1719}
+    .step .dot{width:8px;height:8px;border-radius:50%;background:#777}
+    .step.ok .dot{background:var(--ok)}
+    .step.bad .dot{background:var(--bad)}
+
+    /* NOTE PREVIEW (banknote shell) */
+    .note-preview-host{margin-top:8px;overflow:auto;max-height:440px}
+    .banknote-frame{
+      width:100%;
+      aspect-ratio:1000/618;
+      background:var(--bill-bg);
+      border:1px solid var(--bill-line);
+      border-radius:16px;
+      box-shadow:0 40px 120px #00000050, 0 2px 0 #ffffff10 inset;
+      display:grid;place-items:center;overflow:hidden;
+    }
+    .banknote-frame > svg{
+      width:100%; height:auto; display:block;
+      shape-rendering:geometricPrecision;
+      text-rendering:geometricPrecision;
+    }
+/* Φ watermark (overlay, top-left, visible over SVG) */
+.banknote-frame{
+  position: relative;            /* stacking context */
+}
+.banknote-frame > svg{
+  position: relative;
+  z-index: 2;                    /* SVG sits below the overlay */
+}
+
+/* overlay watermark */
+.banknote-frame::after{
+  content: "Φ";
+  position: absolute;
+  left: 24px;
+  top: 86px;
+  font-family: ui-serif, "Iowan Old Style", Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  line-height: .9;
+  font-size: clamp(120px, 18vw, 260px);
+
+  /* faint but visible */
+  color: #81fff0;
+  opacity: .06;
+  filter: blur(.4px);
+
+  /* blend with whatever the SVG draws */
+  mix-blend-mode: screen;
+
+  pointer-events: none;
+  user-select: none;
+  z-index: 3;                    /* above the SVG */
+}
+
+/* Print: keep faint + predictable on printers */
+@media print {
+  .banknote-frame::after{
+    opacity: .03;
+    mix-blend-mode: normal;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color: #8cdfe0;
+  }
+}
+
+
+
+    /* PRINT SYSTEM */
+    #print-root{display:none}
+    .print-page{page-break-after:always;position:relative;padding:24px}
+    .print-page:last-child{page-break-after:auto}
+    .page-stamp-top,.page-stamp-bot{
+      position:absolute;left:24px;right:24px;font:12px/1.4 ui-monospace,monospace;color:#1b2b2b;opacity:.95;letter-spacing:.02em
+    }
+    .page-stamp-top{top:10px;display:flex;justify-content:space-between}
+    .page-stamp-bot{bottom:10px;display:flex;justify-content:space-between}
+    .proof-card{border:1px solid var(--line-strong);border-radius:10px;padding:12px;background:linear-gradient(180deg,#ffffff0a,#ffffff05);margin:10px 0}
+    .kv{display:grid;grid-template-columns:220px 1fr;gap:6px 10px}
+    .kv code{word-break:break-all}
+
+    /* PRINT MEDIA OVERRIDES — identical mobile/desktop output */
+    @media print {
+      html, body{background:#fff}
+      header.app,.no-print{display:none !important}
+      #print-root{display:block}
+
+      /* Typography for proof pages (dark on white, elegant & readable) */
+      #print-root, #print-root *{
+        color:#111 !important;
+        font-family: ui-serif, "Iowan Old Style", "Georgia", "Times New Roman", Times, serif;
+      }
+      .hint{color:#555 !important}
+      code, pre{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace !important;color:#111 !important}
+      .out{background:#f6f8f9 !important; border-color:#cbd5e1 !important}
+
+      .print-page{border:none;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}
+      @page{size:auto; margin: 14mm}
+      /* banknote physical size fixed for parity */
+      .banknote-frame{border:none; box-shadow:none; width:182mm; height:auto; aspect-ratio:1000/618; margin:0 auto}
+      .banknote-frame > svg{width:182mm; height:auto}
+    }
+
+    /* Mobile tweaks */
+    @media (max-width: 900px){
+      .grid{grid-template-columns:1fr}
+      .row{grid-template-columns:1fr}
+      .file{flex-direction:column;align-items:stretch}
+    }
+  </style>
+</head>
+<body>
+  <header class="app">
+    <div class="head-inner">
+      <div class="brand"><span class="dot"></span> Kairos — Exhaler</div>
+      <div class="head-right"><span class="badge">100% Offline</span><span class="badge">No Network Calls</span></div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <h1>Σ → sha256(Σ) → Φ</h1>
+    <h3>Inhale • Verify • Remember • Exhale</h3>
+    <p class="sub">Inhale a sigil-glyph Φkey, verify Σ → sha256 → Φ, Kompute a <strong>Live Valuation (Φ)</strong>, <strong>Exhale</strong> a lineage-aware deriative glyph, as <strong>KAIROS KURRENSY</strong> with verified <strong>Proof Of Breath™</strong>.</p>
+
+    <!-- 0) Load SVG -->
+    <section class="no-print">
+      <div class="flex">
+        <strong>0) Load SVG to auto-fill</strong>
+        <span class="spacer"></span>
+        <span class="hint">Parses <code>kaiSignature</code>, <code>userPhiKey</code>, Σ fields, <code>data-zk-*</code>, provenance, and valuation hints.</span>
+      </div>
+      <div class="file">
+        <input id="svgfile" type="file" accept=".svg,image/svg+xml" />
+        <span id="filesum" class="hint" style="min-width:0;overflow:hidden;text-overflow:ellipsis"></span>
+      </div>
+      <div class="grid">
+        <div class="stack">
+          <label class="hint">Detected kaiSignature</label>
+          <input id="det-sigma" readonly class="out" />
+        </div>
+        <div class="stack">
+          <label class="hint">Detected userPhiKey</label>
+          <input id="det-phi" readonly class="out" />
+        </div>
+      </div>
+      <div class="grid" style="margin-top:8px">
+        <div class="stack">
+          <label class="hint">Detected Σ fields (pulse/beat/step/chakra/intention)</label>
+          <textarea id="det-fields" readonly class="out" style="min-height:64px"></textarea>
+        </div>
+        <div class="stack">
+          <label class="hint">SVG preview (text)</label>
+          <textarea id="det-raw" readonly class="out" style="min-height:64px"></textarea>
+        </div>
+      </div>
+      <div class="row">
+        <div></div>
+        <div class="flex">
+          <button id="btn-apply-detected">Apply to inputs</button>
+          <button id="btn-clear-detected" class="ghost">Clear</button>
+        </div>
+        <div></div>
+      </div>
+    </section>
+
+    <!-- 1) Compose Σ (optional) -->
+    <section class="no-print">
+      <div class="flex">
+        <strong>1) Compose Σ (optional)</strong>
+        <span class="spacer"></span>
+        <span class="badge">Uses your canonical <code>verifierSigmaString</code></span>
+      </div>
+      <div class="row"><label>Pulse</label><input id="pulse" inputmode="numeric" /></div>
+      <div class="row"><label>Beat</label><input id="beat" inputmode="numeric" /></div>
+      <div class="row"><label>Step index</label><input id="stepIndex" inputmode="numeric" /></div>
+      <div class="row"><label>Chakra day</label><input id="chakra" /></div>
+      <div class="row"><label>Intention</label><input id="intention" /></div>
+      <div class="row">
+        <div></div>
+        <div class="flex">
+          <button class="primary" id="build-sigma">Build Σ</button>
+          <button id="clear-compose" class="ghost">Clear</button>
+        </div>
+        <div></div>
+      </div>
+      <div class="stack">
+        <label class="hint">Σ string (canonical). You can also paste directly:</label>
+        <textarea id="sigma" placeholder="pulse|beat|stepIndex|chakraDay|intention"></textarea>
+        <div class="flex"><button id="copy-sigma" class="copy">Copy Σ</button></div>
+      </div>
+    </section>
+
+    <!-- 2) Compute sha256 -->
+    <section class="no-print">
+      <strong>2) Compute sha256(Σ)</strong>
+      <div class="row">
+        <label>sha256 hex</label>
+        <input id="sha" readonly class="out" />
+        <button id="copy-sha" class="copy">Copy</button>
+      </div>
+      <div class="row">
+        <label>Compare vs. SVG <code>kaiSignature</code></label>
+        <input id="svg-sigma" placeholder="Paste SVG kaiSignature (hex) to compare…"/>
+        <div class="pill">Match: <span id="match-sha" class="bad">—</span></div>
+      </div>
+      <div class="row">
+        <div></div>
+        <div class="flex">
+          <button class="primary" id="btn-hash">Compute sha256</button>
+          <button id="btn-clear-hash" class="ghost">Clear</button>
+        </div>
+        <div></div>
+      </div>
+    </section>
+
+    <!-- 3) Derive Φ -->
+    <section class="no-print">
+      <div class="flex">
+        <strong>3) Derive Φ from sha256(Σ)</strong>
+        <span class="spacer"></span>
+        <span class="badge">Your exact <code>derivePhiKeyFromSigCanon</code></span>
+      </div>
+      <div class="row">
+        <label>Derived Φ</label>
+        <input id="phi" readonly class="out" />
+        <button id="copy-phi" class="copy">Copy</button>
+      </div>
+      <div class="row">
+        <label>Compare vs. SVG <code>userPhiKey</code></label>
+        <input id="svg-phi" placeholder="Paste SVG userPhiKey to compare…" />
+        <div class="pill">Match: <span id="match-phi" class="bad">—</span></div>
+      </div>
+      <div class="row">
+        <div></div>
+        <div class="flex">
+          <button class="primary" id="btn-derive">Derive Φ</button>
+          <button id="btn-clear-derive" class="ghost">Clear</button>
+        </div>
+        <div></div>
+      </div>
+    </section>
+
+    <!-- 4) Verify Attestation (optional for send) -->
+    <section class="no-print">
+      <div class="flex">
+        <strong>4) Verify Registry Attestation</strong>
+        <span class="spacer"></span>
+        <span class="hint">Validates <code>?r</code>, <code>?s</code>, <code>?kid</code> offline</span>
+      </div>
+      <div class="row">
+        <label>Transfer URL</label>
+        <input id="att-url" placeholder="Paste a transfer link with ?r=&s=&kid=" />
+        <button id="att-parse">Parse URL</button>
+      </div>
+      <div class="grid">
+        <div class="stack"><label class="hint"><code>r</code> (base64url)</label><textarea id="att-r" class="out"></textarea></div>
+        <div class="stack"><label class="hint"><code>s</code> (DER base64url)</label><textarea id="att-s" class="out"></textarea></div>
+      </div>
+      <div class="row">
+        <label><code>kid</code></label>
+        <input id="att-kid" />
+        <div class="pill">Valid: <span id="att-ok" class="bad">—</span></div>
+      </div>
+      <div class="row">
+        <div></div><div class="flex"><button class="primary" id="att-verify">Verify attestation</button><button id="att-clear" class="ghost">Clear</button></div><div></div>
+      </div>
+      <div class="stack">
+        <label class="hint">Decoded claim JSON</label>
+        <textarea id="att-claim" readonly class="out" style="min-height:90px"></textarea>
+      </div>
+    </section>
+
+    <!-- 5) Live Valuation (Φ) -->
+    <section class="no-print">
+      <div class="flex">
+        <strong>5) Live Valuation (Φ)</strong>
+        <span class="spacer"></span>
+        <span class="badge">phi/kosmos-vφ-5 • fully offline</span>
+      </div>
+      <div class="grid">
+        <div class="stack"><label class="hint">Live Value Φ</label><input id="val-live" readonly class="out" /></div>
+        <div class="stack"><label class="hint">Premium Φ</label><input id="val-premium" readonly class="out" /></div>
+      </div>
+      <div class="grid">
+        <div class="stack"><label class="hint">Algorithm • Policy checksum</label><input id="val-alg" readonly class="out" /></div>
+        <div class="stack"><label class="hint">Computed at Pulse (frozen)</label><input id="val-computed" readonly class="out" /></div>
+      </div>
+      <div class="grid">
+        <div class="stack"><label class="hint">Valuation Stamp (hash)</label><input id="val-stamp" readonly class="out" /></div>
+        <div class="stack"><label class="hint">Now (pulses/day 17,491.270421)</label><input id="val-nowpulse" readonly class="out" /></div>
+      </div>
+      <div class="row">
+        <div></div>
+        <div class="flex">
+          <button id="val-compute-now" class="primary">Compute live Φ now</button>
+          <button id="val-clear" class="ghost">Clear</button>
+        </div>
+        <div></div>
+      </div>
+
+      <details class="no-print" style="margin-top:6px">
+        <summary><strong>Advanced</strong> — write Φ attrs into loaded SVG</summary>
+        <div class="row">
+          <div></div>
+          <div class="flex">
+            <button id="val-write-into-svg">Write live Φ into SVG (root attrs)</button>
+          </div>
+          <div></div>
+        </div>
+      </details>
+    </section>
+
+    <!-- 6) Send (Φ) -->
+    <section class="no-print">
+      <div class="flex">
+        <strong>6) Send (Φ)</strong>
+        <span class="spacer"></span>
+        <span class="hint">Stage: ① Amount → ② Send → ③ URL → ④ Mint</span>
+      </div>
+
+      <div class="steps" style="margin:6px 0 10px">
+        <div id="step-amount" class="step bad"><span class="dot"></span><span>① Amount</span></div>
+        <div id="step-send" class="step bad"><span class="dot"></span><span>② Send</span></div>
+        <div id="step-url" class="step bad"><span class="dot"></span><span>③ URL</span></div>
+        <div id="step-mint" class="step bad"><span class="dot"></span><span>④ Mint</span></div>
+      </div>
+
+      <div class="row"><label>Parent URL</label><input id="parent-url" placeholder="Auto-filled from loaded SVG if present" /></div>
+      <div class="row"><label>Amount Φ <strong>(required)</strong></label><input id="send-amount" inputmode="decimal" placeholder="e.g. 0.125000" /><div class="pill">Ready: <span id="send-ready" class="bad">NO</span></div></div>
+      <div class="row"><label>Recipient Φkey (optional)</label><input id="send-recipient" placeholder="base58 Φkey (optional)" /></div>
+      <div class="row"><label>New child URL</label><input id="live-url" readonly class="out" /><button id="copy-live-url" class="copy">Copy</button></div>
+
+      <div class="row">
+        <div></div>
+        <div class="flex">
+          <button id="btn-send" class="primary" disabled>Exhale → Inhale child</button>
+          <span class="pill">Status: <span id="send-status" class="bad">—</span></span>
+          <button id="btn-download-child" disabled>Inhale child SVG</button>
+          <button id="btn-rotate" disabled>Rotate URL</button>
+          <button id="btn-clear-live" class="ghost">Clear</button>
+        </div>
+        <div></div>
+      </div>
+    </section>
+
+    <!-- 7) Kairos Kurrency (Preview + Print + PNG) -->
+    <section>
+      <div class="flex">
+        <strong>7) KAIROS KURRENSY — Sovereign Harmonik Kingdom</strong>
+        <span class="spacer"></span>
+        <span class="badge">Issued under Yahuah’s Law of Eternal Light (Φ • Kai-Turah)</span>
+      </div>
+
+      <!-- Immutable Title -->
+      <div class="row"><label>Title</label><input value="KAIROS KURRENSY — LEGAL TENDER OF THE SOVEREIGN KINGDOM" disabled class="out" /></div>
+
+      <!-- Rich metadata inputs printed on note -->
+      <div class="grid no-print">
+        <div class="stack">
+          <div class="row"><label>Purpose</label><input id="note-purpose" placeholder="e.g., consideration for work / gift / exchange" /></div>
+          <div class="row"><label>To</label><input id="note-to" placeholder="Recipient" /></div>
+          <div class="row"><label>From</label><input id="note-from" placeholder="Issuer" /></div>
+        </div>
+        <div class="stack">
+          <div class="row"><label>Location</label><input id="note-location" placeholder="(optional)" /></div>
+          <div class="row"><label>Witnesses</label><input id="note-witnesses" placeholder="(optional)" /></div>
+          <div class="row"><label>Reference</label><input id="note-ref" placeholder="(optional)" /></div>
+        </div>
+      </div>
+      <div class="row no-print"><label>Remark</label><input id="note-remark" placeholder="In Yahuah We Trust — Secured by Φ, not man-made law" /></div>
+      <div class="row no-print">
+        <div></div>
+        <div class="flex">
+          <button id="btn-render-note" class="primary">Render Preview</button>
+          <button id="btn-print-note">Print / Save PDF</button>
+          <button id="btn-save-png" class="ghost">Save PNG</button>
+        </div>
+        <div></div>
+      </div>
+
+      <div id="note-preview" class="note-preview-host out"></div>
+    </section>
+<!-- 8) Provenance & Transfer (Offline) -->
+<section class="no-print">
+  <div class="flex">
+    <strong>8) Provenance & Transfer (Offline)</strong>
+    <span class="spacer"></span>
+    <span class="badge">Chain • Merkle • Note-ID</span>
+  </div>
+
+  <!-- PDF upload -->
+  <div class="file" style="margin:6px 0 10px">
+    <input id="pv-pdf" type="file" accept="application/pdf,.pdf" />
+    <span id="pv-pdfsum" class="hint" style="min-width:0;overflow:hidden;text-overflow:ellipsis"></span>
+  </div>
+
+  <div class="grid">
+    <div class="stack">
+      <label class="hint">Note ID</label>
+      <input id="pv-noteid" readonly class="out"/>
+    </div>
+    <div class="stack">
+      <label class="hint">Current Holder (Φkey)</label>
+      <input id="pv-current" readonly class="out"/>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="stack">
+      <label class="hint">Chain Length</label>
+      <input id="pv-len" readonly class="out"/>
+    </div>
+    <div class="stack">
+      <label class="hint">Merkle Root</label>
+      <input id="pv-root" readonly class="out"/>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>Transfer to Φkey</label>
+    <input id="pv-newto" placeholder="Paste recipient Φkey"/>
+    <button id="pv-stamp" class="primary">Stamp Transfer</button>
+  </div>
+
+  <div class="row">
+    <label>Status</label>
+    <input id="pv-status" readonly class="out"/>
+  </div>
+</section>
+
+
+    <!-- Hidden print root -->
+    <div id="print-root" aria-hidden="true"></div>
+  </div>
+
+  <!-- Core verifier (your existing build) -->
+  <script src="./pdf-lib.min.js"></script>
+  <script src="./verifier-core.js"></script>
+  <script>
+    /*! Minimal QR (byte mode, EC-M, v1–v12) — MIT.
+        API compatible with kazuhikoarase's qrcode-generator for SVG output. */
+    (function (global) {
+      "use strict";
+    
+      // ---------- GF(256) ----------
+      const QRMath = (() => {
+        const EXP = new Array(256);
+        const LOG = new Array(256);
+        for (let i = 0; i < 8; i++) EXP[i] = 1 << i;
+        for (let i = 8; i < 256; i++) EXP[i] = EXP[i - 4] ^ EXP[i - 5] ^ EXP[i - 6] ^ EXP[i - 8];
+        for (let i = 0; i < 256; i++) LOG[EXP[i]] = i;
+        const glog = (n) => { if (n < 1) throw new Error("glog"); return LOG[n]; };
+        const gexp = (n) => { while (n < 0) n += 255; while (n >= 256) n -= 255; return EXP[n]; };
+        return { glog, gexp, EXP_TABLE: EXP, LOG_TABLE: LOG };
+      })();
+    
+      // ---------- Polynomials ----------
+      class QRPolynomial {
+        constructor(num, shift) {
+          let offset = 0;
+          while (offset < num.length && num[offset] === 0) offset++;
+          this.num = new Array(num.length - offset + shift);
+          for (let i = 0; i < num.length - offset; i++) this.num[i] = num[i + offset];
+        }
+        get(i) { return this.num[i]; }
+        getLength() { return this.num.length; }
+        multiply(e) {
+          const num = new Array(this.getLength() + e.getLength() - 1).fill(0);
+          for (let i = 0; i < this.getLength(); i++)
+            for (let j = 0; j < e.getLength(); j++)
+              num[i + j] ^= QRMath.gexp(QRMath.glog(this.get(i)) + QRMath.glog(e.get(j)));
+          return new QRPolynomial(num, 0);
+        }
+        mod(e) {
+          if (this.getLength() - e.getLength() < 0) return this;
+          const ratio = QRMath.glog(this.get(0)) - QRMath.glog(e.get(0));
+          const num = this.num.slice();
+          for (let i = 0; i < e.getLength(); i++)
+            num[i] ^= QRMath.gexp(QRMath.glog(e.get(i)) + ratio);
+          return new QRPolynomial(num, 0).mod(e);
+        }
+      }
+    
+      // ---------- Bit buffer ----------
+      class QRBitBuffer {
+        constructor() { this.buffer = []; this.length = 0; }
+        get(i) { return ((this.buffer[Math.floor(i / 8)] >>> (7 - i % 8)) & 1) === 1; }
+        put(num, length) { for (let i = 0; i < length; i++) this.putBit(((num >>> (length - i - 1)) & 1) === 1); }
+        putBit(bit) {
+          if (this.length === this.buffer.length * 8) this.buffer.push(0);
+          if (bit) this.buffer[this.length >>> 3] |= (0x80 >>> (this.length % 8));
+          this.length++;
+        }
+        getLengthInBits() { return this.length; }
+      }
+    
+      // ---------- Tables & utils ----------
+      const QRErrorCorrectLevel = { L:1, M:0, Q:3, H:2 };
+      const QRMaskPattern = {
+        PATTERN000:0, PATTERN001:1, PATTERN010:2, PATTERN011:3,
+        PATTERN100:4, PATTERN101:5, PATTERN110:6, PATTERN111:7,
+        applyMask(p, i, j){
+          switch (p) {
+            case 0: return (i + j) % 2 === 0;
+            case 1: return i % 2 === 0;
+            case 2: return j % 3 === 0;
+            case 3: return (i + j) % 3 === 0;
+            case 4: return ((Math.floor(i / 2) + Math.floor(j / 3)) % 2) === 0;
+            case 5: return ((i * j) % 2 + (i * j) % 3) === 0;
+            case 6: return (((i * j) % 2 + (i * j) % 3) % 2) === 0;
+            case 7: return (((i * j) % 3 + (i + j) % 2) % 2) === 0;
+            default: throw new Error("bad mask");
+          }
+        }
+      };
+    
+      const QRUtil = (() => {
+        const PATTERN_POSITION_TABLE = [
+          [],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62]
+        ];
+        const G15 = 1335, G18 = 7973, G15_MASK = 21522;
+        const getBCHDigit = (d) => { let n=0; while (d !== 0) { n++; d >>>= 1; } return n; };
+        function getBCHTypeInfo(data) {
+          let d = data << 10;
+          while (getBCHDigit(d) - getBCHDigit(G15) >= 0) d ^= (G15 << (getBCHDigit(d) - getBCHDigit(G15)));
+          return ( (data << 10) | d ) ^ G15_MASK;
+        }
+        function getBCHTypeNumber(data) {
+          let d = data << 12;
+          while (getBCHDigit(d) - getBCHDigit(G18) >= 0) d ^= (G18 << (getBCHDigit(d) - getBCHDigit(G18)));
+          return (data << 12) | d;
+        }
+        const getPatternPosition = (typeNumber) => PATTERN_POSITION_TABLE[typeNumber - 1];
+    
+        function getLostPoint(qr) {
+          const moduleCount = qr.getModuleCount();
+          let lostPoint = 0;
+    
+          // Adjacent modules in row/column having same color
+          for (let r=0; r<moduleCount; r++) {
+            let sameCount = 0; let dark = qr.isDark(r,0);
+            for (let c=0; c<moduleCount; c++) {
+              if (qr.isDark(r,c) === dark) { sameCount++; }
+              else { if (sameCount >= 5) lostPoint += (3 + (sameCount - 5)); dark = qr.isDark(r,c); sameCount = 1; }
+            }
+            if (sameCount >= 5) lostPoint += (3 + (sameCount - 5));
+          }
+          for (let c=0; c<moduleCount; c++) {
+            let sameCount = 0; let dark = qr.isDark(0,c);
+            for (let r=0; r<moduleCount; r++) {
+              if (qr.isDark(r,c) === dark) { sameCount++; }
+              else { if (sameCount >= 5) lostPoint += (3 + (sameCount - 5)); dark = qr.isDark(r,c); sameCount = 1; }
+            }
+            if (sameCount >= 5) lostPoint += (3 + (sameCount - 5));
+          }
+    
+          // 2x2 blocks
+          for (let r=0; r<moduleCount-1; r++)
+            for (let c=0; c<moduleCount-1; c++) {
+              const count = (qr.isDark(r,c)?1:0) + (qr.isDark(r+1,c)?1:0) + (qr.isDark(r,c+1)?1:0) + (qr.isDark(r+1,c+1)?1:0);
+              if (count === 0 || count === 4) lostPoint += 3;
+            }
+    
+          // Finder-like patterns in rows
+          for (let r=0; r<moduleCount; r++)
+            for (let c=0; c<moduleCount-6; c++) {
+              if ( qr.isDark(r,c) && !qr.isDark(r,c+1) && qr.isDark(r,c+2) && qr.isDark(r,c+3) && qr.isDark(r,c+4) && !qr.isDark(r,c+5) && qr.isDark(r,c+6) ) {
+                if (c>=4 && !qr.isDark(r,c-1) && !qr.isDark(r,c-2) && !qr.isDark(r,c-3) && !qr.isDark(r,c-4)) lostPoint += 40;
+                else if (c+7<=moduleCount-5 && !qr.isDark(r,c+7) && !qr.isDark(r,c+8) && !qr.isDark(r,c+9) && !qr.isDark(r,c+10)) lostPoint += 40;
+              }
+            }
+          // ...and columns
+          for (let c=0; c<moduleCount; c++)
+            for (let r=0; r<moduleCount-6; r++) {
+              if ( qr.isDark(r,c) && !qr.isDark(r+1,c) && qr.isDark(r+2,c) && qr.isDark(r+3,c) && qr.isDark(r+4,c) && !qr.isDark(r+5,c) && qr.isDark(r+6,c) ) {
+                if (r>=4 && !qr.isDark(r-1,c) && !qr.isDark(r-2,c) && !qr.isDark(r-3,c) && !qr.isDark(r-4,c)) lostPoint += 40;
+                else if (r+7<=moduleCount-5 && !qr.isDark(r+7,c) && !qr.isDark(r+8,c) && !qr.isDark(r+9,c) && !qr.isDark(r+10,c)) lostPoint += 40;
+              }
+            }
+    
+          // Balance of dark modules
+          let darkCount = 0;
+          for (let r=0; r<moduleCount; r++)
+            for (let c=0; c<moduleCount; c++)
+              if (qr.isDark(r,c)) darkCount++;
+          const ratio = Math.abs((darkCount * 100 / (moduleCount*moduleCount)) - 50) / 5;
+          lostPoint += ratio * 10;
+          return lostPoint;
+        }
+    
+        function getErrorCorrectPolynomial(ecLength){
+          let a = new QRPolynomial([1], 0);
+          for (let i=0; i<ecLength; i++) a = a.multiply(new QRPolynomial([1, QRMath.gexp(i)], 0));
+          return a;
+        }
+    
+        return {
+          getBCHTypeInfo, getBCHTypeNumber, getPatternPosition, getMask: QRMaskPattern.applyMask,
+          getErrorCorrectPolynomial, getLostPoint
+        };
+      })();
+    
+      // RS blocks for v1–v12, EC-M only (index 1)
+      const RS_BLOCK_TABLE = [
+        null,
+        [ [[19,16]], [[16,14]], [[13,11]], [[9,9]] ],
+        [ [[34,28]], [[28,22]], [[22,16]], [[16,12]] ],
+        [ [[55,44]], [[44,34]], [[34,26]], [[26,18]] ],
+        [ [[80,64]], [[64,52]], [[48,38]], [[36,26]] ],
+        [ [[108,86]], [[86,70]], [[62,46]], [[46,34]] ],
+        [ [[136,108]], [[108,86]], [[76,60]], [[60,42]] ],
+        [ [[156,124]], [[124,98]], [[88,66]], [[66,50]] ],
+        [ [[194,154]], [[154,122]], [[110,86]], [[86,62]] ],
+        [ [[232,182]], [[182,143]], [[132,100]], [[100,74]] ],
+        [ [[274,216]], [[216,174]], [[154,122]], [[122,86]] ],
+        [ [[324,254]], [[254,202]], [[180,140]], [[140,100]] ]
+      ];
+      function QRErrorCorrectLevelIndex(level){
+        return (level===QRErrorCorrectLevel.L?0:level===QRErrorCorrectLevel.M?1:level===QRErrorCorrectLevel.Q?2:3);
+      }
+      const QRRSBlock = {
+        getRSBlocks(typeNumber, errorCorrectLevel){
+          const idx = QRErrorCorrectLevelIndex(errorCorrectLevel);
+          return RS_BLOCK_TABLE[typeNumber][idx].map(t => ({ totalCount:t[0], dataCount:t[1] }));
+        }
+      };
+    
+      // ---------- Data object (byte mode only) ----------
+      class QR8bitByte {
+        constructor(data){ this.mode = 4; this.data = data; this.parsed = new TextEncoder().encode(data); }
+        getLength(){ return this.parsed.length; }
+        write(buffer){ for (let i=0;i<this.parsed.length;i++) buffer.put(this.parsed[i], 8); }
+      }
+    
+      // ---------- Core model ----------
+      class QRCodeModel {
+        constructor(typeNumber, errorCorrectLevel){
+          this.typeNumber = typeNumber;
+          this.errorCorrectLevel = errorCorrectLevel;
+          this.modules = null; this.moduleCount = 0;
+          this.dataList = []; this.dataCache = null;
+        }
+        addData(data){ this.dataList.push(new QR8bitByte(data)); this.dataCache=null; }
+        isDark(r,c){ return this.modules[r][c] === true; }
+        getModuleCount(){ return this.moduleCount; }
+    
+        make(){
+          if (this.typeNumber < 1) {
+            for (let t=1; t<=12; t++){
+              const test = new QRCodeModel(t, this.errorCorrectLevel);
+              test.addData(this.dataList[0].data);
+              try {
+                test.makeImpl(false, 0);
+                this.typeNumber = t; break;
+              } catch { /* overflow → try bigger */ }
+            }
+          }
+          this.makeImpl(false, 0);
+        }
+    
+        makeImpl(test, maskPattern){
+          this.moduleCount = this.typeNumber * 4 + 17;
+          this.modules = Array.from({length:this.moduleCount}, _ => Array(this.moduleCount).fill(null));
+    
+          // Finder patterns
+          this.setupPositionProbePattern(0, 0);
+          this.setupPositionProbePattern(this.moduleCount - 7, 0);
+          this.setupPositionProbePattern(0, this.moduleCount - 7);
+    
+          // Timing
+          this.setupTimingPattern();
+    
+          // Alignment
+          this.setupPositionAdjustPattern();
+    
+          // Type & version info
+          this.setupTypeInfo(test, maskPattern);
+          if (this.typeNumber >= 7) this.setupTypeNumber(test);
+    
+          // Data
+          const data = this.createData(this.typeNumber, this.errorCorrectLevel, this.dataList);
+          this.mapData(data, maskPattern);
+    
+          // Choose best mask
+          let bestMask = 0, bestLost = 1e9;
+          for (let p=0; p<8; p++){
+            const q = new QRCodeModel(this.typeNumber, this.errorCorrectLevel);
+            q.modules = this.modules.map(row => row.slice());
+            q.mapData(this.dataCache, p);
+            const lost = QRUtil.getLostPoint(q);
+            if (lost < bestLost) { bestLost = lost; bestMask = p; }
+          }
+          this.modules = Array.from({length:this.moduleCount}, _ => Array(this.moduleCount).fill(null));
+          this.setupPositionProbePattern(0, 0);
+          this.setupPositionProbePattern(this.moduleCount - 7, 0);
+          this.setupPositionProbePattern(0, this.moduleCount - 7);
+          this.setupTimingPattern();
+          this.setupPositionAdjustPattern();
+          this.setupTypeInfo(false, bestMask);
+          if (this.typeNumber >= 7) this.setupTypeNumber(false);
+          this.mapData(this.dataCache, bestMask);
+        }
+    
+        setupPositionProbePattern(row, col){
+          for (let r=-1;r<=7;r++) for (let c=-1;c<=7;c++){
+            const rr = row + r, cc = col + c;
+            if (rr<0||rr>=this.moduleCount||cc<0||cc>=this.moduleCount) continue;
+            const v = ( (r>=0&&r<=6&&(c===0||c===6)) ||
+                        (c>=0&&c<=6&&(r===0||r===6)) ||
+                        (r>=2&&r<=4&&c>=2&&c<=4) );
+            this.modules[rr][cc] = v;
+          }
+        }
+        setupTimingPattern(){
+          for (let r=8; r<this.moduleCount-8; r++) if (this.modules[r][6] === null) this.modules[r][6] = (r % 2 === 0);
+          for (let c=8; c<this.moduleCount-8; c++) if (this.modules[6][c] === null) this.modules[6][c] = (c % 2 === 0);
+        }
+        setupPositionAdjustPattern(){
+          const pos = QRUtil.getPatternPosition(this.typeNumber);
+          for (let i=0;i<pos.length;i++) for (let j=0;j<pos.length;j++){
+            const row = pos[i], col = pos[j];
+            if (this.modules[row][col] !== null) continue;
+            for (let r=-2;r<=2;r++) for (let c=-2;c<=2;c++){
+              const rr=row+r, cc=col+c;
+              if (rr<0||rr>=this.moduleCount||cc<0||cc>=this.moduleCount) continue;
+              this.modules[rr][cc] = (Math.max(Math.abs(r), Math.abs(c)) !== 1) ? true : (r===0||c===0) ? true : false;
+            }
+          }
+        }
+        setupTypeNumber(test){
+          const bits = QRUtil.getBCHTypeNumber(this.typeNumber);
+          for (let i=0;i<18;i++){
+            const mod = (!test && ((bits >> i) & 1) === 1);
+            this.modules[Math.floor(i/3)][i%3 + this.moduleCount - 8 - 3] = mod;
+            this.modules[i%3 + this.moduleCount - 8 - 3][Math.floor(i/3)] = mod;
+          }
+        }
+        setupTypeInfo(test, maskPattern){
+          const data = (QRErrorCorrectLevel.M << 3) | maskPattern;
+          const bits = QRUtil.getBCHTypeInfo(data);
+    
+          // around finders
+          for (let i=0;i<15;i++){
+            const mod = (!test && ((bits >> i) & 1) === 1);
+            // vertical left
+            if (i<6) this.modules[i][8] = mod;
+            else if (i<8) this.modules[i+1][8] = mod;
+            else this.modules[this.moduleCount - 15 + i][8] = mod;
+    
+            // horizontal top
+            const j = 14 - i;
+            if (j<8) this.modules[8][j] = mod;
+            else this.modules[8][j+1] = mod;
+          }
+          // fixed dark module
+          this.modules[this.moduleCount-8][8] = true;
+        }
+    
+        createData(typeNumber, errorCorrectLevel, dataList){
+          const rsBlocks = QRRSBlock.getRSBlocks(typeNumber, errorCorrectLevel);
+          const buffer = new QRBitBuffer();
+          // mode = 4 (byte)
+          for (const d of dataList){
+            buffer.put(4, 4);
+            const lenBits = (typeNumber < 10 ? 8 : 16);
+            buffer.put(d.getLength(), lenBits);
+            d.write(buffer);
+          }
+          let totalDataCount = 0;
+          for (const b of rsBlocks) totalDataCount += b.dataCount;
+          if (buffer.getLengthInBits() > totalDataCount * 8) throw new Error("data overflow");
+    
+          // terminator & padding to byte
+          if (buffer.getLengthInBits() + 4 <= totalDataCount * 8) buffer.put(0, 4);
+          while (buffer.getLengthInBits() % 8 !== 0) buffer.putBit(false);
+    
+          // pad bytes
+          const bytes = [];
+          const dataBytes = buffer.getLengthInBits() / 8;
+          for (let i=0;i<dataBytes;i++) bytes[i] = buffer.buffer[i];
+          for (let i=dataBytes;i<totalDataCount;i++) bytes[i] = (i % 2 === 0) ? 0xEC : 0x11;
+    
+          // RS blocks interleave
+          let offset = 0;
+          const dcData = [], ecData = [];
+          for (const rs of rsBlocks) {
+            const dcCount = rs.dataCount;
+            const ecCount = rs.totalCount - dcCount;
+            const dc = bytes.slice(offset, offset + dcCount); offset += dcCount;
+            const rsPoly = QRUtil.getErrorCorrectPolynomial(ecCount);
+            const rawPoly = new QRPolynomial(dc, 0);
+            const modPoly = rawPoly.mod(rsPoly);
+            const ec = new Array(ecCount).fill(0);
+            const modLen = modPoly.getLength();
+            for (let i=0;i<ecCount;i++){
+              const modIndex = i + modLen - ecCount;
+              ec[i] = (modIndex >= 0) ? modPoly.get(modIndex) : 0;
+            }
+            dcData.push(dc); ecData.push(ec);
+          }
+    
+          // interleave into this.dataCache
+          const data = [];
+          const rsCount = rsBlocks.length;
+          const maxDc = Math.max(...dcData.map(d => d.length));
+          for (let i=0;i<maxDc;i++) for (let r=0;r<rsCount;r++) if (i < dcData[r].length) data.push(dcData[r][i]);
+          const maxEc = Math.max(...ecData.map(e => e.length));
+          for (let i=0;i<maxEc;i++) for (let r=0;r<rsCount;r++) if (i < ecData[r].length) data.push(ecData[r][i]);
+    
+          this.dataCache = data;
+          return data;
+        }
+    
+        mapData(data, mask){
+          let inc = -1, row = this.moduleCount - 1, bitIndex = 7, byteIndex = 0;
+          for (let col = this.moduleCount - 1; col > 0; col -= 2) {
+            if (col === 6) col--;
+            while (true) {
+              for (let c = 0; c < 2; c++) {
+                if (this.modules[row][col - c] === null) {
+                  let dark = false;
+                  if (byteIndex < data.length) dark = ((data[byteIndex] >>> bitIndex) & 1) === 1;
+                  if (QRMaskPattern.applyMask(mask, row, col - c)) dark = !dark;
+                  this.modules[row][col - c] = dark;
+                  bitIndex--;
+                  if (bitIndex === -1) { byteIndex++; bitIndex = 7; }
+                }
+              }
+              row += inc;
+              if (row < 0 || this.moduleCount <= row) { row -= inc; inc = -inc; break; }
+            }
+          }
+        }
+    
+        // SVG
+        createSvgTag(opt){
+          opt = opt || {};
+          const cs = opt.cellSize || 2, m = (opt.margin == null ? 2 : opt.margin);
+          const mc = this.getModuleCount();
+          const size = cs * (mc + 2*m);
+          let sb = [];
+          sb.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`);
+          sb.push(`<rect width="100%" height="100%" fill="#fff"/>`);
+          sb.push(`<g fill="#000">`);
+          for (let r=0;r<mc;r++)
+            for (let c=0;c<mc;c++)
+              if (this.isDark(r,c)) sb.push(`<rect x="${cs*(c+m)}" y="${cs*(r+m)}" width="${cs}" height="${cs}"/>`);
+          sb.push(`</g></svg>`);
+          return sb.join("");
+        }
+      }
+    
+      function qrcode(typeNumber, errorCorrectLevel){
+        const q = new QRCodeModel(typeNumber || 0, (errorCorrectLevel == null ? QRErrorCorrectLevel.M : errorCorrectLevel));
+        return {
+          addData: (s) => q.addData(s),
+          make: () => q.make(),
+          createSvgTag: (o) => q.createSvgTag(o),
+          getModuleCount: () => q.getModuleCount(),
+          isDark: (r,c) => q.isDark(r,c)
+        };
+      }
+    
+      global.qrcode = qrcode;
+    })(this);
+    </script>
+    
+
+  <script>
+    /* =========================
+       === OFFLINE REGISTRY KEYS
+       ========================= */
+    const REGISTRY_PUBKEYS = {
+      "deh1AywPQdWpy9DXKAj3yU-WODpb1ehNZMtkAKsJqf8": {
+        rawHex: "04e89883a630e4ed7ad20a317955371d7dc24f8a52c23fe8bbc1238465f912d4fea5c9cb3478278921cc50052a5599d0a93eb364ad403c844804b66451d3d07c0c"
+      }
+    };
+    const REQUIRE_ATTESTATION_FOR_SEND = true;
+
+    /* guards */
+    if (!window.KaiVerifier ||
+        typeof KaiVerifier.verifierSigmaString !== "function" ||
+        typeof KaiVerifier.sha256HexCanon !== "function" ||
+        typeof KaiVerifier.derivePhiKeyFromSigCanon !== "function") {
+      alert("KaiVerifier core not found. Make sure verifier-core.js is built and next to this file.");
+    }
+
+    /* tiny DOM helpers */
+    const $ = (id) => document.getElementById(id);
+    const setMatch = (el, ok) => { el.textContent = ok ? "YES" : "NO"; el.classList.toggle("ok", !!ok); el.classList.toggle("bad", !ok); };
+    const setStep = (id, ok) => { const el=$(id); el.classList.toggle("ok", !!ok); el.classList.toggle("bad", !ok); };
+    const setStatus = (el, txt, ok) => { el.textContent = txt; el.classList.toggle("ok", !!ok); el.classList.toggle("bad", !ok); };
+    const copyText = (s) => { try { navigator.clipboard?.writeText?.(s); } catch {} };
+
+    /* ======================
+       === A) Build + Clear Σ
+       ====================== */
+    $("build-sigma").addEventListener("click", () => {
+      const pulse = Number($("pulse").value||0);
+      const beat = Number($("beat").value||0);
+      const stepIndex = Number($("stepIndex").value||0);
+      const chakra = $("chakra").value||"";
+      const intention = $("intention").value||"";
+      $("sigma").value = KaiVerifier.verifierSigmaString(pulse, beat, stepIndex, chakra, intention);
+    });
+    $("clear-compose").addEventListener("click", () => {
+      for (const id of ["pulse","beat","stepIndex","chakra","intention","sigma"]) $(id).value="";
+      setMatch($("match-sha"), false); $("sha").value="";
+    });
+    $("copy-sigma").addEventListener("click", ()=>copyText($("sigma").value||""));
+
+    /* ==================
+       === B) Hash (Σ)
+       ================== */
+    $("btn-hash").addEventListener("click", async () => {
+      const sigma = $("sigma").value.trim();
+      if (!sigma) { alert("Provide a Σ string first."); return; }
+      $("sha").value = "…";
+      const h = await KaiVerifier.sha256HexCanon(sigma);
+      $("sha").value = h;
+      const expect = ($("svg-sigma").value||"").trim();
+      setMatch($("match-sha"), expect && expect.toLowerCase()===h.toLowerCase());
+    });
+    $("btn-clear-hash").addEventListener("click", ()=>{ $("sha").value=""; $("svg-sigma").value=""; setMatch($("match-sha"), false); });
+    $("copy-sha").addEventListener("click", ()=>copyText($("sha").value||""));
+
+    /* ==================
+       === C) Derive Φ
+       ================== */
+    $("btn-derive").addEventListener("click", async () => {
+      const hex = ($("sha").value||"").trim(); if (!hex){ alert("Compute sha256 first."); return; }
+      const phi = await KaiVerifier.derivePhiKeyFromSigCanon(hex);
+      $("phi").value = phi;
+      const expectPhi = ($("svg-phi").value||"").trim();
+      setMatch($("match-phi"), !!expectPhi && expectPhi===phi);
+    });
+    $("btn-clear-derive").addEventListener("click", ()=>{ $("phi").value=""; $("svg-phi").value=""; setMatch($("match-phi"), false); });
+    $("copy-phi").addEventListener("click", ()=>copyText($("phi").value||""));
+
+    /* =========================
+       === D) SVG parsing / load
+       ========================= */
+    let currentSvgText = ""; let lastSvgFileName=null;
+    $("svgfile").addEventListener("change", async (e) => {
+      const f = e.target.files?.[0]; if (!f) return;
+      lastSvgFileName = f.name;
+      $("filesum").textContent = `${f.name} • ${f.type||"SVG"} • ${f.size.toLocaleString()} bytes`;
+      currentSvgText = await f.text();
+      $("det-raw").value = currentSvgText.slice(0, 200000);
+
+      // Detect share/sigil/live/valuation URL on root, prefill parent
+      const m = currentSvgText.match(/\sdata-(?:share|sigil|live|valuation)-url="([^"]+)"/i);
+      const foundUrl = m ? m[1].replace(/&amp;/g,'&') : "";
+      if (foundUrl) $("parent-url").value = foundUrl;
+      const shareMeta = /"shareUrl"\s*:\s*"([^"]+)"/.exec(currentSvgText)?.[1] || "";
+      if (!foundUrl && shareMeta) $("parent-url").value = shareMeta;
+
+      const sig = /"kaiSignature"\s*:\s*"([0-9a-fA-F]{16,})"/.exec(currentSvgText)?.[1] || /data-kai-signature="([0-9a-fA-F]{16,})"/i.exec(currentSvgText)?.[1] || "";
+      const phi = /"userPhiKey"\s*:\s*"([^"]{10,})"/.exec(currentSvgText)?.[1] || /data-phi-key="([^"]{10,})"/i.exec(currentSvgText)?.[1] || "";
+      $("det-sigma").value = sig; $("det-phi").value = phi;
+
+      const fields = {};
+      const take = (k, re) => { const v=re.exec(currentSvgText); if (v) fields[k]=isNaN(+v[1])?v[1]:+v[1]; };
+      take("pulse", /"pulse"\s*:\s*(\d+)/); take("kaiPulse", /"kaiPulse"\s*:\s*(\d+)/);
+      take("beat", /"beat"\s*:\s*(\d+)/); take("stepIndex", /"step(?:Index|index)"\s*:\s*(\d+)/);
+      take("chakraDay", /"chakraDay"\s*:\s*"([^"]+)"/); take("intention", /"intention"\s*:\s*"([^"]*)"/);
+
+      // ZK info (optional)
+      const zkScheme = /data-zk-scheme="([^"]+)"/i.exec(currentSvgText)?.[1] || /"zkScheme"\s*:\s*"([^"]+)"/.exec(currentSvgText)?.[1] || null;
+      const zkHash = /data-zk-poseidon-hash="([^"]+)"/i.exec(currentSvgText)?.[1] || /"poseidonHash"\s*:\s*"([^"]+)"/.exec(currentSvgText)?.[1] || null;
+      if (zkScheme || zkHash) {
+        fields.zk = { scheme: zkScheme||"", poseidon: zkHash||"" };
+      }
+
+      // Provenance (array in metadata)
+      const prov = currentSvgText.match(/"provenance"\s*:\s*\[([\s\S]*?)\]/);
+      if (prov) { try { fields.provenance = JSON.parse('[' + prov[1] + ']'); } catch {} }
+
+      $("det-fields").value = Object.keys(fields).length ? JSON.stringify(fields, null, 2) : "(none detected)";
+
+      clearValuation(); refreshSendReady();
+    });
+    $("btn-apply-detected").addEventListener("click", () => {
+      const sig = $("det-sigma").value.trim(), phi = $("det-phi").value.trim();
+      if (sig) $("svg-sigma").value = sig; if (phi) $("svg-phi").value = phi;
+      try {
+        const parsed = JSON.parse($("det-fields").value||"{}");
+        if (parsed.pulse!=null) $("pulse").value = parsed.pulse;
+        if (parsed.beat!=null) $("beat").value = parsed.beat;
+        if (parsed.stepIndex!=null) $("stepIndex").value = parsed.stepIndex;
+        if (parsed.chakraDay!=null) $("chakra").value = parsed.chakraDay;
+        if (parsed.intention!=null) $("intention").value = parsed.intention;
+      } catch {}
+    });
+    $("btn-clear-detected").addEventListener("click", () => {
+      $("svgfile").value=""; for (const id of ["filesum","det-sigma","det-phi","det-fields","det-raw"]) $(id).value="";
+      currentSvgText = ""; clearValuation(); refreshSendReady();
+    });
+
+    // Show selected PDF summary in section 8
+$("pv-pdf")?.addEventListener("change", (e) => {
+  const f = e.target.files?.[0];
+  $("pv-pdfsum").textContent = f ? `${f.name} • ${f.size.toLocaleString()} bytes` : "";
+});
+
+    /* ===========================================
+       === E) Attestation verify (ECDSA P-256)
+       =========================================== */
+    const hexToBytes = (hex)=>{ const c=hex.replace(/^0x/i,""); const u=new Uint8Array(c.length/2); for(let i=0;i<u.length;i++)u[i]=parseInt(c.slice(i*2,i*2+2),16); return u; };
+    const b64uToBytes = (s)=>{ const pad=s.length%4? "=".repeat(4-(s.length%4)):""; const b64=s.replace(/-/g,"+").replace(/_/g,"/")+pad; const bin=atob(b64); const u=new Uint8Array(bin.length); for(let i=0;i<u.length;i++)u[i]=bin.charCodeAt(i); return u; };
+    const importP256 = async (rawHex)=> crypto.subtle.importKey("raw", hexToBytes(rawHex), {name:"ECDSA",namedCurve:"P-256"}, false, ["verify"]);
+    const kidFromRawHex = async (rawHex)=>{ const d=await crypto.subtle.digest("SHA-256", hexToBytes(rawHex)); const b=btoa(String.fromCharCode(...new Uint8Array(d))); return b.replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); };
+
+    async function verifyAttestation({ r, s, kid }) {
+      const entry = REGISTRY_PUBKEYS[kid]; if (!entry) return { ok:false, reason:"Unknown kid", claimJson:null };
+      if (await kidFromRawHex(entry.rawHex) !== kid) return { ok:false, reason:"kid mismatch", claimJson:null };
+      const pub = await importP256(entry.rawHex);
+      const ok = await crypto.subtle.verify({name:"ECDSA",hash:"SHA-256"}, pub, b64uToBytes(s), b64uToBytes(r));
+      let claimJson=null; try{ claimJson=new TextDecoder().decode(b64uToBytes(r)); }catch{}
+      return { ok, reason: ok?"valid":"invalid signature", claimJson };
+    }
+
+    $("att-parse").addEventListener("click", () => {
+      const raw = ($("att-url").value||"").trim();
+      try { const u=new URL(raw, "http://x"); $("att-r").value=u.searchParams.get("r")||""; $("att-s").value=u.searchParams.get("s")||""; $("att-kid").value=u.searchParams.get("kid")||""; }
+      catch { alert("Invalid URL"); }
+    });
+    $("att-verify").addEventListener("click", async () => {
+      const r=($("att-r").value||"").trim(), sVal=($("att-s").value||"").trim(), kid=($("att-kid").value||"").trim();
+      if(!r||!sVal||!kid){ alert("Provide r, s and kid"); return; }
+      const res = await verifyAttestation({ r, s:sVal, kid });
+      $("att-claim").value = res.claimJson||""; setMatch($("att-ok"), !!res.ok); if(!res.ok&&res.reason) alert(res.reason);
+      refreshSendReady();
+    });
+    $("att-clear").addEventListener("click", ()=>{ for (const id of ["att-url","att-r","att-s","att-kid","att-claim"]) $(id).value=""; setMatch($("att-ok"), false); refreshSendReady(); });
+
+    /* =========================================================
+       === F) Live Valuation (vφ-5) — identical to your policy
+       ========================================================= */
+    function parseMetaLiteFromSvgText(txt) {
+      const pickNum = (re) => { const m = re.exec(txt); return m ? +m[1] : undefined; };
+      const pickStr = (re) => { const m = re.exec(txt); return m ? String(m[1]) : undefined; };
+      const meta = {};
+      meta.kaiPulse      = pickNum(/"kaiPulse"\s*:\s*(\d+)/) ?? pickNum(/"pulse"\s*:\s*(\d+)/);
+      meta.kaiSignature  = pickStr(/"kaiSignature"\s*:\s*"([0-9a-fA-F]{16,})"/) || pickStr(/data-kai-signature="([0-9a-fA-F]{16,})"/i);
+      meta.userPhiKey    = pickStr(/"userPhiKey"\s*:\s*"([^"]{10,})"/) || pickStr(/data-phi-key="([^"]{10,})"/i);
+      meta.beat          = pickNum(/"beat"\s*:\s*(\d+)/);
+      meta.stepIndex     = pickNum(/"step(?:Index|index)"\s*:\s*(\d+)/);
+      meta.stepsPerBeat  = pickNum(/"stepsPerBeat"\s*:\s*(\d+)/);
+      meta.seriesSize    = pickNum(/"seriesSize"\s*:\s*(\d+)/) ?? 1;
+      meta.quality       = pickStr(/"quality"\s*:\s*"(low|med|high)"/) ?? "med";
+      meta.creatorVerified = /"creatorVerified"\s*:\s*true/.test(txt);
+      meta.creatorRep    = pickNum(/"creatorRep"\s*:\s*(0?\.\d+|1(?:\.0+)?)/) ?? 0;
+      meta.frequencyHz   = pickNum(/"frequency(?:Hz|_hz|_HZ)"\s*:\s*([0-9]*\.?[0-9]+)/);
+      meta.chakraDay     = pickStr(/"chakraDay"\s*:\s*"([^"]+)"/);
+      meta.chakraGate    = pickStr(/"chakraGate"\s*:\s*"([^"]+)"/);
+
+      const txBlocks = txt.match(/"transfers"\s*:\s*\[([\s\S]*?)\]/);
+      if (txBlocks) { try { meta.transfers = JSON.parse("[" + txBlocks[1] + "]"); } catch { meta.transfers = []; } }
+
+      const prov = txt.match(/"provenance"\s*:\s*\[([\s\S]*?)\]/);
+      if (prov) { try { meta.provenance = JSON.parse("[" + prov[1] + "]"); } catch { meta.provenance = []; } }
+
+      const zkS = /data-zk-scheme="([^"]+)"/i.exec(txt)?.[1] || /"zkScheme"\s*:\s*"([^"]+)"/.exec(txt)?.[1] || null;
+      const zkH = /data-zk-poseidon-hash="([^"]+)"/i.exec(txt)?.[1] || /"poseidonHash"\s*:\s*"([^"]+)"/.exec(txt)?.[1] || null;
+      if (zkS || zkH) meta.zk = { scheme: zkS||"", poseidon: zkH||"" };
+
+      return meta;
+    }
+
+    (function(){
+      const PHI=(1+Math.sqrt(5))/2;
+      const PAR_OFFSET = 1;
+      const DISPLAY_OFFSET = 0.0;
+      const DEFAULT_STEPS_PER_BEAT=44, PULSES_PER_STEP=11, PULSES_PER_DAY_EXACT=17491.270421;
+      const RARITY_ONE_OF_ONE=PHI, RARITY_EXP=1/PHI;
+      const QUALITY_MAP={low:1-1/PHI**6,med:1,high:1+1/PHI**6};
+      const CREATOR_VERIFIED_LIFT=1/PHI**6, CREATOR_REP_MAX=1/PHI**5;
+      const PROV_LOG_SLOPE=1/PHI**3, HOLD_SLOPE=1/PHI**4, HOLD_CAP=1+1/PHI**4;
+      const CLOSURE_CENTER=0.7, CLOSURE_RANGE=0.3;
+      const CHURN_KAPPA=0.15;
+      const RESONANCE_GAIN=1/PHI**5, DISCOUNT_PULSE_HALFSPAN=PULSES_PER_DAY_EXACT;
+      const GEOM_EDGE_GAIN=1/PHI**7, GEOM_PRIME_GAIN=1/PHI**8;
+      const MOMENT_FIB_EXACT_GAIN=1/PHI, MOMENT_LUCAS_EXACT_GAIN=1/PHI**2, MOMENT_UNIFORM_GAIN=1/PHI**3, MOMENT_PAL_GAIN=1/PHI**4, MOMENT_RUN_GAIN=1/PHI**4, MOMENT_SEQ_GAIN=1/PHI**5, MOMENT_LOW_ENTROPY_GAIN=1/PHI**6;
+      const GENESIS_BIAS_GAIN=1/PHI**5, YEAR_PULSES_APPROX=PULSES_PER_DAY_EXACT*365;
+      const ADOPTION_GAIN_BASE=1/PHI**3, ADOPTION_GAIN_RARE=1/PHI**2;
+      const INDEX_SCARCITY_GAIN=1/PHI**4, FIB_STEP_GAIN=1/PHI**6, LUCAS_STEP_GAIN=1/PHI**7;
+      const BREATH_WAVE_GAIN=1/PHI**8, DAY_WAVE_GAIN=1/PHI**8, STROBE_WAVE_GAIN=1/PHI**9;
+      const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+      const q=(x,d=9)=>Math.round(x*10**d)/10**d;
+
+      function stableStringifyImpl(x){
+        if (x===null) return "null";
+        const t=typeof x;
+        if (t==="string"||t==="number"||t==="boolean") return JSON.stringify(x);
+        if (t==="object"){
+          if (Array.isArray(x)) return "["+x.map(stableStringifyImpl).join(",")+"]";
+          const keys=Object.keys(x).sort();
+          return "{"+keys.map(k=>JSON.stringify(k)+":"+stableStringifyImpl(x[k])).join(",")+"}";
+        }
+        return "null";
+      }
+      function stableStringify(x){ return stableStringifyImpl(x); }
+      function policyChecksum(){
+        const s="val-policy:"+stableStringify({
+          RARITY_ONE_OF_ONE, RARITY_EXP, QUALITY_MAP, CREATOR_VERIFIED_LIFT, CREATOR_REP_MAX,
+          PROV_LOG_SLOPE, HOLD_SLOPE, HOLD_CAP, CLOSURE_CENTER, CLOSURE_RANGE,
+          CHURN_KAPPA,
+          RESONANCE_GAIN, DISCOUNT_PULSE_HALFSPAN,
+          GEOM_EDGE_GAIN, GEOM_PRIME_GAIN,
+          MOMENT_FIB_EXACT_GAIN, MOMENT_LUCAS_EXACT_GAIN, MOMENT_UNIFORM_GAIN, MOMENT_PAL_GAIN, MOMENT_RUN_GAIN, MOMENT_SEQ_GAIN, MOMENT_LOW_ENTROPY_GAIN,
+          GENESIS_BIAS_GAIN, YEAR_PULSES_APPROX,
+          ADOPTION_GAIN_BASE, ADOPTION_GAIN_RARE,
+          INDEX_SCARCITY_GAIN, FIB_STEP_GAIN, LUCAS_STEP_GAIN,
+          BREATH_WAVE_GAIN, DAY_WAVE_GAIN, STROBE_WAVE_GAIN,
+          DEFAULT_STEPS_PER_BEAT, PULSES_PER_STEP, PULSES_PER_DAY_EXACT, PHI, PAR_OFFSET
+        });
+        let h=2166136261>>>0;
+        for (let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=(h+((h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24)))>>>0; }
+        return ("00000000"+(h>>>0).toString(16)).slice(-8);
+      }
+
+      /* helpers for the clock etc. */
+      function bigintSqrt(n){ if(n<0n) throw new Error("sqrt neg"); if(n<2n) return n; let x0=n, x1=(n>>1n)+1n; while(x1<x0){ x0=x1; x1=(x1+n/x1)>>1n; } return x0; }
+      function isPerfectSquareBig(n){ if(n<0n) return false; const r=bigintSqrt(n); return r*r===n; }
+      function isFibonacciExact(p){ if(!Number.isFinite(p)||p<0) return false; const n=BigInt(Math.trunc(Math.abs(p))); const a=5n*n*n+4n, b=5n*n*n-4n; return isPerfectSquareBig(a)||isPerfectSquareBig(b); }
+      function isLucasExact(p){ if(!Number.isFinite(p)||p<0) return false; const n=BigInt(Math.trunc(Math.abs(p))); let a=2n,b=1n; while(b<n){ const t=a+b; a=b; b=t; } return b===n; }
+      const absDigits=(p)=>Math.abs(Math.trunc(p)).toString();
+      function allSameDigit(s){ if(s.length<=1) return false; for(let i=1;i<s.length;i++) if(s[i]!==s[0]) return false; return true; }
+      function isPalindromeDigits(s){ if(s.length<=1) return false; for(let i=1;i<Math.floor(s.length/2);i++) if(s[i]!==s[s.length-1-i]) return false; return true; }
+      function longestRunSameDigit(s){ if(!s.length) return 0; let max=1,cur=1; for(let i=1;i<s.length;i++){ if(s[i]===s[i-1]){cur++; if(cur>max)max=cur;} else cur=1; } return max; }
+      function longestConsecutiveSequenceLen(s){ if(s.length<=1) return 1; let maxLen=1,curLen=1,dir=0; for(let i=1;i<s.length;i++){ const prev=s.charCodeAt(i-1)-48, curr=s.charCodeAt(i)-48, step=curr-prev; if(step===dir&&(step===1||step===-1)) curLen++; else if(step===1||step===-1){dir=step;curLen=2;} else {dir=0;curLen=1;} if(curLen>maxLen)maxLen=curLen; } return maxLen; }
+      function digitEntropy01(s){ if(!s.length) return 1; const cnt=Array(10).fill(0); for(const ch of s) cnt[ch.charCodeAt(0)-48]++; let H=0; for(const c of cnt) if(c){ const p=c/s.length; H -= p*Math.log(p); } const Hmax=Math.log(Math.min(10,s.length)); return Math.max(0,Math.min(1,H/(Hmax||1)));
+      }
+
+      function computeIntrinsicUnsigned(meta, nowPulse){
+        const STEPS_PER_BEAT = Number.isFinite(meta.stepsPerBeat) && meta.stepsPerBeat>0 ? meta.stepsPerBeat : DEFAULT_STEPS_PER_BEAT;
+        const pulsesPerBeat = STEPS_PER_BEAT * PULSES_PER_STEP;
+        const claimPulse = typeof meta.kaiPulse==="number" ? meta.kaiPulse : typeof meta.pulse==="number" ? meta.pulse : nowPulse;
+
+        const transfers = meta.transfers ?? [];
+        const closed = (transfers||[]).filter(t => t.receiverSignature && Number.isFinite(t.receiverKaiPulse));
+        const agePulses = Math.max(0, nowPulse-claimPulse);
+        const isPrime=(n)=>{ if(typeof n!=="number"||!Number.isFinite(n)||n<2) return false; const k=Math.floor(n); if(k%2===0) return k===2; for(let i=3;i*i<=k;i+=2) if(k%i===0) return false; return true; };
+        const resonancePhi = (()=>{ const f=meta.frequencyHz; if(!f||!Number.isFinite(f)||f<=0) return 0.5; const x=Math.log(f)/Math.log(PHI); const dist=Math.abs(x-Math.round(x)); return 0.5+0.5*Math.max(0,Math.min(1,1-2*dist)); })();
+        const geomLift = (()=>{ let lift=1; const isEdge=typeof meta.stepIndex==="number" && (meta.stepIndex===0 || meta.stepIndex===((STEPS_PER_BEAT>0)?STEPS_PER_BEAT-1:-1)); if(isEdge) lift*=1+1/PHI**7; if(isPrime(meta.beat)) lift*=1+1/PHI**8; if(resonancePhi>0.9){ const t=(resonancePhi-0.9)/0.1; lift*=1+1/PHI**7*Math.max(0,Math.min(1,t));} return lift; })();
+
+        const size = meta.seriesSize ?? 1;
+        const rarity = size<=1 ? PHI : Math.pow(size, -1/PHI);
+        const qf = QUALITY_MAP[meta.quality ?? "med"] ?? QUALITY_MAP.med;
+
+        const provLift = 1 + 1/PHI**3 * Math.log(1+Math.max(0, new Set((transfers||[]).map(t=>t.receiverSignature).filter(Boolean)).size - 1));
+
+        const holdBeats = closed.map(t => (t.receiverKaiPulse - t.senderKaiPulse)/pulsesPerBeat).filter(x => x>=0);
+        const medHoldBeats = (function(a){ if(!a.length) return 0; const b=a.slice().sort((x,y)=>x-y); const m=Math.floor(b.length/2); return b.length%2?b[m]:(b[m-1]+b[m])/2; })(holdBeats);
+        const holdLift = Math.max(1, Math.min(1+1/PHI**4 * Math.log(1+(medHoldBeats||0)), 1+1/PHI**4));
+
+        const closedFraction = transfers.length===0 ? 1 : closed.length/transfers.length;
+        const closureLift = 1 + (1/PHI**6) * Math.max(-1, Math.min(1, ((closedFraction - 0.7) * (1/0.3))));
+
+        const cadenceRegularity = (function(deltas){
+          if(!transfers||transfers.length<2)return 1.0;
+          const arr=[]; for(let i=1;i<transfers.length;i++){const a=transfers[i-1].senderKaiPulse,b=transfers[i].senderKaiPulse; if(Number.isFinite(a)&&Number.isFinite(b)&&b>=a)arr.push(b-a);}
+          if(arr.length===0)return 1.0; const a2=arr.slice().sort((x,y)=>x-y); const m=Math.floor(a2.length/2); const med=a2.length%2?a2[m]:(a2[m-1]+a2[m])/2;
+          let sum=0; for(const d of arr) sum+=Math.abs(d-med)/med; const mad=sum/arr.length; return 1/(1+mad);
+        })();
+        const cadenceLift = 1 + (1/PHI**6) * (2*cadenceRegularity - 1);
+
+        const resonanceLift = 1 + 1/PHI**5 * (2*resonancePhi - 1);
+        const ageBeats = agePulses / pulsesPerBeat;
+        const ageLift = Math.min(1+1/PHI**3, 1 + 1/PHI**5 * Math.log(1+Math.max(0,ageBeats)));
+        const churnPenalty = 1 / (1 + 0.15 * Math.max(0, transfers.length / Math.max(1, (nowPulse-claimPulse)/pulsesPerBeat)));
+
+        const claimMoment = (function momentRarityLiftFromPulse(p){
+          if(!Number.isFinite(p)||p<0) return 1;
+          const s=absDigits(p), len=s.length;
+          let lift=1;
+          if (isFibonacciExact(p)) lift*=1+1/PHI;
+          if (isLucasExact(p))     lift*=1+1/PHI**2;
+          if (allSameDigit(s))     lift*=1+1/PHI**3;
+          if (isPalindromeDigits(s)) lift*=1+1/PHI**4;
+          const run=longestRunSameDigit(s);
+          if (run>=3){ const norm=Math.max(0,Math.min(1,(run-2)/Math.max(3,len-2))); lift*=1+1/PHI**4*norm; }
+          const seq=longestConsecutiveSequenceLen(s);
+          if (seq>=4){ const norm=Math.max(0,Math.min(1,(seq-3)/Math.max(4,len-3))); lift*=1+1/PHI**5*norm; }
+          const ent=digitEntropy01(s); lift*=1+1/PHI**6*(1-ent);
+          return lift;
+        })(claimPulse);
+
+        const lineageMoments = closed.map(t => (Number.isFinite(t.receiverKaiPulse) ? (function momentRarityLiftFromPulse(p){
+          if(!Number.isFinite(p)||p<0) return 1;
+          const s=absDigits(p), len=s.length;
+          let lift=1;
+          if (isFibonacciExact(p)) lift*=1+1/PHI;
+          if (isLucasExact(p))     lift*=1+1/PHI**2;
+          if (allSameDigit(s))     lift*=1+1/PHI**3;
+          if (isPalindromeDigits(s)) lift*=1+1/PHI**4;
+          const run=longestRunSameDigit(s);
+          if (run>=3){ const norm=Math.max(0,Math.min(1,(run-2)/Math.max(3,len-2))); lift*=1+1/PHI**4*norm; }
+          const seq=longestConsecutiveSequenceLen(s); const seqNorm=Math.max(0,Math.min(1,(seq-3)/Math.max(4,len-3)));
+          if (seq>=4){ lift*=1+1/PHI**5*seqNorm; }
+          const ent=digitEntropy01(s); lift*=1+1/PHI**6*(1-ent);
+          return lift;
+        })(t.receiverKaiPulse) : 1));
+        const lineageGM = (function(xs){ if(!xs.length) return 1.0; let sum=0; for(const x of xs) sum+=Math.log(Math.max(x,1e-12)); return Math.exp(sum/xs.length); })(lineageMoments);
+        const genesisBias = (function(claimPulse){ if(!Number.isFinite(claimPulse)||claimPulse<0) return 1.0; const t=claimPulse/(claimPulse+YEAR_PULSES_APPROX); return 1 + 1/PHI**5*(1-2*t); })(claimPulse);
+
+        const claimMomentLift = claimMoment * Math.max(1, lineageGM) * genesisBias;
+
+        const pre = (rarity * qf) * provLift * closureLift * holdLift * resonanceLift * ageLift * churnPenalty * geomLift * claimMomentLift;
+
+        const adoption = (p)=> ( !Number.isFinite(p)||p<=0 ? 0 : 1-Math.pow(PHI, -p/(PULSES_PER_DAY_EXACT*365)) );
+        const adoptionAtClaim = adoption(claimPulse);
+        const adoptionNow = adoption(nowPulse);
+        const adoptionDelta = Math.max(0, adoptionNow - adoptionAtClaim);
+        const rarityScore01=(function(p){
+          if(!Number.isFinite(p)||p<0) return 0;
+          const s=Math.abs(Math.trunc(p)).toString(), len=s.length;
+          const fib=isFibonacciExact(p)?1:0;
+          const luc=isLucasExact(p)?1:0;
+          const uni=allSameDigit(s)?1:0;
+          const pal=isPalindromeDigits(s)?1:0;
+          const run=longestRunSameDigit(s); const runNorm=Math.max(0,Math.min(1,(run-2)/Math.max(3,len-2)));
+          const seq=longestConsecutiveSequenceLen(s); const seqNorm=Math.max(0,Math.min(1,(seq-3)/Math.max(4,len-3)));
+          const ent=digitEntropy01(s);
+          let score=0,w=0; score+=1.0*fib; w+=1.0; score+=(1/PHI)*luc; w+=1/PHI; score+=(1/PHI)*uni; w+=1/PHI; score+=(1/PHI**2)*pal; w+=1/PHI**2; score+=(1/PHI**2)*runNorm; w+=1/PHI**2; score+=(1/PHI**3)*seqNorm; w+=1/PHI**3; score+=(1/PHI**3)*(1-ent); w+=1/PHI**3;
+          if(w<=0) return 0; return Math.max(0,Math.min(1,score/w));
+        })(claimPulse);
+
+        const k = 1/PHI**3 + 1/PHI**2 * rarityScore01;
+        const adoptionLift = q(Math.exp(k * adoptionDelta));
+        const indexScarcity = q(1 + 1/PHI**4 * (1 - adoptionAtClaim));
+        const fibLevels   = (function(age){ if(!Number.isFinite(age)||age<=0) return 0; let a=1n,b=1n,lv=0; const A=BigInt(Math.trunc(age)); while(b<=A){ lv++; const t=a+b; a=b; b=t; } return lv; })(Math.max(0, nowPulse-claimPulse));
+        const lucasLevels = (function(age){ if(!Number.isFinite(age)||age<=0) return 0; let a=2n,b=1n,lv=0; const A=BigInt(Math.trunc(age)); while(b<=A){ lv++; const t=a+b; a=b; b=t; } return lv; })(Math.max(0, nowPulse-claimPulse));
+        const fibAccrualLift   = q(Math.exp(1/PHI**6 * fibLevels));
+        const lucasAccrualLift = q(Math.exp(1/PHI**7 * lucasLevels));
+        const dynamicGrowth = q(indexScarcity * adoptionLift * fibAccrualLift * lucasAccrualLift);
+
+        const rarityFloor = q(claimMomentLift * indexScarcity * adoptionLift * fibAccrualLift * lucasAccrualLift * Math.max(1, genesisBias));
+
+        const breathPhase01 = pulsesPerBeat>0 ? ((nowPulse % pulsesPerBeat) / pulsesPerBeat) : 0;
+        const breathAmp = BREATH_WAVE_GAIN * (0.5 + 0.5 * 1.0);
+        const breathWave = q(1 + breathAmp * Math.sin(2 * Math.PI * breathPhase01));
+        const dayPhase01 = (nowPulse / PULSES_PER_DAY_EXACT) % 1; const claimDayPhase01 = (claimPulse / PULSES_PER_DAY_EXACT) % 1;
+        const daySim = 1 - Math.abs(((dayPhase01 - claimDayPhase01 + 1) % 1) - 0.5) * 2;
+        const dayAmp = DAY_WAVE_GAIN * 0.75;
+        const dayWave = q(1 + dayAmp * (2 * daySim - 1));
+        const strobeWaveVal = q(1 + 1/PHI**9 * (2*((( (claimPulse+nowPulse)*PHI ) % 1 + 1) % 1) - 1));
+
+        const combinedOsc = q(breathWave * dayWave * strobeWaveVal, 6);
+
+        const premiumPreWave = pre * dynamicGrowth;
+        const premiumBandBase = Math.max(0, premiumPreWave - rarityFloor);
+        const premium = q(rarityFloor + premiumBandBase * combinedOsc, 6);
+
+        const valuePhi = q(Math.max(0, premium - PAR_OFFSET), 6);
+
+        const inputs = {
+          size: meta.seriesSize ?? 1,
+          quality: meta.quality ?? "med",
+          creatorVerified: !!meta.creatorVerified,
+          creatorRep: meta.creatorRep ?? 0,
+          pulsesPerBeat,
+          algorithmVersion: "phi/kosmos-vφ-5",
+          parOffset: PAR_OFFSET
+        };
+
+        const checksum = policyChecksum();
+        const unsigned = {
+          version: 1, unit: "Φ", algorithm: "phi/kosmos-vφ-5", policyId: undefined, policyChecksum: checksum,
+          valuePhi: Number(valuePhi.toFixed(6)), premium: Number(premium.toFixed(6)),
+          inputs,
+          computedAtPulse: nowPulse,
+          headRef: { headHash: undefined, transfersWindowRoot: undefined, cumulativeTransfers: (meta.transfers||[]).length }
+        };
+        return unsigned;
+      }
+
+      async function computeValuationAndStamp(meta){
+        const nowPulse = kaiNowPulseExact();
+        const unsigned = computeIntrinsicUnsigned(meta, nowPulse);
+        const minimal = {
+          algorithm: unsigned.algorithm,
+          policy: unsigned.policyId ?? null,
+          policyChecksum: unsigned.policyChecksum,
+          inputs: unsigned.inputs,
+          minimalHead: {
+            headHash: unsigned.headRef.headHash ?? null,
+            transfersWindowRoot: unsigned.headRef.transfersWindowRoot ?? null,
+            cumulativeTransfers: unsigned.headRef.cumulativeTransfers ?? 0
+          }
+        };
+        const stamp = await KaiVerifier.sha256HexCanon("val-stamp:"+JSON.stringify(minimal));
+        return { nowPulse, unsigned, stamp };
+      }
+
+      function clearValuation() {
+        for (const id of ["val-live","val-premium","val-alg","val-stamp","val-computed","val-nowpulse"]) $(id).value = "";
+      }
+      window.clearValuation = clearValuation;
+
+      async function handleComputeNow(){
+        if (!hasSigilLoaded()) { alert("Upload a sigil to calculate the value."); return; }
+        const txt  = $("det-raw").value || "";
+        const meta = parseMetaLiteFromSvgText(txt);
+        const { nowPulse, unsigned, stamp } = await computeValuationAndStamp(meta);
+        const par = Number(unsigned?.inputs?.parOffset ?? 1);
+        const valueGross   = Math.max(0, Number((unsigned.valuePhi + par).toFixed(6)));
+        const premiumGross = Math.max(0, Number((unsigned.premium).toFixed(6)));
+        const valueAdj   = Math.max(0, Number((valueGross   - DISPLAY_OFFSET).toFixed(6)));
+        const premiumAdj = Math.max(0, Number((premiumGross - DISPLAY_OFFSET).toFixed(6)));
+        $("val-live").value     = String(valueAdj);
+        $("val-premium").value  = String(premiumAdj);
+        $("val-alg").value      = `${unsigned.algorithm} • ${unsigned.policyChecksum}`;
+        $("val-computed").value = String(unsigned.computedAtPulse);
+        $("val-nowpulse").value = String(nowPulse);
+        $("val-stamp").value    = stamp;
+      }
+
+      $("val-compute-now").addEventListener("click", handleComputeNow);
+      $("val-clear").addEventListener("click", clearValuation);
+
+      /* === XML helpers === */
+      function xmlEscapeAttr(v) {
+        return String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
+      function upsertSvgRootAttrs(svgText, attrs) {
+        const m = svgText.match(/<svg\b[^>]*>/i);
+        if (!m) return svgText;
+        const openTag = m[0];
+        let newTag = openTag;
+        for (const [name, rawVal] of Object.entries(attrs)) {
+          if (rawVal == null) continue;
+          const val = xmlEscapeAttr(rawVal);
+          const re = new RegExp(`\\s${name}="[^"]*"`, "i");
+          if (re.test(newTag)) newTag = newTag.replace(re, ` ${name}="${val}"`);
+          else newTag = newTag.replace(/>$/, ` ${name}="${val}">`);
+        }
+        return svgText.replace(openTag, newTag);
+      }
+
+      // Write valuation attrs into current SVG + download
+      $("val-write-into-svg").addEventListener("click", async () => {
+        const raw = $("det-raw").value;
+        if (!raw) { alert("Load an SVG first."); return; }
+        if (!$("val-stamp").value) await handleComputeNow();
+        // inject printed background (exact parity color)
+        const bgColor = getComputedStyle(document.documentElement).getPropertyValue('--sigil-slot-bg').trim() || '#0a1114';
+        const updated0 = ensureSvgBackground(raw, bgColor);
+        const updated = upsertSvgRootAttrs(updated0, {
+          "data-valuation-url": ($("parent-url").value || ""),
+          "data-valuation-algorithm": ($("val-alg").value || ""),
+          "data-valuation-valuephi": ($("val-live").value || ""),
+          "data-valuation-premium": ($("val-premium").value || ""),
+          "data-valuation-stamp": ($("val-stamp").value || ""),
+          "data-valuation-computed-at-pulse": ($("val-computed").value || ""),
+          "data-valuation-now-pulse": ($("val-nowpulse").value || "")
+        });
+        const blob = new Blob([updated], { type: "image/svg+xml" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = (lastSvgFileName ? lastSvgFileName.replace(/\.svg$/i,"") : "sigil") + ".valued.svg";
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+
+      /* φ-exact Kai-Klok */
+      const GENESIS_TS_BI = 1715323541888n;
+      const INV_Tx1000_NUM_BI = 190983005625052575897706582817180941139845410097118568932275689n;
+      const INV_Tx1000_DEN_BI = 10n ** 60n;
+      const absBI = (x)=> (x<0n ? -x : x);
+      const floorDivE = (a, d)=> { const q=a/d, r=a%d; return (r===0n||a>=0n)?q:q-1n; };
+      const mulDivRoundHalfEven = (x, num, den) => {
+        if (den <= 0n) throw new Error("Denominator must be positive.");
+        const sgn = (x < 0n ? -1n : 1n) * (num < 0n ? -1n : 1n);
+        const A = absBI(x) * absBI(num);
+        const q = A / den;
+        const r = A % den;
+        const twice = r * 2n;
+        let n = q;
+        if (twice > den) n = q + 1n;
+        else if (twice === den && (q & 1n) === 1n) n = q + 1n;
+        return sgn * n;
+      };
+      function kaiNowPulseExact() {
+        const msNow = BigInt(Date.now());
+        const deltaMs = msNow - GENESIS_TS_BI;
+        const microPulses = mulDivRoundHalfEven(deltaMs, INV_Tx1000_NUM_BI, INV_Tx1000_DEN_BI);
+        const pulses = floorDivE(microPulses, 1_000_000n);
+        const MAX = BigInt(Number.MAX_SAFE_INTEGER);
+        return Number(pulses > MAX ? MAX : pulses);
+      }
+      window.kaiNowPulseExact = kaiNowPulseExact;
+
+      function hasSigilLoaded() {
+        if (typeof window.currentSvgText === "string" && window.currentSvgText.trim().length) return true;
+        const det = $("det-raw"); if (det && det.value && det.value.trim().length) return true;
+        const f = $("svgfile"); if (f && f.files && f.files.length > 0) return true;
+        return false;
+      }
+    })();
+
+    /* =========================
+       === URL codec / parity ===
+       ========================= */
+    const hasWindowEnv = typeof window !== "undefined";
+    const btoa_ = (s) => hasWindowEnv && typeof btoa === "function" ? btoa(s) : "";
+    const atob_ = (s) => hasWindowEnv && typeof atob === "function" ? atob(s) : "";
+    const toB64 = (bytes) => btoa_(String.fromCharCode(...bytes));
+    const fromB64 = (b64) => Uint8Array.from(atob_(b64), (c) => c.charCodeAt(0));
+    const toB64url = (b64) => b64.replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"");
+    const fromB64url = (b64url) => {
+      const b64 = b64url.replace(/-/g,"+").replace(/_/g,"/");
+      const pad = b64.length % 4 ? "=".repeat(4 - (b64.length % 4)) : "";
+      return b64 + pad;
+    };
+
+    function encodeSigilPayloadCompact(p){
+      const compact = {
+        u: p.pulse, b: p.beat, s: p.stepIndex, c: p.chakraDay,
+        d: p.stepsPerBeat ?? 44, k: p.kaiSignature, p: p.userPhiKey
+      };
+      if (p.parentUrl) compact.r = p.parentUrl;
+      if (p.originUrl) compact.o = p.originUrl;
+      const json = JSON.stringify(compact);
+      const b64url = toB64url(toB64(new TextEncoder().encode(json)));
+      return `c:${b64url}`;
+    }
+    function extractPayloadParamFromUrl(url){
+      try {
+        const u = new URL(url, "resolve://");
+        const qp = u.searchParams.get("p");
+        return qp ?? null;
+      } catch {
+        const m = url.match(/[?&]p=([^&#]+)/);
+        return m ? decodeURIComponent(m[1]) : null;
+      }
+    }
+    function decodeSigilPayload(pParam){
+      if (pParam.startsWith("c:")) {
+        const b64url = pParam.slice(2);
+        const b64 = fromB64url(b64url);
+        const bytes = fromB64(b64);
+        const json = new TextDecoder().decode(bytes);
+        const v = JSON.parse(json);
+        return {
+          pulse: Number(v.u)||0, beat: Number(v.b)||0, stepIndex: Number(v.s)||0,
+          chakraDay: v.c, stepsPerBeat: Number(v.d)||44,
+          kaiSignature: typeof v.k==="string"?v.k:undefined,
+          userPhiKey: typeof v.p==="string"?v.p:undefined,
+          parentUrl: typeof v.r==="string"?v.r:undefined,
+          originUrl: typeof v.o==="string"?v.o:undefined,
+        };
+      }
+      const rawB64url = pParam.startsWith("j:") ? pParam.slice(2) : pParam;
+      const b64 = fromB64url(rawB64url);
+      const bytes = fromB64(b64);
+      const json = new TextDecoder().decode(bytes);
+      const v = JSON.parse(json);
+      const core = {
+        pulse: Number(v.pulse)||0, beat: Number(v.beat)||0, stepIndex: Number(v.stepIndex)||0,
+        chakraDay: v.chakraDay, stepsPerBeat: Number(v.stepsPerBeat)||44,
+        kaiSignature: typeof v.kaiSignature==="string"?v.kaiSignature:undefined,
+        userPhiKey: typeof v.userPhiKey==="string"?v.userPhiKey:undefined,
+        parentUrl: typeof v.parentUrl==="string"?v.parentUrl:undefined,
+        originUrl: typeof v.originUrl==="string"?v.originUrl:undefined,
+      };
+        return { ...v, ...core };
+    }
+    function extractPayloadFromUrl(url){
+      const qp = extractPayloadParamFromUrl(url);
+      if (!qp) return null;
+      try { return decodeSigilPayload(qp); } catch { return null; }
+    }
+
+    const nonceB64url = (len=12) => {
+      const b = new Uint8Array(len);
+      crypto.getRandomValues(b);
+      const s = String.fromCharCode(...b);
+      return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+    };
+
+    function toCanonicalShareUrl(raw, origin) {
+      try {
+        const u = new URL(raw, typeof window !== "undefined" ? window.location.origin : "http://x");
+        const m = u.pathname.match(/\/s\/([0-9a-fA-F]+)/);
+        if (!m) return "";
+        const hash = m[1].toLowerCase();
+        const base = origin || (typeof window !== "undefined" ? window.location.origin : "");
+        return `${base}/s/${encodeURIComponent(hash)}`;
+      } catch { return ""; }
+    }
+
+    function makeSigilUrlParity(hash, payloadCore, { absolute = true, origin, transferNonce } = {}) {
+      const runtimeOrigin = (typeof window!=="undefined" && window.location?.origin) ? window.location.origin : "";
+      const o = absolute === false ? "" : (origin ?? runtimeOrigin);
+      const qp = encodeSigilPayloadCompact(payloadCore);
+      const path = `/s/${encodeURIComponent(hash)}?p=${qp}`;
+      const t = transferNonce ? `&t=${encodeURIComponent(transferNonce)}` : "";
+      return o ? `${o}${path}${t}` : `${path}${t}`;
+    }
+    function rotateSigilUrl(url){
+      try {
+        const u = new URL(url, typeof window !== "undefined" ? window.location.origin : "http://x");
+        u.searchParams.set("t", nonceB64url(12));
+        return u.toString();
+      } catch { return url; }
+    }
+
+    /* Local registry (no network) */
+    const SIGIL_REGISTRY_LS_KEY = "kai:sigils:v1";
+    const SIGIL_MODAL_FALLBACK_LS_KEY = "sigil:urls";
+    const SIGIL_CHANNEL_NAME = "kai-sigil-registry";
+    function readList(key){ try{ const raw=localStorage.getItem(key); if(!raw) return []; const arr=JSON.parse(raw); return Array.isArray(arr)?arr.filter(x=>typeof x==="string"):[]; }catch{return[];} }
+    function writeList(key,list){ try{ localStorage.setItem(key, JSON.stringify(list)); }catch{} }
+    function pushUnique(list,url){ if(list.includes(url)) return false; list.push(url); return true; }
+    function canonicalize(url){ try{ return new URL(url, window.location.origin).toString(); }catch{return url;} }
+    let _bc=null; const bc=()=>{ if(!("BroadcastChannel" in window)) return null; if(_bc) return _bc; _bc=new BroadcastChannel(SIGIL_CHANNEL_NAME); return _bc; };
+    function registerSigilUrl(url){
+      if(!url) return;
+      const abs = canonicalize(url);
+      const canon = readList(SIGIL_REGISTRY_LS_KEY); if(pushUnique(canon,abs)) writeList(SIGIL_REGISTRY_LS_KEY, canon);
+      const fallback = readList(SIGIL_MODAL_FALLBACK_LS_KEY); if(pushUnique(fallback,abs)) writeList(SIGIL_MODAL_FALLBACK_LS_KEY, fallback);
+      try{ window.dispatchEvent(new CustomEvent("sigil:url-registered",{detail:{url:abs}})); }catch{}
+      try{ bc()?.postMessage({type:"sigil:add", url:abs}); }catch{}
+    }
+
+    /* One-time attestation ledger (local) */
+    const SPENT_LEDGER_KEY = "kai:spent-att:v1";
+    function readSpentMap(){ try{ return JSON.parse(localStorage.getItem(SPENT_LEDGER_KEY)||"{}"); }catch{ return {}; } }
+    function writeSpentMap(obj){ try{ localStorage.setItem(SPENT_LEDGER_KEY, JSON.stringify(obj)); }catch{} }
+    async function attHashKey(att){
+      const s = `att:${att.kid}:${att.r}:${att.s}`;
+      return KaiVerifier.sha256HexCanon(s);
+    }
+    async function ensureNotSpentAndMark(att, context){
+      const key = await attHashKey(att);
+      const m = readSpentMap();
+      if (m[key]) return { ok:false, key };
+      m[key] = { spentAt: Date.now(), context };
+      writeSpentMap(m);
+      return { ok:true, key };
+    }
+
+    /* =========================
+       === Send flow (child)
+       ========================= */
+    const canonicalFromUrl = (u) => {
+      try { const path=new URL(u, window.location.origin).pathname; const m=path.match(/\/s\/([0-9a-fA-F]+)/); return m?m[1].toLowerCase():null; } catch { return null; }
+    };
+
+    function refreshSendReady(){
+      const parent = ($("parent-url").value||"").trim();
+      const amt = Number($("send-amount").value);
+      const okAmt = Number.isFinite(amt) && amt >= 0.000001;
+      const okParent = !!canonicalFromUrl(parent);
+      const attNeeded = REQUIRE_ATTESTATION_FOR_SEND;
+      const attPresent = !!(($("att-r").value||"").trim() && ($("att-s").value||"").trim() && ($("att-kid").value||"").trim());
+      const ready = okAmt && okParent && (!attNeeded || attPresent);
+      setStatus($("send-ready"), ready ? "YES" : "NO", ready);
+      $("btn-send").disabled = !ready;
+      setStep("step-amount", okAmt);
+      setStep("step-send", false);
+      setStep("step-url", false);
+      setStep("step-mint", false);
+    }
+
+    $("parent-url").addEventListener("input", refreshSendReady);
+    $("send-amount").addEventListener("input", refreshSendReady);
+    ["att-r","att-s","att-kid"].forEach(id => { const el=$(id); if(el) el.addEventListener("input", refreshSendReady); });
+
+    $("copy-live-url").addEventListener("click", () => copyText($("live-url").value));
+    $("btn-clear-live").addEventListener("click", () => {
+      for (const id of ["parent-url","send-amount","send-recipient","live-url"]) $(id).value = "";
+      setStatus($("send-status"), "—", false);
+      $("btn-send").disabled = true;
+      $("btn-download-child").disabled = false;
+      $("btn-rotate").disabled = false;
+      setStep("step-amount", false); setStep("step-send", false); setStep("step-url", false); setStep("step-mint", false);
+    });
+
+    let lastMintedChildSvg = "";
+    let lastMintedChildName = "";
+
+    function triggerDownload(filename, data, mime = "application/octet-stream"){
+  try {
+    const blob = data instanceof Blob ? data : new Blob([data], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "download";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch (e) {
+    alert("Download failed.");
+    console.error("Download failed:", e);
+  }
+}
+
+    $("btn-send").addEventListener("click", async () => {
+      const parentRaw = ($("parent-url").value||"").trim();
+      const amountPhi = Number(($("send-amount").value||"").trim());
+      const recipientPhiKey = ($("send-recipient").value||"").trim() || undefined;
+
+      const canonicalParent = toCanonicalShareUrl(parentRaw);
+      const hashMatch = canonicalParent && canonicalParent.match(/\/s\/([0-9a-fA-F]+)/);
+      const hash = hashMatch ? hashMatch[1].toLowerCase() : null;
+
+      if (!hash) { alert("Parent URL must look like /s/:hash (or include it)."); return; }
+      if (!Number.isFinite(amountPhi) || amountPhi < 0.000001) { alert("Enter a valid Amount Φ ≥ 0.000001"); return; }
+
+      let att = null;
+      if (REQUIRE_ATTESTATION_FOR_SEND) {
+        att = { r: ($("att-r").value||"").trim(), s: ($("att-s").value||"").trim(), kid: ($("att-kid").value||"").trim() };
+        if (!att.r || !att.s || !att.kid) { alert("Attestation required: please provide r, s, kid."); return; }
+        const res = await verifyAttestation(att);
+        setMatch($("att-ok"), !!res.ok);
+        $("att-claim").value = res.claimJson || "";
+        if (!res.ok) { alert("Attestation invalid. Cannot send."); return; }
+        const spentRes = await ensureNotSpentAndMark(att, { parent: canonicalParent, amountPhi });
+        if (!spentRes.ok) { alert("This attestation was already consumed on this device."); return; }
+      }
+
+      setStep("step-send", true);
+      setStatus($("send-status"), "Building child URL…", true);
+
+      const parentPayload = extractPayloadFromUrl(parentRaw) || {};
+      const nowPulse = (window.kaiNowPulseExact ? window.kaiNowPulseExact() : 0);
+      const transferNonce = nonceB64url(12);
+
+      const stepIndex = Number.isFinite(parentPayload.stepIndex) ? Number(parentPayload.stepIndex) :
+                        Number($("stepIndex").value) || 0;
+
+      const baseCore = {
+        pulse: Number(parentPayload.pulse) || Number($("pulse").value)||0,
+        beat: Number(parentPayload.beat) || Number($("beat").value)||0,
+        stepIndex,
+        chakraDay: parentPayload.chakraDay || ($("chakra").value||""),
+        stepsPerBeat: Number(parentPayload.stepsPerBeat)||44,
+        kaiSignature: parentPayload.kaiSignature || ($("svg-sigma").value||""),
+        userPhiKey: recipientPhiKey || parentPayload.userPhiKey || ($("svg-phi").value||""),
+        parentUrl: canonicalParent,
+        originUrl: parentPayload.originUrl || canonicalParent
+      };
+
+      let childUrl = makeSigilUrlParity(hash, baseCore, { absolute: true, transferNonce });
+
+      if (att && att.r && att.s && att.kid) {
+        const u = new URL(childUrl);
+        u.searchParams.set("r", att.r);
+        u.searchParams.set("s", att.s);
+        u.searchParams.set("kid", att.kid);
+        childUrl = u.toString();
+      }
+
+      $("live-url").value = childUrl;
+      copyText(childUrl);
+      setStep("step-url", true);
+
+      const sourceName = lastSvgFileName || "sigil";
+      const childName = `${sourceName.replace(/\.svg$/i,"") || "sigil"}-child-${transferNonce}.svg`;
+
+      const attrs = {
+        "data-share-url": childUrl,
+        "data-sigil-url": childUrl,
+        "data-live-url": childUrl,
+        "data-parent-url": canonicalParent,
+        "data-transfer-amount-phi": amountPhi.toFixed(6),
+        "data-exported-at-pulse": String(nowPulse)
+      };
+      if (att && att.r && att.s && att.kid) {
+        attrs["data-attestation-r"] = att.r;
+        attrs["data-attestation-s"] = att.s;
+        attrs["data-attestation-kid"] = att.kid;
+      }
+
+      const originalSvg = currentSvgText && currentSvgText.includes("<svg")
+        ? currentSvgText
+        : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><title>Minted Child Sigil</title><rect width="1024" height="1024" fill="#0b1417"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#9ee" font-family="monospace" font-size="28">Kai Child Sigil</text></svg>`;
+
+      const childSvg = (function upsert(svgText, attrs){
+        const m = svgText.match(/<svg\b[^>]*>/i);
+        if (!m) return svgText;
+        const openTag = m[0];
+        let newTag = openTag;
+        for (const [name, rawVal] of Object.entries(attrs)) {
+          if (rawVal == null) continue;
+          const val = String(rawVal).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          const re = new RegExp(`\\s${name}="[^"]*"`, "i");
+          if (re.test(newTag)) newTag = newTag.replace(re, ` ${name}="${val}"`);
+          else newTag = newTag.replace(/>$/, ` ${name}="${val}">`);
+        }
+        return svgText.replace(openTag, newTag);
+      })(originalSvg, attrs);
+
+      lastMintedChildSvg = childSvg;
+      lastMintedChildName = childName;
+
+      registerSigilUrl(childUrl);
+
+      setStep("step-mint", true);
+      setStatus($("send-status"), "Minted ✓", true);
+      $("btn-download-child").disabled = false;
+      $("btn-rotate").disabled = false;
+
+      triggerDownload(childName, new Blob([childSvg], {type:"image/svg+xml"}));
+    });
+
+    $("btn-download-child").addEventListener("click", () => {
+      if (!lastMintedChildSvg) { alert("No child SVG minted yet."); return; }
+      triggerDownload(lastMintedChildName || "child.svg", new Blob([lastMintedChildSvg], {type:"image/svg+xml"}));
+    });
+
+    $("btn-rotate").addEventListener("click", () => {
+      const cur = ($("live-url").value||"").trim();
+      if (!cur) { alert("No live URL yet. Press Send first."); return; }
+      const rotated = rotateSigilUrl(cur);
+      $("live-url").value = rotated;
+      registerSigilUrl(rotated);
+      if (lastMintedChildSvg) {
+        lastMintedChildSvg = (function upsert(svgText, attrs){
+          const m = svgText.match(/<svg\b[^>]*>/i);
+          if (!m) return svgText;
+          const openTag = m[0];
+          let newTag = openTag;
+          for (const [name, rawVal] of Object.entries(attrs)) {
+            if (rawVal == null) continue;
+            const val = String(rawVal).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            const re = new RegExp(`\\s${name}="[^"]*"`, "i");
+            if (re.test(newTag)) newTag = newTag.replace(re, ` ${name}="${val}"`);
+            else newTag = newTag.replace(/>$/, ` ${name}="${val}">`);
+          }
+          return svgText.replace(openTag, newTag);
+        })(lastMintedChildSvg, {
+          "data-sigil-url": rotated,
+          "data-live-url": rotated,
+          "data-share-url": rotated
+        });
+      }
+    });
+/* === Pv: Provenance & Transfer — unified (PDF or SVG) === */
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const setStatus = (el, txt, ok) => { if (!el) return; el.value = txt; el.classList.toggle("ok", !!ok); el.classList.toggle("bad", !ok); };
+
+  // tiny helper (SVG attrs)
+  function upsertSvgRootAttrs(svgText, attrs) {
+    const m = svgText.match(/<svg\b[^>]*>/i);
+    if (!m) return svgText;
+    const openTag = m[0];
+    let newTag = openTag;
+    for (const [name, rawVal] of Object.entries(attrs || {})) {
+      if (rawVal == null) continue;
+      const val = String(rawVal).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      const re = new RegExp(`\\s${name}="[^"]*"`, "i");
+      newTag = re.test(newTag) ? newTag.replace(re, ` ${name}="${val}"`) : newTag.replace(/>$/, ` ${name}="${val}">`);
+    }
+    return svgText.replace(openTag, newTag);
+  }
+
+  // Recompute panel info from current SVG
+  async function loadFromCurrentSvg() {
+    const txt = (window.currentSvgText || $("det-raw")?.value || "").trim();
+    const noteEl = $("pv-noteid"), curEl = $("pv-current"), lenEl = $("pv-len"), rootEl = $("pv-root");
+    if (!txt) { if (noteEl) noteEl.value=""; if (curEl) curEl.value=""; if (lenEl) lenEl.value=""; if (rootEl) rootEl.value=""; return; }
+
+    const phi =
+      /"userPhiKey"\s*:\s*"([^"]{10,})"/.exec(txt)?.[1] ||
+      /data-phi-key="([^"]{10,})"/i.exec(txt)?.[1] || "";
+    const txBlock = txt.match(/"transfers"\s*:\s*\[([\s\S]*?)\]/);
+    let transfers = []; if (txBlock) { try { transfers = JSON.parse("[" + txBlock[1] + "]"); } catch {} }
+    const provBlock = txt.match(/"provenance"\s*:\s*\[([\s\S]*?)\]/);
+    let prov = []; if (provBlock) { try { prov = JSON.parse("[" + prov[1] + "]"); } catch {} }
+
+    if (curEl) curEl.value = phi || "";
+    const chainLen = (Array.isArray(transfers) ? transfers.length : 0) || (Array.isArray(prov) ? prov.length : 0);
+    if (lenEl) lenEl.value = String(chainLen);
+    const noteId = (await KaiVerifier.sha256HexCanon("note:" + txt)).slice(0, 16);
+    if (noteEl) noteEl.value = noteId;
+    const root = (await KaiVerifier.sha256HexCanon("merkle:" + JSON.stringify(prov || []))).slice(0, 16);
+    if (rootEl) rootEl.value = root;
+  }
+
+  // --- SVG stamping path (download fix included) ---
+  async function stampSvgProvenance(key) {
+    const txt = (window.currentSvgText || $("det-raw")?.value || "").trim();
+    if (!txt) { alert("Load a sigil first."); return; }
+    const now = (window.kaiNowPulseExact ? window.kaiNowPulseExact() : Date.now());
+    const stamp = await KaiVerifier.sha256HexCanon(`xfer:${now}:${key}`);
+
+    const updated = upsertSvgRootAttrs(txt, {
+      "data-transfer-to-phi": key,
+      "data-transfer-kai-pulse": String(now),
+      "data-transfer-stamp": stamp
+    });
+
+    const base = (window.lastSvgFileName || "sigil.svg").replace(/\.svg$/i, "");
+    const fname = `${base}.xfer-${stamp.slice(0, 8)}.svg`;
+
+    try {
+      const blob = new Blob([updated], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = fname; a.rel = "noopener";
+      document.body.appendChild(a); a.click(); a.remove();
+      setStatus($("pv-status"), `Stamped ✓ ${fname}`, true);
+      setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 1500);
+    } catch (e) {
+      setStatus($("pv-status"), "Stamp failed.", false);
+      console.error(e);
+    }
+  }
+
+  // --- PDF stamping path (adds a one-page Provenance sheet & metadata) ---
+  async function stampPdfProvenance(pdfFile, key) {
+    if (!window.PDFLib) { alert("Missing pdf-lib. Include ./pdf-lib.min.js"); return; }
+    const bytes = await pdfFile.arrayBuffer();
+
+    const now = (window.kaiNowPulseExact ? window.kaiNowPulseExact() : Date.now());
+    const stamp = await KaiVerifier.sha256HexCanon(`xfer:${now}:${key}`);
+    const stampShort = stamp.slice(0,8);
+
+    const noteId = ($("pv-noteid")?.value || "").trim();
+    const holder = ($("pv-current")?.value || "").trim();
+    const chainLen = ($("pv-len")?.value || "").trim();
+    const merkle = ($("pv-root")?.value || "").trim();
+
+    const doc = await PDFLib.PDFDocument.load(bytes, { updateMetadata: true });
+    const page = doc.addPage();
+    const { width, height } = page.getSize();
+    const font = await doc.embedFont(PDFLib.StandardFonts.Courier);
+    const size = 12, lh = 16;
+    let x = 54, y = height - 54;
+
+    function line(s){ page.drawText(String(s), { x, y, size, font }); y -= lh; }
+
+    page.drawText("KAIROS — Provenance Transfer", { x, y, size: 16, font }); y -= lh*2;
+    line(`Note ID:            ${noteId || "(n/a)"}`);
+    line(`Current Holder Φ:   ${holder || "(n/a)"}`);
+    line(`Chain Length:       ${chainLen || "0"}`);
+    line(`Merkle Root:        ${merkle || "(n/a)"}`);
+    y -= lh;
+    line(`Transfer To Φ:      ${key}`);
+    line(`Kai Pulse:          ${now}`);
+    line(`Transfer Stamp:     ${stamp}`);
+    y -= lh;
+    line(`Generated:          ${new Date().toISOString()}`);
+
+    try {
+      doc.setTitle("Kairos — Provenance Transfer");
+      doc.setSubject(`transfer-stamp=${stamp} kai-pulse=${now} to-phi=${key}`);
+      doc.setKeywords(["Kairos","Provenance","Transfer", `note=${noteId}`, `merkle=${merkle}`, `to=${key}`, `stamp=${stampShort}`]);
+      doc.setProducer("Kairos Exhaler (offline)");
+      doc.setCreator("Kairos Exhaler");
+      doc.setModificationDate(new Date());
+    } catch {}
+
+    const out = await doc.save();
+    const base = pdfFile.name.replace(/\.pdf$/i, "");
+    const fname = `${base}.xfer-${stampShort}.pdf`;
+
+    try {
+      const blob = new Blob([out], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = fname; a.rel = "noopener";
+      document.body.appendChild(a); a.click(); a.remove();
+      setStatus($("pv-status"), `Stamped ✓ ${fname}`, true);
+      setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 1500);
+    } catch (e) {
+      setStatus($("pv-status"), "Stamp failed.", false);
+      console.error(e);
+    }
+  }
+
+  // --- Single button routes: PDF first, else SVG ---
+  async function stampTransfer(toKeyInput) {
+    const key = (toKeyInput || $("pv-newto")?.value || "").trim();
+    if (!key) { alert("Paste recipient Φkey."); return; }
+    const pdfFile = $("pv-pdf")?.files?.[0] || null;
+    if (pdfFile) { await stampPdfProvenance(pdfFile, key); }
+    else { await stampSvgProvenance(key); }
+  }
+
+  // one listener
+  const btn = $("pv-stamp");
+  if (btn) {
+    const clone = btn.cloneNode(true);
+    btn.replaceWith(clone);
+    clone.addEventListener("click", () => stampTransfer());
+  }
+
+  window.Pv = Object.assign(window.Pv || {}, { loadFromCurrentSvg, stampTransfer });
+})();
+</script>
+<!-- call it now that Pv exists -->
+<script>
+  if (window.Pv?.loadFromCurrentSvg) Pv.loadFromCurrentSvg();
+
+    /* =========================
+       === G) Banknote Builder
+       ========================= */
+
+    function sanitizeSvg(svgText) {
+      let s = (svgText || "").toString();
+      // Keep everything visual (defs/filters/gradients/etc.). Just strip script and inline handlers.
+      const reScriptOpen  = "<" + "script[\\s\\S]*?>";
+      const reScriptClose = "<" + "\\/script>";
+      const reScriptBlock = new RegExp(reScriptOpen + "[\\s\\S]*?" + reScriptClose, "gi");
+      s = s.replace(reScriptBlock, "");
+      s = s.replace(/\son[a-z]+\s*=\s*"(?:[^"]*)"/gi, "");
+      s = s.replace(/\son[a-z]+\s*=\s*'(?:[^']*)'/gi, "");
+      if (!/xmlns=/.test(s)) s = s.replace(/<svg/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+      if (!/viewBox=/.test(s)) {
+        const mW = s.match(/\bwidth\s*=\s*"(\d+(\.\d+)?)"/i);
+        const mH = s.match(/\bheight\s*=\s*"(\d+(\.\d+)?)"/i);
+        const w = mW ? parseFloat(mW[1]) : 1024;
+        const h = mH ? parseFloat(mH[1]) : 1024;
+        s = s.replace(/<svg([^>]*)>/i, "<svg$1 viewBox=\"0 0 " + w + " " + h + "\">");
+      }
+      s = s.replace(/\bwidth\s*=\s*"(?:[^"]*)"/ig, "");
+      s = s.replace(/\bheight\s*=\s*"(?:[^"]*)"/ig, "");
+      return s;
+    }
+    function ensureSvgBackground(svgText, color) {
+      const m = svgText.match(/<svg\b[^>]*>/i);
+      if (!m) return svgText;
+      const open = m[0];
+      if (!/data-injected-bg="true"/.test(svgText)) {
+        return svgText.replace(open, open + `<rect width="100%" height="100%" fill="${color}" data-injected-bg="true"/>`);
+      }
+      return svgText;
+    }
+    const esc = (t)=> String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    const trunc = (s,n)=>{ if(!s) return "—"; return s.length<=n?s:(s.slice(0,n-2)+"…"); };
+
+    /* QR helpers — safe generation with smart shortening */
+    function tryMakeQrSvg(raw, pixelSize=110, margin=2){
+      const qr = qrcode(0, 0);
+      qr.addData(raw);
+      qr.make();
+      const cell = Math.max(1, Math.floor(pixelSize / (qr.getModuleCount() + margin*2)));
+      let svg = qr.createSvgTag({cellSize:cell, margin});
+      svg = svg.replace(/<svg /, `<svg width="${pixelSize}" height="${pixelSize}" `);
+      return svg;
+    }
+    function shortenForQr(url){
+      try{
+        const u=new URL(url, location.origin);
+        // base /s/:hash
+        const m=u.pathname.match(/\/s\/([0-9a-fA-F]+)/);
+        if(!m) return url;
+        const base=`${u.origin}/s/${m[1]}`;
+        const p=u.searchParams.get("p");
+        // keep only ?p= if present (drop r,s,kid,t etc.)
+        return p ? `${base}?p=${p}` : base;
+      }catch{ return url; }
+    }
+    function makeQrSvgTagSafe(url, pixelSize=110, margin=2){
+      const candidates=[url, shortenForQr(url), toCanonicalShareUrl(url) || url];
+      for(const u of candidates){
+        try{ return tryMakeQrSvg(u, pixelSize, margin); }catch(e){}
+      }
+      // Ultimate fallback: visible error box
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${pixelSize}" height="${pixelSize}"><rect width="100%" height="100%" fill="#fff"/><text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" fill="#000" font-size="10">QR ERROR</text></svg>`;
+    }
+
+    /* Single source of truth for verify URL (used by clickable sigil & QR) */
+    function getVerifyUrl(){
+      const live = ($("live-url").value||"").trim();
+      const parent = ($("parent-url").value||"").trim();
+      if (live) return live;
+      if (parent) return parent;
+      // Try discover from loaded SVG data-* root attr
+      const txt = ($("det-raw").value||"");
+      const m = txt.match(/\sdata-(?:share|sigil|live|valuation)-url="([^"]+)"/i);
+      const foundUrl = m ? m[1].replace(/&amp;/g,'&') : "";
+      if (foundUrl) return foundUrl;
+      try { return location.origin + "/"; } catch { return "/"; }
+    }
+
+    /* === Centered, full sigil embed as clickable link; no cropping (scaled to fit slot) === */
+    function embedSigilIntoSlotClickable(sigilRaw, slotX, slotY, slotW, slotH, hrefUrl) {
+      const safe = sanitizeSvg(sigilRaw);
+      const bgColor = getComputedStyle(document.documentElement).getPropertyValue('--sigil-slot-bg').trim() || '#0a1114';
+      const withBg = ensureSvgBackground(safe, bgColor);
+
+      // strip outer <svg> and capture viewBox
+      const mOpen = withBg.match(/<svg\b([^>]*)>/i);
+      const mClose = withBg.match(/<\/svg>/i);
+      const open = mOpen ? mOpen[0] : '<svg>';
+      const inner = withBg.substring(open.length, mClose ? withBg.lastIndexOf(mClose[0]) : withBg.length);
+      const vbMatch = open.match(/viewBox\s*=\s*"([^"]+)"/i);
+      const viewBox = vbMatch ? vbMatch[1] : '0 0 1024 1024';
+
+      // Frosted slot background & click-through link
+      const glossId = `gloss-${Math.random().toString(36).slice(2)}`;
+      const slot =
+        `<defs>
+          <linearGradient id="${glossId}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#ffffff" stop-opacity=".14"/>
+            <stop offset=".35" stop-color="#ffffff" stop-opacity=".04"/>
+            <stop offset=".7" stop-color="#000000" stop-opacity=".02"/>
+            <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <a href="${esc(hrefUrl)}" target="_blank" rel="noopener">
+          <g>
+            <rect x="${slotX}" y="${slotY}" width="${slotW}" height="${slotH}" rx="12" fill="${bgColor}" stroke="#2ad6c733"/>
+            <svg x="${slotX}" y="${slotY}" width="${slotW}" height="${slotH}" viewBox="${viewBox}" preserveAspectRatio="xMidYMid meet">${inner}</svg>
+            <!-- glossy overlay -->
+            <rect x="${slotX}" y="${slotY}" width="${slotW}" height="${slotH}" rx="12" fill="url(#${glossId})"/>
+            <!-- subtle inner edge frost -->
+            <rect x="${slotX+1}" y="${slotY+1}" width="${slotW-2}" height="${slotH-2}" rx="10" fill="none" stroke="#ffffff" stroke-opacity=".08"/>
+          </g>
+        </a>`;
+      return slot;
+    }
+
+    function buildCutMarks(x, y, w, h, len=16){
+      const X1=x, X2=x+w, Y1=y, Y2=y+h;
+      return `
+        <g stroke="#a6f4eb" stroke-opacity=".45" stroke-width="1">
+          <!-- top-left -->
+          <line x1="${X1-0}" y1="${Y1-len}" x2="${X1-0}" y2="${Y1-0}"/>
+          <line x1="${X1-0}" y1="${Y1-0}" x2="${X1-len}" y2="${Y1-0}"/>
+          <!-- top-right -->
+          <line x1="${X2+0}" y1="${Y1-len}" x2="${X2+0}" y2="${Y1-0}"/>
+          <line x1="${X2+0}" y1="${Y1-0}" x2="${X2+len}" y2="${Y1-0}"/>
+          <!-- bottom-left -->
+          <line x1="${X1-0}" y1="${Y2+0}" x2="${X1-0}" y2="${Y2+len}"/>
+          <line x1="${X1-0}" y1="${Y2+0}" x2="${X1-len}" y2="${Y2+0}"/>
+          <!-- bottom-right -->
+          <line x1="${X2+0}" y1="${Y2+0}" x2="${X2+0}" y2="${Y2+len}"/>
+          <line x1="${X2+0}" y1="${Y2+0}" x2="${X2+len}" y2="${Y2+0}"/>
+        </g>`;
+    }
+
+/* === Banknote field fallback helpers (deterministic, offline) === */
+/* Compact FNV-1a (same style you used for policy checksum) → 8-hex */
+function fnvHex8(s){
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++){
+    h ^= s.charCodeAt(i);
+    h = (h + ((h<<1) + (h<<4) + (h<<7) + (h<<8) + (h<<24))) >>> 0;
+  }
+  return ("00000000" + h.toString(16)).slice(-8).toUpperCase();
+}
+
+/* Make a short code per label from anchors; fits the bill typography */
+function fallbackCode(label, anchors){
+  const H = fnvHex8(`kk:${label}:${anchors}`);
+  switch (label){
+    case "Purpose":   return `${H.slice(0,8)}`;        // 13 chars
+    case "To":        return `${H.slice(0,10)}`;         // 13 chars
+    case "From":      return `${H.slice(0,10)}`;       // 15 chars
+    case "Location":  return `${H.slice(0,8)}`;         // 12 chars
+    case "Witnesses": return `${H.slice(0,8)}`;         // 12 chars
+    case "Reference": return `${H.slice(0,12)}`;        // 16 chars
+    default:          return H;
+  }
+}
+    function buildBanknoteSVG(){
+  const NOTE_TITLE = "KAIROS NOTE — LEGAL TENDER OF THE SOVEREIGN KINGDOM";
+
+  /* Inputs */
+  const purposeRaw = $("note-purpose").value || "";
+  const toRaw       = $("note-to").value || "";
+  const fromRaw     = $("note-from").value || "";
+  const locationRaw = $("note-location").value || "";
+  const witnessesRaw= $("note-witnesses").value || "";
+  const refRaw      = $("note-ref").value || "";
+  const remarkRaw   = $("note-remark").value || "In Yahuah We Trust — Secured by Φ, not man-made law";
+
+  const esc = (t)=> String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  const trunc = (s,n)=>{ if(!s) return "—"; return s.length<=n?s:(s.slice(0,n-2)+"…"); };
+
+  /* Pull anchors first — used for deterministic fallback codes */
+  const val        = $("val-live").value || "0";
+  const premium    = $("val-premium").value || "0";
+  const pulse      = $("val-computed").value || $("val-nowpulse").value || "0";
+  const kaiSig     = $("det-sigma").value || $("svg-sigma").value || "";
+  const phiKey     = $("det-phi").value || $("svg-phi").value || "";
+  const verifyUrl  = getVerifyUrl(); // already defined below
+  const alg        = $("val-alg").value || "";     // ← ADD THIS
+  const stamp      = $("val-stamp").value || "";   // ← ADD THIS
+
+
+  /* Stable seed so blanks become verifiable codes (no network, no RNG) */
+  const anchors = `${kaiSig}|${phiKey}|${pulse}|${verifyUrl}`;
+
+  /* If user typed something, honor it; otherwise synthesize a short code */
+  const purpose   = trunc( (purposeRaw.trim()   || fallbackCode("Purpose",   anchors)), 28);
+  const to        = trunc( (toRaw.trim()        || fallbackCode("To",        anchors)), 22);
+  const from      = trunc( (fromRaw.trim()      || fallbackCode("From",      anchors)), 22);
+  const location  = trunc( (locationRaw.trim()  || fallbackCode("Location",  anchors)), 28);
+  const witnesses = trunc( (witnessesRaw.trim() || fallbackCode("Witnesses", anchors)), 22);
+  const ref       = trunc( (refRaw.trim()       || fallbackCode("Reference", anchors)), 22);
+  const remark    = trunc( remarkRaw, 86 );
+
+
+
+  /* Serial */
+  const serialCore = (kaiSig ? kaiSig.slice(0,12).toUpperCase() : "ΦΦΦΦΦΦΦΦΦΦΦΦ").replace(/[^0-9A-F]/g,"Φ");
+  const serial = `K℞K-${serialCore}-${pulse}`;
+
+  // Guilloché
+  const rosette = (()=> {
+    const cx=500, cy=350, R=210; const turns=96;
+    let d=`M ${cx} ${cy-R}`;
+    for(let i=1;i<=turns;i++){
+      const t=i/turns*2*Math.PI;
+      const r=R*(0.82+0.18*Math.sin(5*t));
+      const x=cx + r*Math.sin(3*t), y=cy + r*Math.cos(4*t);
+      d += ` L ${x.toFixed(2)} ${y.toFixed(2)}`;
+    }
+    return d+" Z";
+  })();
+
+  // Sigil slot (center)
+  const slot = { x:280, y:150, w:440, h:300 };
+
+  // Sigil source (full visual retained)
+  const sigilRaw = (currentSvgText || $("det-raw").value || "").toString();
+  const hasSigil = /<svg[\s\S]*<\/svg>/i.test(sigilRaw);
+  const sigilInner = hasSigil ? sigilRaw
+    : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#0b1417"/><circle cx="512" cy="512" r="420" fill="#37e6d433"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#0ff" font-family="ui-monospace,monospace" font-size="28">SIGIL</text></svg>`;
+
+
+
+  function sanitizeSvg(svgText) {
+    let s = (svgText || "").toString();
+    const reScriptBlock = new RegExp("<"+"script[\\s\\S]*?>"+"[\\s\\S]*?"+"<"+"/script>", "gi");
+    s = s.replace(reScriptBlock, "");
+    s = s.replace(/\son[a-z]+\s*=\s*"(?:[^"]*)"/gi, "");
+    s = s.replace(/\son[a-z]+\s*=\s*'(?:[^']*)'/gi, "");
+    if (!/xmlns=/.test(s)) s = s.replace(/<svg/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+    if (!/viewBox=/.test(s)) {
+      const mW = s.match(/\bwidth\s*=\s*"(\d+(\.\d+)?)"/i);
+      const mH = s.match(/\bheight\s*=\s*"(\d+(\.\d+)?)"/i);
+      const w = mW ? parseFloat(mW[1]) : 1024;
+      const h = mH ? parseFloat(mH[1]) : 1024;
+      s = s.replace(/<svg([^>]*)>/i, "<svg$1 viewBox=\"0 0 " + w + " " + h + "\">");
+    }
+    s = s.replace(/\bwidth\s*=\s*"(?:[^"]*)"/ig, "");
+    s = s.replace(/\bheight\s*=\s*"(?:[^"]*)"/ig, "");
+    return s;
+  }
+  function ensureSvgBackground(svgText, color) {
+    const m = svgText.match(/<svg\b[^>]*>/i);
+    if (!m) return svgText;
+    const open = m[0];
+    if (!/data-injected-bg="true"/.test(svgText)) {
+      return svgText.replace(open, open + `<rect width="100%" height="100%" fill="${color}" data-injected-bg="true"/>`);
+    }
+    return svgText;
+  }
+
+  const bgColor = getComputedStyle(document.documentElement).getPropertyValue('--sigil-slot-bg').trim() || '#0a1114';
+  function embedSigilIntoSlotClickable(sigilRaw, slotX, slotY, slotW, slotH, hrefUrl) {
+    const safe = sanitizeSvg(sigilRaw);
+    const withBg = ensureSvgBackground(safe, bgColor);
+    const mOpen = withBg.match(/<svg\b([^>]*)>/i);
+    const mClose = withBg.match(/<\/svg>/i);
+    const open = mOpen ? mOpen[0] : '<svg>';
+    const inner = withBg.substring(open.length, mClose ? withBg.lastIndexOf(mClose[0]) : withBg.length);
+    const vbMatch = open.match(/viewBox\s*=\s*"([^"]+)"/i);
+    const viewBox = vbMatch ? vbMatch[1] : '0 0 1024 1024';
+    const glossId = `gloss-${Math.random().toString(36).slice(2)}`;
+    return `
+      <defs>
+        <linearGradient id="${glossId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ffffff" stop-opacity=".14"/>
+          <stop offset=".35" stop-color="#ffffff" stop-opacity=".04"/>
+          <stop offset=".7" stop-color="#000000" stop-opacity=".02"/>
+          <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <a href="${esc(hrefUrl)}" target="_blank" rel="noopener">
+        <g>
+          <rect x="${slotX}" y="${slotY}" width="${slotW}" height="${slotH}" rx="12" fill="${bgColor}" stroke="#2ad6c733"/>
+          <svg x="${slotX}" y="${slotY}" width="${slotW}" height="${slotH}" viewBox="${viewBox}" preserveAspectRatio="xMidYMid meet">${inner}</svg>
+          <rect x="${slotX}" y="${slotY}" width="${slotW}" height="${slotH}" rx="12" fill="url(#${glossId})"/>
+          <rect x="${slotX+1}" y="${slotY+1}" width="${slotW-2}" height="${slotH-2}" rx="10" fill="none" stroke="#ffffff" stroke-opacity=".08"/>
+        </g>
+      </a>`;
+  }
+
+  function buildCutMarks(x, y, w, h, len=16){
+    const X1=x, X2=x+w, Y1=y, Y2=y+h;
+    return `
+      <g stroke="#a6f4eb" stroke-opacity=".45" stroke-width="1">
+        <line x1="${X1-0}" y1="${Y1-len}" x2="${X1-0}" y2="${Y1-0}"/>
+        <line x1="${X1-0}" y1="${Y1-0}" x2="${X1-len}" y2="${Y1-0}"/>
+        <line x1="${X2+0}" y1="${Y1-len}" x2="${X2+0}" y2="${Y1-0}"/>
+        <line x1="${X2+0}" y1="${Y1-0}" x2="${X2+len}" y2="${Y1-0}"/>
+        <line x1="${X1-0}" y1="${Y2+0}" x2="${X1-0}" y2="${Y2+len}"/>
+        <line x1="${X1-0}" y1="${Y2+0}" x2="${X1-len}" y2="${Y2+0}"/>
+        <line x1="${X2+0}" y1="${Y2+0}" x2="${X2+0}" y2="${Y2+len}"/>
+        <line x1="${X2+0}" y1="${Y2+0}" x2="${X2+len}" y2="${Y2+0}"/>
+      </g>`;
+  }
+
+  /* QR helpers (use your existing ones on the page) */
+  const qrSvg = makeQrSvgTagSafe(verifyUrl, 110, 2);
+
+  /* === QR: up a little vs previous (tight to badge) === */
+  const qrBlock = `
+    <g transform="translate(828,346)">
+      <rect x="-8" y="-8" width="126" height="142" rx="10" fill="#0a1013" stroke="#2ad6c733"/>
+      <g>${qrSvg}</g>
+      <text x="55" y="132" text-anchor="middle" font-family="ui-sans-serif" font-size="10" fill="#81fff1" letter-spacing=".08em">SCAN • VERIFY</text>
+    </g>`;
+
+  // Provenance summary (if present)
+  let provLines = "";
+  try {
+    const parsed = JSON.parse($("det-fields").value||"{}");
+    const prov = Array.isArray(parsed.provenance) ? parsed.provenance.slice(-3) : [];
+    if (prov.length) {
+      const items = prov.map((p,i)=>`#${prov.length-i} • ${esc(p.action||"")} @ pulse ${esc(String(p.pulse||""))}${p.ownerPhiKey?` • owner ${esc(String(p.ownerPhiKey)).slice(0,10)}…`:''}`).join("  ");
+      provLines = `<text x="64" y="494" fill="#aef" font-size="11" font-family="ui-sans-serif">Lineage: ${items}</text>`;
+    }
+  } catch {}
+
+  /* === PROOF OF BREATH badge — frosted glass, glossy, palette-matched (#37e6d4 → #81fff1 only) === */
+  const badgeBlock = `
+    <g transform="translate(860,200)">
+      <defs>
+        <!-- Palette-matched sweep (accent → accent-2) with subtle shimmer -->
+        <linearGradient id="atl-sweep" x1="0" y1="0" x2="1" y2="1">
+          <stop id="as1" offset="0%"  stop-color="#37e6d4"/>
+          <stop id="as2" offset="100%" stop-color="#81fff1"/>
+          <animate xlink:href="#as1" attributeName="offset" values="0;0.2;0" dur="8s" repeatCount="indefinite"/>
+          <animate xlink:href="#as2" attributeName="offset" values="1;0.8;1" dur="8s" repeatCount="indefinite"/>
+        </linearGradient>
+
+        <!-- Frosted glass look: layered blur/glow (uses only cyan channel bias) -->
+        <filter id="atl-frost" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="1.2" result="b1"/>
+          <feColorMatrix in="b1" type="matrix"
+            values="0 0 0 0 0.22  0 0 0 0 0.90  0 0 0 0 0.85  0 0 0 0.35 0" result="g1"/>
+          <feGaussianBlur in="SourceGraphic" stdDeviation="5.5" result="b2"/>
+          <feColorMatrix in="b2" type="matrix"
+            values="0 0 0 0 0.10  0 0 0 0 0.70  0 0 0 0 0.75  0 0 0 0.25 0" result="g2"/>
+          <feMerge><feMergeNode in="g2"/><feMergeNode in="g1"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+
+        <!-- Gloss wipe -->
+        <linearGradient id="atl-gloss" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0"   stop-color="#ffffff" stop-opacity=".22"/>
+          <stop offset=".35" stop-color="#ffffff" stop-opacity=".06"/>
+          <stop offset="1"   stop-color="#000000" stop-opacity="0"/>
+        </linearGradient>
+
+        <!-- Subtle inner frost rim -->
+        <radialGradient id="atl-rim" cx="50%" cy="50%" r="52%">
+          <stop offset="80%" stop-color="#ffffff" stop-opacity=".10"/>
+          <stop offset="100%" stop-color="#ffffff" stop-opacity=".00"/>
+        </radialGradient>
+      </defs>
+
+      <!-- Transparent, frosted coin (see-through) -->
+      <circle cx="0" cy="0" r="56" fill="url(#atl-sweep)" fill-opacity=".12" stroke="#2ad6c7" stroke-opacity=".45" filter="url(#atl-frost)"/>
+      <circle cx="0" cy="0" r="54" fill="url(#atl-rim)"/>
+
+      <!-- glossy sheen -->
+      <ellipse cx="0" cy="-12" rx="46" ry="18" fill="url(#atl-gloss)" opacity=".85">
+        <animate attributeName="opacity" values=".85;.55;.85" dur="6s" repeatCount="indefinite"/>
+      </ellipse>
+
+      <!-- Minimal rotating dash ring (palette, very light) -->
+      <circle cx="0" cy="0" r="44" fill="none" stroke="#81fff1" stroke-opacity=".25" stroke-width="2" stroke-dasharray="6 10">
+        <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="24s" repeatCount="indefinite"/>
+      </circle>
+
+      <!-- label (palette colors) -->
+      <text x="0" y="-10" text-anchor="middle" font-size="12" fill="#81fff1" fill-opacity=".95" style="letter-spacing:.08em">PROOF</text>
+      <text x="0" y="8"   text-anchor="middle" font-size="14" fill="#e7fbf7" fill-opacity=".98" style="letter-spacing:.1em">OF</text>
+      <text x="0" y="26"  text-anchor="middle" font-size="12" fill="#37e6d4" fill-opacity=".95" style="letter-spacing:.08em">BREATH™</text>
+    </g>`;
+
+  const sigilEmbed = embedSigilIntoSlotClickable(sigilInner, slot.x, slot.y, slot.w, slot.h, verifyUrl);
+
+  return `
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="618" viewBox="0 0 1000 618" data-note="kairos-kurrency" data-valuation-pulse="${esc(pulse)}" data-kai-signature="${esc(kaiSig)}" data-user-phikey="${esc(phiKey)}">
+  <defs>
+    <!-- Title gradient stays palette-true -->
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#37e6d4"/><stop offset="1" stop-color="#81fff1"/></linearGradient>
+    <pattern id="micro" width="120" height="10" patternUnits="userSpaceOnUse">
+      <text x="0" y="8" font-size="9" font-family="ui-monospace,monospace" fill="#6fe" letter-spacing=".08em">KAIROS KURRENSY • LAWFUL UNDER YAHUAH • Φ • HARMONIK TENDER • ${esc(serial)}</text>
+    </pattern>
+    <filter id="soft"><feGaussianBlur stdDeviation="1.2"/></filter>
+    <filter id="frostGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.8  0 0 0 0 1  0 0 0 0 0.95  0 0 0 0.25 0" result="glow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  ${buildCutMarks(10,10,980,598,16)}
+
+  <!-- Border + background -->
+  <g filter="url(#frostGlow)">
+    <rect x="10" y="10" width="980" height="598" rx="14" fill="#0b1417" stroke="#2ad6c7" stroke-opacity=".45"/>
+    <rect x="24" y="24" width="952" height="570" rx="12" fill="#0a1013" stroke="#2ad6c7" stroke-opacity=".35"/>
+    <rect x="36" y="36" width="928" height="546" rx="10" fill="url(#micro)" opacity=".15"/>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".12"/>
+      <stop offset=".35" stop-color="#ffffff" stop-opacity=".05"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </linearGradient>
+    <rect x="24" y="24" width="952" height="160" rx="12" fill="url(#glass)"/>
+  </g>
+
+  <!-- Headings -->
+  <text x="50%" y="78" fill="url(#g)" font-size="20" font-family="ui-sans-serif" text-anchor="middle" letter-spacing=".20em">${esc(NOTE_TITLE)}</text>
+  <text x="50%" y="102" fill="#cfe" font-size="13" font-family="ui-sans-serif" text-anchor="middle" letter-spacing=".10em">ISSUED UNDER YAHUAH’S LAW OF ETERNAL LIGHT — Φ • KAI-TURAH</text>
+
+  <!-- Guilloché rosette -->
+  <path d="${rosette}" fill="none" stroke="#5ef5e6" stroke-opacity=".25" stroke-width="1"/>
+  <path d="${rosette}" fill="none" stroke="#5ef5e6" stroke-opacity=".12" stroke-width="8" filter="url(#soft)"/>
+<defs>
+  <!-- soft rainbow lens (radial blend of the spectrum) -->
+  <radialGradient id="rbwLens" cx="50%" cy="50%" r="70%">
+    <stop offset="0"    stop-color="#ffffff" stop-opacity=".35"/>  <!-- soft specular core -->
+    <stop offset=".08"  stop-color="#ff0033" stop-opacity=".90"/>
+    <stop offset=".22"  stop-color="#ff7a00" stop-opacity=".90"/>
+    <stop offset=".36"  stop-color="#ffef00" stop-opacity=".90"/>
+    <stop offset=".50"  stop-color="#00d05a" stop-opacity=".90"/>
+    <stop offset=".64"  stop-color="#00b6ff" stop-opacity=".90"/>
+    <stop offset=".78"  stop-color="#6a00ff" stop-opacity=".90"/>
+    <stop offset=".92"  stop-color="#c800ff" stop-opacity=".90"/>
+    <stop offset="1"    stop-color="#000000" stop-opacity=".00"/>  <!-- feathered edge -->
+  </radialGradient>
+
+  <!-- gentle vertical gloss (barely-there watermark sheen) -->
+  <linearGradient id="lensGloss" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0"   stop-color="#ffffff" stop-opacity=".22"/>
+    <stop offset=".35" stop-color="#ffffff" stop-opacity=".06"/>
+    <stop offset="1"   stop-color="#ffffff" stop-opacity="0"/>
+  </linearGradient>
+
+  <!-- faint rim so it reads on dark paper without looking “outlined” -->
+  <radialGradient id="lensRim" cx="50%" cy="50%" r="60%">
+    <stop offset=".85" stop-color="#ffffff" stop-opacity=".12"/>
+    <stop offset="1"   stop-color="#ffffff" stop-opacity="0"/>
+  </radialGradient>
+
+  <!-- soft bloom to blend the colors like ink in paper -->
+  <filter id="softBloom" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="1.4" result="b1"/>
+    <feGaussianBlur in="SourceGraphic" stdDeviation="3.2" result="b2"/>
+    <feMerge>
+      <feMergeNode in="b2"/>
+      <feMergeNode in="b1"/>
+      <feMergeNode in="SourceGraphic"/>
+    </feMerge>
+  </filter>
+</defs>
+
+  <!-- Left column values -->
+  <g transform="translate(64,160)">
+    <!-- elegant rainbow-lens watermark Φ (static, no motion) -->
+<g opacity=".18"> <!-- master fade for watermark feel -->
+  <!-- body: rainbow lens fill with soft bloom -->
+  <text x="0" y="58" font-size="72" font-family="ui-sans-serif"
+        fill="url(#rbwLens)" filter="url(#softBloom)">Φ</text>
+
+  <!-- whisper-thin rim so it stays legible on very dark backgrounds -->
+  <text x="0" y="58" font-size="72" font-family="ui-sans-serif"
+        fill="url(#lensRim)"></text>
+
+  <!-- top gloss pass (barely visible, gives “starburst lens” impression) -->
+  <text x="0" y="58" font-size="72" font-family="ui-sans-serif"
+        fill="url(#lensGloss)" opacity=".22"></text>
+</g>
+
+    <g transform="translate(76,0)">
+      <text x="0" y="22" fill="#bff" font-size="22" font-family="ui-sans-serif">VALUE</text>
+      <text x="0" y="52" fill="#cfe" font-size="20" font-family="ui-monospace,monospace">Φ${esc(val)}</text>
+      <text x="0" y="82" fill="#bfe" font-size="12" font-family="ui-monospace,monospace">PREMIUM Φ${esc(premium)}</text>
+    </g>
+  </g>
+
+  <!-- Frosted, palette-matched badge -->
+  ${badgeBlock}
+
+  <!-- Right-side Φ watermark — moved further down -->
+  <text x="860" y="580" text-anchor="middle" font-size="44" fill="#81fff1" fill-opacity=".16" font-family="ui-sans-serif">Φ</text>
+
+  <!-- QR (verify) slightly up -->
+  ${qrBlock}
+
+  <!-- Center sigil (clickable) -->
+  ${sigilEmbed}
+
+  <!-- Microtext belts -->
+  <rect x="64" y="500" width="872" height="16" fill="url(#micro)" opacity=".45"/>
+  <rect x="64" y="520" width="872" height="10" fill="url(#micro)" opacity=".35"/>
+
+  <!-- Provenance summary (if any) -->
+  ${provLines||""}
+
+  <!-- Legal -->
+  <text x="64" y="575" fill="#aee" font-size="11" font-family="ui-sans-serif">This note is lawful tender in Kairos under Yahuah’s Law. It is not issued by man’s law nor redeemable in Chronos. Truth is its collateral; breath is its seal.</text>
+
+  <!-- Parties / context -->
+  <g font-family="ui-monospace,monospace" font-size="12" fill="#dff">
+    <text x="64"  y="544">Purpose: ${esc(purpose || "—")}</text>
+    <text x="364" y="544">To: ${esc(to || "—")}</text>
+    <text x="664" y="544">From: ${esc(from || "—")}</text>
+    <text x="64"  y="562">Location: ${esc(location || "—")}</text>
+    <text x="364" y="562">Witnesses: ${esc(witnesses || "—")}</text>
+    <text x="664" y="562">Reference: ${esc(ref || "—")}</text>
+  </g>
+
+  <!-- Serials / identity -->
+  <g font-family="ui-monospace,monospace" font-size="11" fill="#bff">
+    <text x="64"  y="130">SERIAL: ${esc(serial)}</text>
+    <text x="64"  y="266">PULSE (VALUATION): ${esc(pulse)}</text>
+    <text x="320" y="130" text-anchor="start">KaiSignature: ${esc(kaiSig || "—")}</text>
+    <text x="520" y="146" text-anchor="start">ΦKey: ${esc(phiKey || "—")}</text>
+
+      <!-- NEW: Algorithm and valuation hash stamp -->
+      <text x="64" y="460" fill="#aee" font-size="10" font-family="ui-monospace,monospace" opacity=".95">
+        Algorithm (Valuation): ${esc(alg || "—")}
+      </text>
+      <text x="64" y="478" fill="#aee" font-size="10" font-family="ui-monospace,monospace" opacity=".95">
+        Hash (Valuation): ${esc(stamp || "—")}
+      </text>
+    </g>
+
+  <!-- Remark -->
+  <text x="500" y="590" fill="#ffbfbf" font-size="12" text-anchor="middle" font-family="ui-sans-serif">${esc(remark)}</text>
+</svg>`.trim();
+}
+
+
+    function renderBanknotePreview(){
+      const host = $("note-preview");
+      const svg = buildBanknoteSVG();
+      host.innerHTML = `<div class="banknote-frame">${svg}</div>`;
+    }
+    $("btn-render-note").addEventListener("click", renderBanknotePreview);
+
+    /* ================
+       === PROOF PAGES
+       ================ */
+    function buildProofPagesHTML(frozenPulse){
+      const ksig = $("det-sigma").value||$("svg-sigma").value||"";
+      const uphi = $("det-phi").value||$("svg-phi").value||"";
+      const sigma = $("sigma").value||"";
+      const sha = $("sha").value||"";
+      const phi = $("phi").value||"";
+      const val = $("val-live").value||"0";
+      const prem = $("val-premium").value||"0";
+      const alg = $("val-alg").value||"phi/kosmos-vφ-5 • 00000000";
+      const stamp = $("val-stamp").value||"";
+      const attOk = ($("att-ok").textContent||"") === "YES";
+      const attR = $("att-r").value||"", attS=$("att-s").value||"", attKid=$("att-kid").value||"", attClaim=$("att-claim").value||"";
+
+      // ZK details (if present)
+      let zkBlock = "";
+      try {
+        const parsed = JSON.parse($("det-fields").value||"{}");
+        if (parsed.zk && (parsed.zk.scheme || parsed.zk.poseidon)) {
+          zkBlock = `
+            <div class="proof-card"><h3 style="margin:0 0 8px 0">Zero-Knowledge Proof</h3>
+              <div class="kv">
+                <strong>Scheme</strong><div><code>${esc(parsed.zk.scheme||"")}</code></div>
+                <strong>Poseidon Hash</strong><div><code>${esc(parsed.zk.poseidon||"")}</code></div>
+              </div>
+            </div>`;
+        }
+      } catch {}
+
+      // Provenance details (if present)
+      let provDetail = "";
+      try {
+        const parsed = JSON.parse($("det-fields").value||"{}");
+        const prov = Array.isArray(parsed.provenance) ? parsed.provenance : [];
+        if (prov.length) {
+          const rows = prov.slice().reverse().map((p,i)=>`
+            <tr>
+              <td>${esc(String(p.action||""))}</td>
+              <td>${esc(String(p.pulse||""))}</td>
+              <td>${esc(String(p.beat||""))}:${esc(String(p.stepIndex||""))}</td>
+              <td>${p.ownerPhiKey?esc(String(p.ownerPhiKey)).slice(0,16)+"…":"—"}</td>
+            </tr>`).join("");
+          provDetail = `
+            <div class="proof-card"><h3 style="margin:0 0 8px 0">Provenance (lineage)</h3>
+              <div class="hint" style="margin:0 0 6px 0">Newest first</div>
+              <table style="width:100%;border-collapse:collapse;font:12px ui-monospace,monospace">
+                <thead><tr>
+                  <th style="text-align:left;border-bottom:1px solid var(--line-strong);padding:4px 0">Action</th>
+                  <th style="text-align:left;border-bottom:1px solid var(--line-strong);padding:4px 0">Pulse</th>
+                  <th style="text-align:left;border-bottom:1px solid var(--line-strong);padding:4px 0">Beat:Step</th>
+                  <th style="text-align:left;border-bottom:1px solid var(--line-strong);padding:4px 0">Owner Φkey</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>`;
+        }
+      } catch {}
+
+      const verifyUrl = getVerifyUrl();
+      const qrSvg = makeQrSvgTagSafe(verifyUrl, 160, 2);
+
+      const head = (title)=>`<div class="proof-card"><h3 style="margin:0 0 8px 0">${title}</h3>`;
+      const tail = `</div>`;
+
+      /* === PAGE 2 (first proof page) === */
+      const page2 = `
+      <div class="print-page">
+        <div class="page-stamp-top"><span>PROOF PAGE • Σ → SHA-256 → Φ • Verifier-only</span><span>Valuation Pulse: ${esc(frozenPulse)}</span></div>
+
+        ${head("Identity & Σ")}
+          <div class="kv">
+            <strong>kaiSignature</strong><div><code>${esc(ksig||"—")}</code></div>
+            <strong>userΦkey</strong><div><code>${esc(uphi||"—")}</code></div>
+            <strong>Σ (canonical)</strong><div><code>${esc(sigma||"—")}</code></div>
+          </div>
+        ${tail}
+
+        ${head("Hash & Derivation")}
+          <div class="kv">
+            <strong>sha256(Σ)</strong><div><code>${esc(sha||"—")}</code></div>
+            <strong>Φ (derived)</strong><div><code>${esc(phi||"—")}</code></div>
+          </div>
+        ${tail}
+
+        ${head("Valuation")}
+          <div class="kv">
+            <strong>Algorithm</strong><div><code>${esc(alg)}</code></div>
+            <strong>Valuation Pulse</strong><div><code>${esc(frozenPulse)}</code></div>
+            <strong>Value Φ</strong><div><code>${esc(val)}</code></div>
+            <strong>Premium Φ</strong><div><code>${esc(prem)}</code></div>
+            <strong>Valuation Stamp</strong><div><code>${esc(stamp||"—")}</code></div>
+          </div>
+        ${tail}
+
+        ${zkBlock}
+
+        ${provDetail}
+
+        ${head("QR • Verify Link (same as sigil/QR on seal)")}
+          <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+            <div>${qrSvg}</div>
+            <div>
+              <div class="hint" style="margin-bottom:6px">Open / scan:</div>
+              <div><a href="${esc(verifyUrl)}" target="_blank" rel="noopener" style="word-break:break-all">${esc(verifyUrl)}</a></div>
+            </div>
+          </div>
+        ${tail}
+
+        <div class="page-stamp-bot"><span>All values computed offline</span><span>PULSE: ${esc(frozenPulse)}</span></div>
+      </div>`.trim();
+
+      /* === PAGE 3 (attestation) === */
+      const page3 = `
+      <div class="print-page">
+        <div class="page-stamp-top"><span>PROOF PAGE • Attestation (optional)</span><span>Valuation Pulse: ${esc(frozenPulse)}</span></div>
+
+        ${head("Registry Attestation")}
+          <div class="kv">
+            <strong>Valid</strong><div><code>${attOk ? "YES" : "NO/Not Provided"}</code></div>
+            <strong>r (claim)</strong><div><code>${esc(attR||"—")}</code></div>
+            <strong>s (signature)</strong><div><code>${esc(attS||"—")}</code></div>
+            <strong>kid</strong><div><code>${esc(attKid||"—")}</code></div>
+          </div>
+          <div style="margin-top:8px">
+            <div class="hint">Decoded claim JSON:</div>
+            <pre class="out" style="max-height:420px;overflow:auto">${esc(attClaim||"(none)")}</pre>
+          </div>
+        ${tail}
+
+        <div class="page-stamp-bot"><span>Verifier: offline ECDSA P-256</span><span>PULSE: ${esc(frozenPulse)}</span></div>
+      </div>`.trim();
+
+      /* === PAGE 4 (raw SVG + FIXED clickable verify URL) === */
+      const page4 = `
+      <div class="print-page">
+        <div class="page-stamp-top"><span>PROOF PAGE • Raw SVG (sanitized)</span><span>Valuation Pulse: ${esc(frozenPulse)}</span></div>
+        ${head("SVG")}
+          <pre class="out" style="max-height:560px;overflow:auto">${esc((currentSvgText||$("det-raw").value||"").toString()
+            .replace(/<script[\s\S]*?<\/script>/gi, "")
+            .replace(/\son[a-z]+\s*=\s*"(?:[^"]*)"/gi, "")
+            .replace(/\son[a-z]+\s*=\s*'(?:[^']*)'/gi, ""))}</pre>
+        ${tail}
+
+        ${head("Verify URL (clickable) — same as seal QR & sigil")}
+          <div class="hint" style="margin-bottom:6px">Open / scan:</div>
+          <div><a href="${esc(verifyUrl)}" target="_blank" rel="noopener" style="word-break:break-all">${esc(verifyUrl)}</a></div>
+        ${tail}
+
+        <div class="page-stamp-bot"><span>Sanitized: no scripts or inline handlers</span><span>PULSE: ${esc(frozenPulse)}</span></div>
+      </div>`.trim();
+
+      /* IMPORTANT: We DO NOT create any page before the bill.
+         Printing starts with the BILL ONLY page; these are pages 2-4. */
+      return page2 + page3 + page4;
+    }
+
+    // PDF/PNG titles include KK-serial
+    function buildPdfTitle(frozenPulse){
+      const kaiSig = ($("det-sigma").value || $("svg-sigma").value || "").toString();
+      const serialCore = (kaiSig ? kaiSig.slice(0,12).toUpperCase() : "SIGIL").replace(/[^0-9A-Z]/g,"Φ");
+      const serial = `KK-${serialCore}-${frozenPulse||""}`;
+      const stamp = ($("val-stamp").value || "").toString();
+      const safe = (s)=> s.replace(/[^\w\-–—\u0394\u03A6\u03C6]+/g, "-").replace(/-+/g,"-").slice(0,180);
+      return `SIGIL-${safe(serial)}—VAL-${safe(stamp)}`;
+    }
+
+    /* =========================
+       === PRINT RENDER (PAGES)
+       =========================*/
+    function renderBanknoteIntoPrintRoot(frozenPulse){
+      const root = $("print-root");
+      const banknote = buildBanknoteSVG();
+      root.innerHTML = `
+        <div class="print-page">
+          <div class="page-stamp-top"><span>KAIROS KURRENSY — Sovereign Harmonik Kingdom</span><span>Valuation Pulse: ${esc(frozenPulse)}</span></div>
+          <div class="banknote-frame">${banknote}</div>
+          <div class="page-stamp-bot"><span>Σ→sha256(Σ)→Φ • Offline</span><span>PULSE: ${esc(frozenPulse)}</span></div>
+        </div>
+      ` + buildProofPagesHTML(frozenPulse);
+    }
+
+    $("btn-print-note").addEventListener("click", async () => {
+      if (!($("val-computed").value||"").trim()) {
+        const det = $("det-raw").value||"";
+        if (!det) { alert("Load a sigil, then compute valuation before printing."); return; }
+        const click = $("val-compute-now");
+        if (click) click.click();
+        if (!($("val-computed").value||"").trim()) return;
+      }
+      const frozen = $("val-computed").value || $("val-nowpulse").value || "";
+      renderBanknoteIntoPrintRoot(frozen);
+
+      const oldTitle = document.title;
+      document.title = buildPdfTitle(frozen);
+      window.print();
+      setTimeout(()=>{ document.title = oldTitle; }, 1000);
+    });
+
+/* === PNG exporter (robust, DPR-aware, Safari/taint fallbacks) === */
+async function svgStringToPngBlob(svgText, outWidth = 2400){
+  // Ensure a clean, self-contained SVG string
+  const svg = svgText.startsWith("<?xml")
+    ? svgText
+    : `<?xml version="1.0" encoding="UTF-8"?>\n` + svgText;
+
+  const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(svgBlob);
+
+  try {
+    // Load via <img> (most reliable path)
+    const img = new Image();
+    img.decoding = "async";
+
+    // Prefer decode() when available (Chrome/Edge/Safari 16+)
+    if ("decode" in img) {
+      img.src = url;
+      await img.decode();
+    } else {
+      await new Promise((res, rej) => {
+        img.onload = () => res();
+        img.onerror = rej;
+        img.src = url;
+      });
+    }
+
+    // Use natural dimensions if provided by the browser
+    const naturalW = img.naturalWidth  || img.width  || 1000;
+    const naturalH = img.naturalHeight || img.height || 618;
+    const ratio = naturalH / Math.max(1, naturalW);
+
+    // High-dpi rendering
+    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+    const w = Math.round(outWidth * dpr);
+    const h = Math.round(outWidth * ratio * dpr);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+
+    const ctx = canvas.getContext("2d", { alpha: true });
+    if (!ctx) throw new Error("Canvas 2D context unavailable.");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(img, 0, 0, w, h);
+
+    // Try primary: toBlob
+    let pngBlob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+    // Safari or tainted canvas fallback
+    if (!pngBlob) {
+      // This can throw on tainted canvases — catch and convert to a readable error
+      try {
+        const dataUrl = canvas.toDataURL("image/png");
+        pngBlob = dataUrlToBlob(dataUrl);
+      } catch (e) {
+        throw new Error("Canvas export blocked (likely tainted by external content).");
+      }
+    }
+    return pngBlob;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/* Small helper used by the fallback path */
+function dataUrlToBlob(dataUrl){
+  const parts = dataUrl.split(",");
+  if (parts.length < 2) throw new Error("Bad data URL.");
+  const mimeMatch = parts[0].match(/data:([^;]+);base64/i);
+  const mime = mimeMatch ? mimeMatch[1] : "image/png";
+  const bin = atob(parts[1]);
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return new Blob([u8], { type: mime });
+}
+
+
+$("btn-save-png").addEventListener("click", async () => {
+  try {
+    const svg = buildBanknoteSVG(); // your current builder (unchanged)
+    const pngBlob = await svgStringToPngBlob(svg, 2400);
+    if (!(pngBlob instanceof Blob)) throw new Error("PNG encode failed.");
+
+    const title = buildPdfTitle(
+      $("val-computed").value || $("val-nowpulse").value || ""
+    );
+    triggerDownload(title + ".png", pngBlob, "image/png");
+  } catch (err) {
+    // Visible signal instead of “nothing happens”
+    alert("Save PNG failed: " + (err?.message || err || "Unknown error"));
+    console.error("Save PNG error:", err);
+  }
+});
+
+
+    // Initialize
+    function init(){ refreshSendReady(); }
+    init();
+  </script>
+<script>
+  /* ===========================================================
+     === H) Provenance (Chain + Merkle) — fully offline, no DB
+     =========================================================== */
+  const Pv = (() => {
+    const $ = (id) => document.getElementById(id);
+    const sha = (s) => KaiVerifier.sha256HexCanon(String(s)); // uses your existing core
+  
+    // --- METADATA I/O -------------------------------------------------
+    function parseMetadataBlock(svgText){
+      const m = svgText.match(/<metadata>([\s\S]*?)<\/metadata>/i);
+      if (!m) return {};
+      try { return JSON.parse(m[1]); }
+      catch {
+        // fallback: if only "provenance":[ ... ] is present
+        try {
+          const prov = svgText.match(/"provenance"\s*:\s*\[([\s\S]*?)\]/);
+          if (prov) return { provenance: { chain: JSON.parse("[" + prov[1] + "]") } };
+        } catch {}
+        return {};
+      }
+    }
+    function setMetadataBlock(svgText, obj){
+      const json = JSON.stringify(obj, null, 2);
+      if (/<metadata>[\s\S]*?<\/metadata>/i.test(svgText)){
+        return svgText.replace(/<metadata>[\s\S]*?<\/metadata>/i, `<metadata>\n${json}\n</metadata>`);
+      }
+      return svgText.replace(/<svg\b[^>]*>/i, m => `${m}\n<metadata>\n${json}\n</metadata>`);
+    }
+  
+    async function computeNoteId(svgText){
+      const metaLite = parseMetaLiteFromSvgText(svgText);
+      const sig   = metaLite.kaiSignature || "";
+      const pulse = Number(metaLite.kaiPulse ?? metaLite.pulse ?? 0);
+      const phi   = metaLite.userPhiKey || "";
+      return sha(`note:${sig}:${pulse}:${phi}`);
+    }
+  
+    // --- MERKLE -------------------------------------------------------
+    async function merkleRootFromLeafHashes(hashes){
+      if (!hashes.length) return null;
+      let layer = hashes.slice();
+      while (layer.length > 1) {
+        const next = [];
+        for (let i=0; i<layer.length; i+=2){
+          const a = layer[i], b = layer[i+1] || layer[i];
+          next.push(await sha(`merkle:${a}|${b}`));
+        }
+        layer = next;
+      }
+      return layer[0];
+    }
+  
+    // --- VERIFY CHAIN -------------------------------------------------
+    async function verifyChain(obj){
+      const prov  = obj.provenance || {};
+      const chain = prov.chain || [];
+      const note  = obj.note_id || '';
+  
+      let prevHead = prov.genesis_head || null;
+      for (let i=0; i<chain.length; i++){
+        const e = chain[i];
+        const expectEntry = await sha(`xfer:${note}:${prevHead||''}:${e.fromPhiKey}:${e.toPhiKey}:${e.receiverKaiPulse}`);
+        if (e.entryHash !== expectEntry) return { ok:false, error:`Transfer ${i} hash mismatch` };
+        const head = await sha(`head:${note}:${prevHead||''}:${e.entryHash}:${i}`);
+        if (e.headHash && e.headHash !== head) return { ok:false, error:`Transfer ${i} head mismatch` };
+        e.headHash = head;      // normalize in-memory
+        e.prevHead = prevHead;  // backfill for clarity
+        prevHead = head;
+      }
+  
+      const leafs = chain.map(e => e.entryHash);
+      const root  = await merkleRootFromLeafHashes(leafs);
+      const tip   = chain.length ? chain[chain.length-1].toPhiKey : null;
+      return { ok:true, len:chain.length, merkle_root:root||null, headHash: prevHead||null, current: tip };
+    }
+  
+    // --- UI SYNC ------------------------------------------------------
+    function setUI({note_id, current, len, merkle}){
+      const safe = (x) => x || "";
+      if ($("pv-noteid")) $("pv-noteid").value = safe(note_id);
+      if ($("pv-current")) $("pv-current").value = safe(current);
+      if ($("pv-len")) $("pv-len").value = String(len || 0);
+      if ($("pv-root")) $("pv-root").value = safe(merkle);
+    }
+  
+    async function loadFromCurrentSvg(){
+      const txt = ($("det-raw")?.value || window.currentSvgText || "");
+      if (!txt){ setUI({note_id:"", current:"", len:0, merkle:""}); return; }
+      let md = parseMetadataBlock(txt);
+      if (!md.note_id) md.note_id = await computeNoteId(txt);
+      if (!md.provenance) md.provenance = { version:1, chain:[] };
+  
+      const v = await verifyChain(md);
+      const metaLite = parseMetaLiteFromSvgText(txt);
+      const holder = v.current || metaLite.userPhiKey || "";
+      setUI({ note_id: md.note_id, current: holder, len: v.len||0, merkle: v.merkle_root||"" });
+  
+      Pv._state = { svgText: txt, meta: md, verify: v, fileName: (window.lastSvgFileName || "sigil.svg") };
+    }
+  
+    // --- STAMP TRANSFER (append entry, recompute Merkle, re-embed) ----
+    async function stampTransfer(newToPhiKey){
+      const st = Pv._state;
+      if (!st || !st.svgText){ alert("Load a sigil first."); return; }
+      if (!newToPhiKey || newToPhiKey.length < 8){ alert("Recipient Φkey required."); return; }
+  
+      const metaLite = parseMetaLiteFromSvgText(st.svgText);
+      const prov  = st.meta.provenance || (st.meta.provenance = { version:1, chain:[] });
+      const chain = prov.chain;
+      const now   = (window.kaiNowPulseExact? window.kaiNowPulseExact() : Date.now());
+      const fromPhiKey = chain.length ? chain[chain.length-1].toPhiKey : (metaLite.userPhiKey || "");
+  
+      // Safety: UI's current must match chain's current
+      const uiFrom = ($("pv-current")?.value || "").trim();
+      if (uiFrom && uiFrom !== fromPhiKey){
+        alert("Provenance mismatch. Reload SVG and try again."); return;
+      }
+  
+      const prevHead  = chain.length ? chain[chain.length-1].headHash : (prov.genesis_head || null);
+      const entryHash = await sha(`xfer:${st.meta.note_id}:${prevHead||''}:${fromPhiKey}:${newToPhiKey}:${now}`);
+      const headHash  = await sha(`head:${st.meta.note_id}:${prevHead||''}:${entryHash}:${chain.length}`);
+  
+      const entry = {
+        idx: chain.length,
+        fromPhiKey,
+        toPhiKey: newToPhiKey,
+        senderKaiPulse: Number(metaLite.kaiPulse ?? metaLite.pulse ?? now),
+        receiverKaiPulse: now,
+        prevHead: prevHead || null,
+        entryHash,
+        headHash
+      };
+      chain.push(entry);
+  
+      // Full Merkle + segmented window (last 16)
+      const leafs = chain.map(e => e.entryHash);
+      const merkle_root = await merkleRootFromLeafHashes(leafs);
+      const W = 16, start = Math.max(0, chain.length - W);
+      const windowRoot = await merkleRootFromLeafHashes(chain.slice(start).map(e => e.entryHash));
+  
+      st.meta.provenance.merkle_root  = merkle_root || null;
+      st.meta.provenance.window       = { size: W, start, root: windowRoot || null };
+      st.meta.provenance.last_updated = new Date().toISOString();
+  
+      const updatedSvg = setMetadataBlock(st.svgText, st.meta);
+      window.currentSvgText = updatedSvg;
+      if ($("det-raw")) $("det-raw").value = updatedSvg.slice(0, 200000);
+  
+      setUI({ note_id: st.meta.note_id, current: newToPhiKey, len: chain.length, merkle: merkle_root||"" });
+  
+      const fn = (st.fileName || "sigil.svg").replace(/\.svg$/i,"") + `.xfer-${String(entry.idx).padStart(3,"0")}.svg`;
+      triggerDownload(fn, new Blob([updatedSvg], { type:"image/svg+xml" }));
+  
+      if ($("pv-status")) $("pv-status").value = `Stamped → idx ${entry.idx} • head ${headHash.slice(0,10)}…`;
+    }
+  
+    return { loadFromCurrentSvg, stampTransfer, _state:null };
+  })();
+  </script>
+  <script>
+    /* ===========================================================
+       === H2) PDF loader for Provenance (offline, no deps)
+       =========================================================== */
+    (function(){
+      const $ = (id) => document.getElementById(id);
+      const latin1 = new TextDecoder("latin1");
+    
+      // Heuristic: find the nearest valid JSON object around an anchor index
+      function extractNearestJson(text, anchorIdx){
+        // search window around anchor
+        const L = Math.max(0, anchorIdx - 20000);
+        const R = Math.min(text.length, anchorIdx + 20000);
+        const s = text.slice(L, R);
+    
+        // find a '{' to the left and balance braces to the right
+        let start = s.lastIndexOf("{", anchorIdx - L);
+        if (start < 0) return null;
+    
+        let depth = 0, end = -1;
+        for (let i = start; i < s.length; i++){
+          const ch = s[i];
+          if (ch === "{") depth++;
+          else if (ch === "}") {
+            depth--;
+            if (depth === 0){ end = i; break; }
+          }
+        }
+        if (end < 0) return null;
+    
+        const raw = s.slice(start, end + 1);
+        try {
+          return JSON.parse(raw);
+        } catch {
+          return null;
+        }
+      }
+    
+      // Parse PDF bytes → try XMP, Info, or inline JSON occurrences
+      function parsePdfForKairosMetadata(bytes){
+        const text = latin1.decode(new Uint8Array(bytes));
+    
+        // 1) Try XMP packet first
+        // Many PDFs embed XMP between <x:xmpmeta ...> ... </x:xmpmeta>
+        let metaObj = null;
+        const xmpStart = text.indexOf("<x:xmpmeta");
+        if (xmpStart >= 0){
+          const xmpEnd = text.indexOf("</x:xmpmeta>", xmpStart);
+          if (xmpEnd > xmpStart){
+            const xmp = text.slice(xmpStart, xmpEnd + "</x:xmpmeta>".length);
+            // Look for a JSON blob inside XMP (common when we embed JSON in rdf:Description or <metadata>)
+            const p1 = xmp.indexOf('"provenance"');
+            if (p1 >= 0){
+              metaObj = extractNearestJson(xmp, p1);
+            } else {
+              const p2 = xmp.indexOf('"kaiSignature"');
+              if (p2 >= 0) metaObj = extractNearestJson(xmp, p2);
+            }
+          }
+        }
+    
+        // 2) Fallback: scan the whole PDF stream for JSON anchors
+        if (!metaObj){
+          const anchors = ['"provenance"', '"kaiSignature"', '"userPhiKey"', '"kaiPulse"', '"pulse"'];
+          for (const a of anchors){
+            const idx = text.indexOf(a);
+            if (idx >= 0){
+              metaObj = extractNearestJson(text, idx);
+              if (metaObj) break;
+            }
+          }
+        }
+    
+        // Normalize to a consistent structure that Pv.verifyChain expects
+        // Accept either { provenance: { chain: [...] } } or { chain: [...] } etc.
+        let normalized = {};
+        if (metaObj){
+          if (metaObj.provenance && Array.isArray(metaObj.provenance.chain)){
+            normalized = metaObj;
+          } else if (Array.isArray(metaObj.chain)){
+            normalized = { provenance: { chain: metaObj.chain } };
+          } else {
+            // keep raw; Pv will tolerate empty chain and compute note_id from svg-like fields
+            normalized = metaObj;
+          }
+        }
+        return { meta: normalized || {}, rawText: text };
+      }
+    
+      async function computeNoteIdFromMetaLike(metaLike){
+        // Mimic Pv.computeNoteId(svgText) using the common fields we expect in PDFs
+        const sig   = metaLike?.kaiSignature || metaLike?.sig || "";
+        const pulse = Number(metaLike?.kaiPulse ?? metaLike?.pulse ?? 0);
+        const phi   = metaLike?.userPhiKey || metaLike?.holderPhiKey || "";
+        return KaiVerifier.sha256HexCanon(`note:${sig}:${pulse}:${phi}`);
+      }
+    
+      async function verifyAndPopulateFromPdf(bytes, fileName){
+        const r = parsePdfForKairosMetadata(bytes);
+        const meta = r.meta || {};
+    
+        // If we found inline fields at root level, map them into provenance object
+        if (!meta.provenance) meta.provenance = { version: 1, chain: [] };
+        if (!Array.isArray(meta.provenance.chain)) meta.provenance.chain = [];
+    
+        // Ensure a note_id exists
+        if (!meta.note_id){
+          const shallow = {
+            kaiSignature: meta.kaiSignature || meta.sig,
+            kaiPulse: meta.kaiPulse ?? meta.pulse,
+            userPhiKey: meta.userPhiKey || meta.holderPhiKey
+          };
+          meta.note_id = await computeNoteIdFromMetaLike(shallow);
+        }
+    
+        // Reuse Pv.verifyChain logic by calling it indirectly:
+        const tmp = { provenance: meta.provenance, note_id: meta.note_id, genesis_head: meta?.provenance?.genesis_head };
+        const res = await (async () => {
+          // inline a tiny adapter to Pv.verifyChain without exposing private API
+          // (we re-implement the minimal parts we need here to avoid touching Pv internals)
+          async function sha(s){ return KaiVerifier.sha256HexCanon(String(s)); }
+          async function merkleRoot(hashes){
+            if (!hashes.length) return null;
+            let layer = hashes.slice();
+            while (layer.length > 1) {
+              const next = [];
+              for (let i=0; i<layer.length; i+=2){
+                const a = layer[i], b = layer[i+1] || layer[i];
+                next.push(await sha(`merkle:${a}|${b}`));
+              }
+              layer = next;
+            }
+            return layer[0];
+          }
+          const chain = tmp.provenance?.chain || [];
+          let prevHead = tmp.genesis_head || null;
+          for (let i=0; i<chain.length; i++){
+            const e = chain[i];
+            const expectEntry = await sha(`xfer:${tmp.note_id}:${prevHead||''}:${e.fromPhiKey}:${e.toPhiKey}:${e.receiverKaiPulse}`);
+            if (e.entryHash !== expectEntry) return { ok:false, error:`Transfer ${i} hash mismatch` };
+            const head = await sha(`head:${tmp.note_id}:${prevHead||''}:${e.entryHash}:${i}`);
+            if (e.headHash && e.headHash !== head) return { ok:false, error:`Transfer ${i} head mismatch` };
+            prevHead = head;
+          }
+          const leafs = chain.map(e => e.entryHash);
+          const root  = await merkleRoot(leafs);
+          const tip   = chain.length ? chain[chain.length-1].toPhiKey : (meta.userPhiKey || "");
+          return { ok:true, len: chain.length, merkle_root: root||"", current: tip };
+        })();
+    
+        // Populate the UI
+        const set = (id, v) => { const el=$(id); if (el) el.value = v==null? "": String(v); };
+        set("pv-noteid", meta.note_id || "");
+        set("pv-current", res.current || "");
+        set("pv-len", res.len || 0);
+        set("pv-root", res.merkle_root || "");
+        set("pv-status", res.ok ? `Loaded ${fileName} ✓` : `PDF parsed but failed provenance: ${res.error || "unknown error"}`);
+      }
+    
+      // Wire PDF input
+      const inp = $("pv-pdf");
+      if (inp){
+        inp.addEventListener("change", async (e) => {
+          const f = e.target.files?.[0];
+          if (!f) return;
+          const sum = `${f.name} • ${f.type||"PDF"} • ${f.size.toLocaleString()} bytes`;
+          const sumEl = $("pv-pdfsum"); if (sumEl) sumEl.textContent = sum;
+    
+          try {
+            const buf = await f.arrayBuffer();
+            await verifyAndPopulateFromPdf(buf, f.name);
+          } catch (err){
+            const sEl = $("pv-status");
+            if (sEl) sEl.value = "Failed to read/parse PDF.";
+            console.error(err);
+          }
+        });
+      }
+    })();
+    </script>
+    <script>
+/* ================================
+         === 8) Provenance & Transfer  ===
+         ================================= */
+         (function(){
+        const LS_PREFIX = "kai:pv:v1:";
+      
+        const $ = (id) => document.getElementById(id);
+      
+        function lsKey(noteId){ return LS_PREFIX + noteId; }
+        function loadLocalChain(noteId){
+          try{ return JSON.parse(localStorage.getItem(lsKey(noteId))||"[]"); }catch{ return []; }
+        }
+        function saveLocalChain(noteId, chain){
+          try{ localStorage.setItem(lsKey(noteId), JSON.stringify(chain)); }catch{}
+        }
+      
+        /* Normalize any provenance entry shape into the one we use */
+        function normTx(t){
+          return {
+            senderPhiKey:    t.senderPhiKey || t.senderKey || t.sender || "",
+            receiverPhiKey:  t.receiverPhiKey || t.receiverKey || t.receiver || "",
+            senderKaiPulse:  Number(t.senderKaiPulse ?? t.senderPulse ?? t.pulse ?? 0) || 0,
+            receiverKaiPulse:Number(t.receiverKaiPulse ?? t.receiverPulse ?? t.pulse ?? 0) || 0,
+            senderGlyphStamp:t.senderGlyphStamp || t.glyphStamp || "",
+            txStamp:         t.txStamp || t.stamp || ""
+          };
+        }
+        function mergeUniqueByStamp(a,b){
+          const m = new Map();
+          for (const t of [...a,...b]) {
+            const k = t.txStamp || `${t.senderPhiKey}|${t.receiverPhiKey}|${t.senderKaiPulse}|${t.senderGlyphStamp}`;
+            if (!m.has(k)) m.set(k, normTx(t));
+          }
+          return [...m.values()];
+        }
+      
+        async function txStampOf(t){
+          const minimal = { s:t.senderPhiKey, r:t.receiverPhiKey, sp:t.senderKaiPulse, rp:t.receiverKaiPulse, g:t.senderGlyphStamp||"" };
+          return KaiVerifier.sha256HexCanon("tx:"+JSON.stringify(minimal));
+        }
+      
+        async function merkleRoot(leaves){
+          let layer = (leaves||[]).slice();
+          if (!layer.length) return "";
+          while (layer.length > 1) {
+            const next = [];
+            for (let i=0;i<layer.length;i+=2){
+              const L = layer[i], R = layer[i+1] ?? layer[i];
+              next.push(await KaiVerifier.sha256HexCanon("node:"+L+R));
+            }
+            layer = next;
+          }
+          return layer[0];
+        }
+      
+        async function glyphStampFromCurrentSvg(){
+          const raw = (window.currentSvgText||"").trim();
+          if (!raw) return "";
+          // make it stable: sanitize + strip volatile valuation attrs
+          const safe = sanitizeSvg(raw).replace(/\sdata-valuation-[^"]+="[^"]*"/gi, "");
+          return KaiVerifier.sha256HexCanon("glyph:"+safe);
+        }
+      
+        async function computeNoteId(meta, glyphStamp){
+          const seed = `note:${meta.kaiSignature||""}|${meta.userPhiKey||""}|${glyphStamp||""}`;
+          return KaiVerifier.sha256HexCanon(seed);
+        }
+      
+        function currentHolder(meta, chain){
+          if (!chain.length) return meta.userPhiKey || "";
+          return chain[chain.length-1].receiverPhiKey || meta.userPhiKey || "";
+        }
+      
+        async function loadFromCurrentSvg(){
+          const txt = ($("det-raw")?.value||"").trim();
+          if (!txt){ ["pv-noteid","pv-current","pv-len","pv-root","pv-status"].forEach(id=>{ const el=$(id); if(el) el.value=""; }); return; }
+      
+          const meta = parseMetaLiteFromSvgText(txt);
+          const gStamp = await glyphStampFromCurrentSvg();
+          const noteId = await computeNoteId(meta, gStamp);
+      
+          // provenance embedded in SVG (if any)
+          const svgProv = Array.isArray(meta.provenance) ? meta.provenance.map(normTx) : [];
+          // local continuation (previous stamps on this device)
+          const localProv = loadLocalChain(noteId).map(normTx);
+      
+          // merge + ensure all have txStamp
+          const chain = mergeUniqueByStamp(svgProv, localProv);
+          for (const t of chain) if (!t.txStamp) t.txStamp = await txStampOf(t);
+      
+          const root = await merkleRoot(chain.map(t=>t.txStamp));
+          const holder = currentHolder(meta, chain);
+      
+          $("pv-noteid").value = noteId;
+          $("pv-current").value = holder;
+          $("pv-len").value    = String(chain.length);
+          $("pv-root").value   = root || "";
+          $("pv-status").value = "Loaded.";
+          saveLocalChain(noteId, chain);
+        }
+      
+        async function stampTransfer(){
+          const toKey = ($("pv-newto")?.value||"").trim();
+          if (!toKey){ alert("Paste recipient Φkey."); return; }
+          if (!hasSigilLoaded()) { alert("Upload a sigil in step 0 first."); return; }
+      
+          const txt   = $("det-raw").value||"";
+          const meta  = parseMetaLiteFromSvgText(txt);
+          const gStamp= await glyphStampFromCurrentSvg();
+          const noteId= await computeNoteId(meta, gStamp);
+      
+          const chain = loadLocalChain(noteId).map(normTx);
+          const holder = currentHolder(meta, chain);
+          const now = (window.kaiNowPulseExact ? window.kaiNowPulseExact() : Math.floor(Date.now()/1000));
+      
+          const tx = {
+            senderPhiKey: holder,
+            receiverPhiKey: toKey,
+            senderKaiPulse: now,
+            receiverKaiPulse: now,
+            senderGlyphStamp: gStamp
+          };
+          tx.txStamp = await txStampOf(tx);
+      
+          const newChain = [...chain, tx];
+          saveLocalChain(noteId, newChain);
+      
+          const root = await merkleRoot(newChain.map(t=>t.txStamp));
+          $("pv-current").value = toKey;
+          $("pv-len").value     = String(newChain.length);
+          $("pv-root").value    = root;
+          $("pv-status").value  = `Stamped ✓ • tx ${tx.txStamp.slice(0,10)}…`;
+          $("pv-newto").value   = "";
+        }
+      
+        function bind(){
+          // keep pdf picker purely informational for now
+          const pdf = $("pv-pdf");
+          if (pdf) pdf.addEventListener("change", e => {
+            const f = e.target.files?.[0]; $("pv-pdfsum").textContent = f ? `${f.name} • ${f.size.toLocaleString()} bytes` : "";
+          });
+      
+          const btn = $("pv-stamp");
+          if (btn) btn.addEventListener("click", ()=>{ stampTransfer().catch(err=>{ console.error(err); alert("Stamp failed."); }); });
+      
+          // refresh section 8 whenever a new SVG is loaded in step 0
+          const sig = $("svgfile");
+          if (sig) sig.addEventListener("change", ()=>{ loadFromCurrentSvg().catch(()=>{}); });
+      
+          // initial attempt in case an SVG was already parsed by the other handler
+          loadFromCurrentSvg();
+        }
+      
+        // expose minimal API for existing one-liner calls in your code
+        window.Pv = { loadFromCurrentSvg };
+      
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", bind, { once:true });
+        } else {
+          bind();
+        }
+      })();
+
+      </script>
+      <script>
+        /* === Fix 1: background injector used by valuation writer === */
+        function ensureSvgBackground(svgText, color){
+          try{
+            const bg = color || '#0a1114';
+            const open = svgText.match(/<svg\b[^>]*>/i);
+            if (!open) return svgText;
+            // already has a full-bleed background?
+            if (/<rect[^>]+width="100%"\s+height="100%"/i.test(svgText)) return svgText;
+            const escaped = String(bg).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            const injected = `${open[0]}\n  <rect width="100%" height="100%" fill="${escaped}" />`;
+            return svgText.replace(open[0], injected);
+          }catch{ return svgText; }
+        }
+        
+        /* === Fix 2: make Clear Live truly reset send state === */
+        (function(){
+          const clearBtn = document.getElementById("btn-clear-live");
+          if (!clearBtn) return;
+          clearBtn.addEventListener("click", () => {
+            // disable these (they were being enabled on clear)
+            const dl = document.getElementById("btn-download-child");
+            const rot = document.getElementById("btn-rotate");
+            if (dl) dl.disabled = true;
+            if (rot) rot.disabled = true;
+            // wipe any minted cache
+            window.lastMintedChildSvg = "";
+            window.lastMintedChildName = "";
+          }, { capture: true });
+        })();
+        
+        /* === Fix 3: complete Provenance “Stamp Transfer” flow === */
+        (function(){
+          const $ = (id) => document.getElementById(id);
+          const setStatus = (el, txt, ok) => { if (!el) return; el.value = txt; el.classList.toggle("ok", !!ok); el.classList.toggle("bad", !ok); };
+        
+          async function loadFromCurrentSvg(){
+            try{
+              const txt = (window.currentSvgText || $("det-raw")?.value || "").trim();
+              if (!txt) {
+                ["pv-noteid","pv-current","pv-len","pv-root"].forEach(id => { const el=$(id); if (el) el.value=""; });
+                return;
+              }
+              const phi =
+                /"userPhiKey"\s*:\s*"([^"]{10,})"/.exec(txt)?.[1] ||
+                /data-phi-key="([^"]{10,})"/i.exec(txt)?.[1] || "";
+              const txBlock = txt.match(/"transfers"\s*:\s*\[([\s\S]*?)\]/);
+              let transfers = []; if (txBlock) { try { transfers = JSON.parse("[" + txBlock[1] + "]"); } catch {} }
+              const provBlock = txt.match(/"provenance"\s*:\s*\[([\s\S]*?)\]/);
+              let prov = []; if (provBlock) { try { prov = JSON.parse("[" + prov[1] + "]"); } catch {} }
+        
+              if ($("pv-current")) $("pv-current").value = phi || "";
+              const chainLen = (Array.isArray(transfers) ? transfers.length : 0) || (Array.isArray(prov) ? prov.length : 0);
+              if ($("pv-len")) $("pv-len").value = String(chainLen);
+              const noteId = (await KaiVerifier.sha256HexCanon("note:" + txt)).slice(0,16);
+              if ($("pv-noteid")) $("pv-noteid").value = noteId;
+              const root = (await KaiVerifier.sha256HexCanon("merkle:" + JSON.stringify(prov || []))).slice(0,16);
+              if ($("pv-root")) $("pv-root").value = root;
+            }catch{}
+          }
+        
+          async function stampSvgProvenance(key){
+            const txt = (window.currentSvgText || $("det-raw")?.value || "").trim();
+            if (!txt) { alert("Load a sigil first."); return; }
+            const now = (window.kaiNowPulseExact ? window.kaiNowPulseExact() : Date.now());
+            const stamp = await KaiVerifier.sha256HexCanon(`xfer:${now}:${key}`);
+        
+            // local helper to upsert attrs on root <svg>
+            function upsert(svgText, attrs){
+              const m = svgText.match(/<svg\b[^>]*>/i);
+              if (!m) return svgText;
+              const openTag = m[0];
+              let newTag = openTag;
+              for (const [name, rawVal] of Object.entries(attrs||{})) {
+                if (rawVal == null) continue;
+                const val = String(rawVal).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                const re = new RegExp(`\\s${name}="[^"]*"`, "i");
+                newTag = re.test(newTag) ? newTag.replace(re, ` ${name}="${val}"`) : newTag.replace(/>$/, ` ${name}="${val}">`);
+              }
+              return svgText.replace(openTag, newTag);
+            }
+        
+            const updated = upsert(txt, {
+              "data-transfer-to-phi": key,
+              "data-transfer-kai-pulse": String(now),
+              "data-transfer-stamp": stamp
+            });
+        
+            const base = (window.lastSvgFileName || "sigil.svg").replace(/\.svg$/i,"");
+            const fname = `${base}.xfer-${stamp.slice(0,8)}.svg`;
+            try{
+              const blob = new Blob([updated], { type: "image/svg+xml" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url; a.download = fname; a.rel = "noopener";
+              document.body.appendChild(a); a.click(); a.remove();
+              setTimeout(() => URL.revokeObjectURL(url), 1200);
+              setStatus($("pv-status"), `Stamped ✓ ${fname}`, true);
+            }catch(e){
+              console.error(e);
+              setStatus($("pv-status"), "Stamp failed.", false);
+            }
+          }
+        
+          async function stampPdfProvenance(pdfFile, key){
+            if (!window.PDFLib) { alert("Missing pdf-lib. Include ./pdf-lib.min.js"); return; }
+            const bytes = await pdfFile.arrayBuffer();
+        
+            const now = (window.kaiNowPulseExact ? window.kaiNowPulseExact() : Date.now());
+            const stamp = await KaiVerifier.sha256HexCanon(`xfer:${now}:${key}`);
+            const stampShort = stamp.slice(0,8);
+        
+            const noteId = ($("pv-noteid")?.value || "").trim();
+            const holder = ($("pv-current")?.value || "").trim();
+            const chainLen = ($("pv-len")?.value || "").trim();
+            const merkle = ($("pv-root")?.value || "").trim();
+        
+            const doc = await PDFLib.PDFDocument.load(bytes, { updateMetadata: true });
+            const page = doc.addPage();
+            const { width, height } = page.getSize();
+            const font = await doc.embedFont(PDFLib.StandardFonts.Courier);
+            const size = 12, lh = 16;
+            let x = 54, y = height - 54;
+            const line = (s) => { page.drawText(String(s), { x, y, size, font }); y -= lh; };
+        
+            page.drawText("KAIROS — Provenance Transfer", { x, y, size: 16, font }); y -= lh*2;
+            line(`Note ID:            ${noteId || "(n/a)"}`);
+            line(`Current Holder Φ:   ${holder || "(n/a)"}`);
+            line(`Chain Length:       ${chainLen || "0"}`);
+            line(`Merkle Root:        ${merkle || "(n/a)"}`);
+            y -= lh;
+            line(`Transfer To Φ:      ${key}`);
+            line(`Kai Pulse:          ${now}`);
+            line(`Transfer Stamp:     ${stamp}`);
+            y -= lh;
+            line(`Generated:          ${new Date().toISOString()}`);
+        
+            try {
+              doc.setTitle("Kairos — Provenance Transfer");
+              doc.setSubject(`transfer-stamp=${stamp} kai-pulse=${now} to-phi=${key}`);
+              doc.setKeywords(["Kairos","Provenance","Transfer", `note=${noteId}`, `merkle=${merkle}`, `to=${key}`, `stamp=${stampShort}`]);
+              doc.setProducer("Kairos Exhaler (offline)");
+              doc.setCreator("Kairos Exhaler");
+              doc.setModificationDate(new Date());
+            } catch {}
+        
+            const out = await doc.save();
+            const base = pdfFile.name.replace(/\.pdf$/i, "");
+            const fname = `${base}.xfer-${stampShort}.pdf`;
+        
+            try{
+              const blob = new Blob([out], { type: "application/pdf" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url; a.download = fname; a.rel = "noopener";
+              document.body.appendChild(a); a.click(); a.remove();
+              setTimeout(() => URL.revokeObjectURL(url), 1200);
+              setStatus($("pv-status"), `Stamped ✓ ${fname}`, true);
+            }catch(e){
+              console.error(e);
+              setStatus($("pv-status"), "Stamp failed.", false);
+            }
+          }
+        
+          // ← This is where your snippet got cut off; finish it:
+          async function stampTransfer(toKeyInput){
+            const key = (typeof toKeyInput === "string" ? toKeyInput : (toKeyInput?.value || "")).trim();
+            if (!key) { alert("Paste recipient Φkey."); return; }
+            const pdfFile = $("pv-pdf")?.files?.[0] || null;
+            if (pdfFile) await stampPdfProvenance(pdfFile, key);
+            else         await stampSvgProvenance(key);
+          }
+        
+          // Wire up UI
+          $("pv-stamp")?.addEventListener("click", () => stampTransfer($("pv-newto")));
+          $("pv-newto")?.addEventListener("input", () => setStatus($("pv-status"), "", false));
+        
+          // keep Provenance panel in sync when SVG is loaded
+          document.getElementById("svgfile")?.addEventListener("change", () => setTimeout(loadFromCurrentSvg, 0));
+          window.addEventListener("DOMContentLoaded", loadFromCurrentSvg);
+        })();
+        </script>
+        
+    
+</body>
+</html>

@@ -9,7 +9,8 @@ import React, {
   useState,
 } from "react";
 import type { ChangeEvent } from "react"; // ✅ type-only import
-import { useToasts } from "../data/toast/Toasts";
+import { useToasts } from "../data/toast/toast";
+
 import { computeLocalKai } from "../core/kai_time";
 import {
   buildStreamUrl,

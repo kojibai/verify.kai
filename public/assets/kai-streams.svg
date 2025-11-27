@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Kai Streams — breath lattice, phi spiral, sovereign keyhole, orbit nodes -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title>Kai Streams</title>
+  <desc>A harmonic streams glyph: golden spiral, breath wavebands, orbit nodes, and sovereign keyhole.</desc>
+
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#00FFD0" stop-opacity="0.85"/>
+      <stop offset="55%" stop-color="#6DA8FF" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="#6DA8FF" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="streamA" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00FFD0"/>
+      <stop offset="50%" stop-color="#6DA8FF"/>
+      <stop offset="100%" stop-color="#B38CFF"/>
+    </linearGradient>
+
+    <linearGradient id="streamB" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFD36E"/>
+      <stop offset="45%" stop-color="#FFB36E"/>
+      <stop offset="100%" stop-color="#FF6EA8"/>
+    </linearGradient>
+
+    <linearGradient id="ring" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.9"/>
+    </linearGradient>
+
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.2" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- subtle twinkle -->
+    <g id="spark">
+      <circle r="0.9" fill="#FFFFFF" />
+      <circle r="2.5" fill="#FFFFFF" opacity="0.12"/>
+    </g>
+  </defs>
+
+  <!-- background soft halo -->
+  <circle cx="32" cy="32" r="30" fill="url(#glow)"/>
+
+  <!-- outer ring -->
+  <circle cx="32" cy="32" r="28" fill="none" stroke="url(#ring)" stroke-width="1.6" opacity="0.9"/>
+
+  <!-- golden spiral arcs (approx) -->
+  <path d="M18,32
+           a14,14 0 0 1 14,-14
+           M32,18
+           a14,14 0 0 1 14,14
+           M46,32
+           a14,14 0 0 1 -14,14
+           M32,46
+           a14,14 0 0 1 -14,-14"
+        fill="none" stroke="url(#ring)" stroke-width="1.2" opacity="0.45" />
+
+  <!-- breath streams (A) -->
+  <path d="M6 28
+           C14 24, 22 22, 32 22
+           S50 24, 58 28"
+        fill="none" stroke="url(#streamA)" stroke-width="2.8" stroke-linecap="round" filter="url(#softGlow)" />
+  <path d="M8 36
+           C16 32, 24 30, 32 30
+           S48 32, 56 36"
+        fill="none" stroke="url(#streamA)" stroke-width="2.0" stroke-linecap="round" opacity="0.85" />
+
+  <!-- breath streams (B) -->
+  <path d="M10 42
+           C20 38, 26 37, 32 37
+           S44 38, 54 42"
+        fill="none" stroke="url(#streamB)" stroke-width="2.4" stroke-linecap="round" filter="url(#softGlow)" />
+  <path d="M12 47
+           C22 43, 27 42.5, 32 42.5
+           S42 43, 52 47"
+        fill="none" stroke="url(#streamB)" stroke-width="1.8" stroke-linecap="round" opacity="0.85" />
+
+  <!-- orbit nodes (phi points) -->
+  <circle cx="18" cy="26" r="2" fill="#FFFFFF" opacity="0.9"/>
+  <circle cx="46" cy="34" r="2" fill="#FFFFFF" opacity="0.9"/>
+  <circle cx="26" cy="40" r="2" fill="#FFFFFF" opacity="0.9"/>
+  <use href="#spark" x="22" y="20" opacity="0.8"/>
+  <use href="#spark" x="50" y="44" opacity="0.75"/>
+
+  <!-- sovereign keyhole at the heart -->
+  <g transform="translate(32,28)">
+    <circle cx="0" cy="0" r="8.2" fill="#FFFFFF" opacity="0.12"/>
+    <path d="M0 -5.4
+             a3.8 3.8 0 0 1 3.8 3.8v1.2h-7.6v-1.2A3.8 3.8 0 0 1 0 -5.4Z
+             M-2.2 0.6h4.4v6.2h-4.4z"
+          fill="#FFFFFF" opacity="0.92"/>
+  </g>
+
+  <!-- inner ring -->
+  <circle cx="32" cy="32" r="18" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.35"/>
+
+  <!-- micro ticks around the ring (12) -->
+  <g transform="translate(32,32)" stroke="#FFFFFF" stroke-opacity="0.5" stroke-width="1">
+    <g>
+      <line x1="0" y1="-26" x2="0" y2="-24"/>
+      <line x1="0" y1="24" x2="0" y2="26"/>
+    </g>
+    <g transform="rotate(30)">
+      <line x1="0" y1="-26" x2="0" y2="-24"/>
+      <line x1="0" y1="24" x2="0" y2="26"/>
+    </g>
+    <g transform="rotate(60)">
+      <line x1="0" y1="-26" x2="0" y2="-24"/>
+      <line x1="0" y1="24" x2="0" y2="26"/>
+    </g>
+    <g transform="rotate(90)">
+      <line x1="0" y1="-26" x2="0" y2="-24"/>
+      <line x1="0" y1="24" x2="0" y2="26"/>
+    </g>
+    <g transform="rotate(120)">
+      <line x1="0" y1="-26" x2="0" y2="-24"/>
+      <line x1="0" y1="24" x2="0" y2="26"/>
+    </g>
+    <g transform="rotate(150)">
+      <line x1="0" y1="-26" x2="0" y2="-24"/>
+      <line x1="0" y1="24" x2="0" y2="26"/>
+    </g>
+  </g>
+</svg>

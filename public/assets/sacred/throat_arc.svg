@@ -1,0 +1,54 @@
+<svg
+  viewBox="0 0 500 500"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <defs>
+    <!-- Throat Chakra Glow -->
+    <radialGradient id="throatAura" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00ccff" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#001133" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Soft Glow Filter -->
+    <filter id="throatGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Animation -->
+    <style>
+      .throat-spin {
+        animation: throatSpin 5.236s linear infinite;
+        transform-origin: 250px 250px;
+      }
+
+      @keyframes throatSpin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </defs>
+
+  <!-- Chakra Background Aura -->
+  <circle
+    cx="250"
+    cy="250"
+    r="220"
+    fill="url(#throatAura)"
+    filter="url(#throatGlow)"
+  />
+
+  <!-- Hexagram (Merkaba) -->
+  <g class="throat-spin" stroke="#00ccff" stroke-width="2.5" fill="none">
+    <!-- Upward triangle -->
+    <polygon points="250,130 320,345 180,345" />
+    <!-- Downward triangle -->
+    <polygon points="250,370 320,155 180,155" />
+  </g>
+
+  <!-- Voice Pearl Core -->
+  <circle cx="250" cy="250" r="12" fill="#00ccff" opacity="0.8" />
+</svg>

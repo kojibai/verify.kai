@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none"
+     xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="lockGrad" x1="0" y1="0" x2="48" y2="48"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%"  stop-color="#22ffcc"/>
+      <stop offset="100%" stop-color="#00faff"/>
+    </linearGradient>
+    <filter id="lockGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- shackle -->
+  <path d="M14 20V16C14 9.92 18.92 5 25 5s11 4.92 11 11v4"
+        stroke="url(#lockGrad)" stroke-width="3" fill="none"
+        filter="url(#lockGlow)" stroke-linecap="round"/>
+
+  <!-- body -->
+  <rect x="10" y="20" width="28" height="24" rx="4" ry="4"
+        stroke="url(#lockGrad)" stroke-width="3" fill="none"
+        filter="url(#lockGlow)"/>
+
+  <!-- key-hole -->
+  <circle cx="24" cy="32" r="4" fill="url(#lockGrad)" filter="url(#lockGlow)"/>
+</svg>

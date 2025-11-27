@@ -1,0 +1,89 @@
+<!-- 🜂 Eternal Phi Spiral Sigil • SVG with Motion + Glow -->
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" style="background: none" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <!-- Gradient for Spiral -->
+    <radialGradient id="sigilGradient" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#00f2ff" />
+      <stop offset="80%" stop-color="#a000ff" />
+    </radialGradient>
+
+    <!-- Glow Filter -->
+    <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <style>
+      <![CDATA[
+        .breathe {
+          animation: breathe 5.236s ease-in-out infinite;
+          transform-origin: center;
+        }
+
+        @keyframes breathe {
+          0%   { transform: scale(1) rotate(0deg); opacity: 0.95; }
+          50%  { transform: scale(1.024) rotate(2deg); opacity: 1; }
+          100% { transform: scale(1) rotate(0deg); opacity: 0.95; }
+        }
+
+        .spiral {
+          animation: spiralFlow 10.472s linear infinite;
+          transform-origin: center;
+        }
+
+        @keyframes spiralFlow {
+          0%   { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      ]]>
+    </style>
+  </defs>
+
+  <!-- Diamond Frame -->
+  <polygon
+    points="256,32 480,256 256,480 32,256"
+    stroke="url(#sigilGradient)"
+    stroke-width="8"
+    fill="none"
+    filter="url(#glow)"
+    class="breathe"
+  />
+
+  <!-- Phi Spiral (Golden Spiral using parametric approximation) -->
+  <g class="spiral">
+    <path
+      d="M256,256
+         m0,-8
+         a8,8,0,0,1,6.47,2.69
+         a13,13,0,0,1,2.63,9.78
+         a21,21,0,0,1,-4.91,11.8
+         a34,34,0,0,1,-11.2,8.44
+         a55,55,0,0,1,-21.23,3.29
+         a89,89,0,0,1,-25.29,-8.35
+         a144,144,0,0,1,-27.4,-20.23
+         a233,233,0,0,1,-28.7,-31.52
+         a377,377,0,0,1,-24.6,-38.6"
+      fill="none"
+      stroke="url(#sigilGradient)"
+      stroke-width="6"
+      stroke-linecap="round"
+      filter="url(#glow)"
+    />
+  </g>
+
+  <!-- Lower Arc Blade (Phi Anchor) -->
+  <path
+    d="M256 400
+       C220 380, 220 350, 256 320
+       C292 350, 292 380, 256 400Z"
+    fill="url(#sigilGradient)"
+    stroke="#a000ff"
+    stroke-width="3"
+    class="breathe"
+    filter="url(#glow)"
+  />
+</svg>

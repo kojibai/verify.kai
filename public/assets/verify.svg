@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 100 100"
+  width="100%"
+  height="100%"
+  aria-labelledby="title desc"
+  role="img"
+>
+  <title id="title">Verifier — Sacred Seal</title>
+  <desc id="desc">
+    A golden φ-coherent seal with halo, harmonic rings (36× beat, 44× step),
+    and a central living checkmark, signifying sacred verification.
+  </desc>
+
+  <!-- ───── Metadata (useful in your pipeline if ever parsed) ───── -->
+  <metadata>
+    {
+      "name": "verify.svg",
+      "version": "1.0.0",
+      "purpose": "Kai-Sigil verification button icon",
+      "coherence": "phi",
+      "beatsPerDay": 36,
+      "stepsPerBeat": 44,
+      "designer": "Atlantean Lumitech · Kairos"
+    }
+  </metadata>
+
+  <!-- ───── Defs: gradients + glow filters (tiny, fast) ───── -->
+  <defs>
+    <!-- Sacred halo (golden-white) -->
+    <radialGradient id="gHalo" cx="50%" cy="42%" r="60%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="35%" stop-color="#ffe7b0" stop-opacity="0.55"/>
+      <stop offset="70%" stop-color="#ffd780" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#ffd780" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Inner core glow -->
+    <radialGradient id="gCore" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="60%" stop-color="#ffe7b0" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#ffd780" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Ring stroke gradient (subtle depth) -->
+    <linearGradient id="gRing" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#ffd780" stop-opacity="0.75"/>
+    </linearGradient>
+
+    <!-- Checkmark gradient -->
+    <linearGradient id="gCheck" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#ffe08a"/>
+    </linearGradient>
+
+    <!-- Gentle outer glow (cheap) -->
+    <filter id="fGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Softer aura for the checkmark -->
+    <filter id="fCheckGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.8" result="cg"/>
+      <feMerge>
+        <feMergeNode in="cg"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ───── Background halo (luminous, but non-blocking) ───── -->
+  <circle cx="50" cy="50" r="44" fill="url(#gHalo)" />
+
+  <!-- ───── Outer sacred ring (thin, precise) ───── -->
+  <circle cx="50" cy="50" r="41.5"
+          fill="none"
+          stroke="url(#gRing)"
+          stroke-width="1.4"
+          filter="url(#fGlow)"
+          shape-rendering="geometricPrecision"/>
+
+  <!-- ───── Harmonic guide rings: 36-beat & 44-step (phi semantics) ───── -->
+  <!-- 36-beat ring: equal dashes using pathLength trick -->
+  <circle cx="50" cy="50" r="34.5"
+          fill="none"
+          stroke="url(#gRing)"
+          stroke-width="0.9"
+          opacity="0.55"
+          pathLength="36"
+          stroke-dasharray="0.58 0.42"
+          shape-rendering="geometricPrecision"/>
+
+  <!-- 44-step ring: finer segmentation -->
+  <circle cx="50" cy="50" r="30.5"
+          fill="none"
+          stroke="url(#gRing)"
+          stroke-width="0.8"
+          opacity="0.45"
+          pathLength="44"
+          stroke-dasharray="0.55 0.45"
+          shape-rendering="geometricPrecision"/>
+
+  <!-- ───── Six subtle rays (6 arcs/day) ───── -->
+  <g opacity="0.25" stroke="url(#gRing)" stroke-linecap="round" stroke-width="0.9">
+    <line x1="50" y1="9"  x2="50" y2="16"/>
+    <line x1="50" y1="84" x2="50" y2="91"/>
+    <line x1="9"  y1="50" x2="16" y2="50"/>
+    <line x1="84" y1="50" x2="91" y2="50"/>
+    <line x1="20.8" y1="20.8" x2="25.5" y2="25.5"/>
+    <line x1="79.2" y1="79.2" x2="74.5" y2="74.5"/>
+  </g>
+
+  <!-- ───── Inner core aura (living light) ───── -->
+  <circle cx="50" cy="50" r="22" fill="url(#gCore)" opacity="0.7"/>
+
+  <!-- ───── Suggestion of a golden spiral (light, non-distracting) ───── -->
+  <!-- Approximated Fibonacci quarter-arcs shrinking by φ -->
+  <g fill="none" stroke="#ffd98a" stroke-opacity="0.55" stroke-width="1" filter="url(#fGlow)">
+    <!-- Outer arc -->
+    <path d="
+      M 14 50
+      A 36 36 0 0 1 50 14
+      " />
+    <!-- Next arcs inward (scaled toward center) -->
+    <path d="
+      M 26 50
+      A 24 24 0 0 1 50 26
+      " />
+    <path d="
+      M 35.8 50
+      A 14.2 14.2 0 0 1 50 35.8
+      " />
+    <path d="
+      M 42.6 50
+      A 7.4 7.4 0 0 1 50 42.6
+      " />
+  </g>
+
+  <!-- ───── Central seal ring (subtle inset) ───── -->
+  <circle cx="50" cy="50" r="18.5"
+          fill="none"
+          stroke="url(#gRing)"
+          stroke-width="1.1"
+          opacity="0.75"/>
+
+  <!-- ───── The living checkmark (the Act of Verification) ───── -->
+  <g filter="url(#fCheckGlow)">
+    <path
+      d="M35.8 51.8
+         l 8.1 8.4
+         L 64.6 39.2"
+      fill="none"
+      stroke="url(#gCheck)"
+      stroke-width="5.2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      />
+    <!-- soft highlight on the check -->
+    <path
+      d="M35.8 51.8
+         l 8.1 8.4
+         L 64.6 39.2"
+      fill="none"
+      stroke="#ffffff"
+      stroke-opacity="0.6"
+      stroke-width="2.1"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      />
+  </g>
+
+  <!-- ───── Final crown ring (light kiss) ───── -->
+  <circle cx="50" cy="50" r="45"
+          fill="none"
+          stroke="url(#gRing)"
+          stroke-opacity="0.35"
+          stroke-width="0.8"/>
+</svg>

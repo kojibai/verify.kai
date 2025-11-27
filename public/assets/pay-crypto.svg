@@ -1,0 +1,115 @@
+<!-- pay-crypto.svg — Atlantean Neon BTC, φ-breathing (5.236s) -->
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+     xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+
+  <defs>
+    <!-- Golden aura gradient (outer glow) -->
+    <radialGradient id="aura" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse"
+      gradientTransform="translate(12 12) scale(10)">
+      <stop offset="0" stop-color="#37FFE4" stop-opacity=".85"/>
+      <stop offset=".45" stop-color="#A78BFA" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#37FFE4" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Stroke gradient for subtle chromatic shift along the ring -->
+    <linearGradient id="ringGrad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="currentColor" stop-opacity=".95"/>
+      <stop offset=".5" stop-color="currentColor" stop-opacity=".7"/>
+      <stop offset="1" stop-color="currentColor" stop-opacity=".95"/>
+    </linearGradient>
+
+    <!-- Neon glow filter (merged blurs) -->
+    <filter id="neon" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="0.8" result="b1"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.6" result="b2"/>
+      <feColorMatrix in="b2" type="matrix"
+        values="0 0 0 0 0.21
+                0 0 0 0 1.00
+                0 0 0 0 0.89
+                0 0 0 1 0" result="tealish"/>
+      <feMerge>
+        <feMergeNode in="tealish"/>
+        <feMergeNode in="b1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Mask for a sweeping highlight around the outer ring -->
+    <mask id="sweepMask">
+      <rect x="0" y="0" width="24" height="24" fill="black"/>
+      <g>
+        <circle cx="12" cy="12" r="9.6" fill="none" stroke="white" stroke-width="3"
+                stroke-linecap="round" stroke-dasharray="12 56">
+          <animate attributeName="stroke-dashoffset" values="0; -68" dur="5.236s" repeatCount="indefinite"/>
+        </circle>
+      </g>
+    </mask>
+
+    <!-- CSS animations -->
+    <style>
+      :root { --phi: 5.236s; }
+      .aura { animation: breathe var(--phi) ease-in-out infinite; }
+      .ring { animation: ringPulse var(--phi) ease-in-out infinite; }
+      .btc  { animation: innerPulse var(--phi) ease-in-out infinite; }
+      .orbit { transform-origin: 12px 12px; animation: orbit var(--phi) linear infinite; }
+
+      @keyframes breathe {
+        0%   { opacity: .18; transform: scale(1.00); }
+        50%  { opacity: .34; transform: scale(1.06); }
+        100% { opacity: .18; transform: scale(1.00); }
+      }
+      @keyframes ringPulse {
+        0%   { filter: url(#neon); opacity: .96; }
+        50%  { filter: url(#neon); opacity: .75; }
+        100% { filter: url(#neon); opacity: .96; }
+      }
+      @keyframes innerPulse {
+        0%   { opacity: .95; }
+        50%  { opacity: .80; }
+        100% { opacity: .95; }
+      }
+      @keyframes orbit {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+      }
+
+      /* Respect user motion preferences */
+      @media (prefers-reduced-motion: reduce) {
+        .aura, .ring, .btc, .orbit { animation: none !important; }
+      }
+    </style>
+  </defs>
+
+  <!-- Soft golden aura halo (under everything) -->
+  <circle class="aura" cx="12" cy="12" r="10" fill="url(#aura)"/>
+
+  <!-- Outer coin ring with sweeping highlight -->
+  <g class="ring" mask="url(#sweepMask)" filter="url(#neon)">
+    <circle cx="12" cy="12" r="8.8" fill="none" stroke="url(#ringGrad)" stroke-width="1.8" />
+  </g>
+
+  <!-- Inner ring (subtle) -->
+  <circle cx="12" cy="12" r="6.3" fill="none" stroke="currentColor" stroke-width="1"
+          opacity=".35" />
+
+  <!-- Orbiting micro-nodes (circuit notches that rotate) -->
+  <g class="orbit" opacity=".7" stroke="currentColor" stroke-width="1" fill="none">
+    <circle cx="12" cy="3.6" r="1"/>
+    <circle cx="20.4" cy="12" r="1"/>
+    <circle cx="12" cy="20.4" r="1"/>
+    <circle cx="3.6" cy="12" r="1"/>
+  </g>
+
+  <!-- Stylized ₿ — path-based, inherits currentColor, neon-filtered -->
+  <g class="btc" filter="url(#neon)" stroke="currentColor" stroke-linecap="round" fill="none">
+    <!-- Top bar -->
+    <path d="M9.2 8.0h3.35c1.05 0 1.9.85 1.9 1.9 0 .73-.42 1.38-1.06 1.69" stroke-width="1.7"/>
+    <!-- Bottom bar -->
+    <path d="M9.2 12.6h3.65c1.12 0 2.03.91 2.03 2.03 0 1.12-.91 2.03-2.03 2.03H9.2" stroke-width="1.7"/>
+    <!-- Vertical spine -->
+    <path d="M9.2 6.8v10.4" stroke-width="1.7"/>
+    <!-- Crossbars -->
+    <path d="M8.15 8.0h2.2M8.15 12.6h2.2" stroke-width="1.25" opacity=".8"/>
+  </g>
+
+</svg>

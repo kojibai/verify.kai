@@ -1,0 +1,29 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="cosmicGradient" r="80%" cx="50%" cy="50%">
+      <stop offset="0%" stop-color="#9333EA" />
+      <stop offset="100%" stop-color="#3B82F6" />
+    </radialGradient>
+  </defs>
+  <circle
+    cx="100"
+    cy="100"
+    r="40"
+    fill="url(#cosmicGradient)"
+  >
+    <animate
+      attributeName="r"
+      values="40;45;40"
+      dur="4s"
+      repeatCount="indefinite"
+    />
+    <animateTransform
+      attributeName="transform"
+      type="rotate"
+      from="0 100 100"
+      to="360 100 100"
+      dur="60s"
+      repeatCount="indefinite"
+    />
+  </circle>
+</svg>

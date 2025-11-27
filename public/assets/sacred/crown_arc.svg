@@ -1,0 +1,85 @@
+<svg
+  viewBox="0 0 500 500"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <defs>
+    <!-- Crown Gradient Glow -->
+    <radialGradient id="crownAura" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#9900ff" stop-opacity="0.08" />
+    </radialGradient>
+
+    <!-- Glow Filter -->
+    <filter id="crownGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Rotation Animation -->
+    <style>
+      .torus-spin {
+        animation: torusSpin 5.236s linear infinite;
+        transform-origin: 250px 250px;
+      }
+
+      @keyframes torusSpin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </defs>
+
+  <!-- Outer Aura -->
+  <circle
+    cx="250"
+    cy="250"
+    r="220"
+    fill="url(#crownAura)"
+    filter="url(#crownGlow)"
+  />
+
+  <!-- Toroidal Field -->
+  <g class="torus-spin">
+    <!-- Outer Ring -->
+    <circle
+      cx="250"
+      cy="250"
+      r="140"
+      stroke="#ffffff"
+      stroke-opacity="0.7"
+      stroke-width="2"
+      fill="none"
+    />
+    <!-- Inner Ring -->
+    <circle
+      cx="250"
+      cy="250"
+      r="65"
+      stroke="#ffffff"
+      stroke-opacity="0.4"
+      stroke-width="1.5"
+      fill="none"
+    />
+    <!-- Flow lines -->
+    <path
+      d="M190,250 Q250,170 310,250 Q250,330 190,250 Z"
+      fill="none"
+      stroke="#cc99ff"
+      stroke-width="1.3"
+      stroke-opacity="0.6"
+    />
+    <path
+      d="M200,210 Q250,150 300,210 Q250,270 200,210 Z"
+      fill="none"
+      stroke="#cc99ff"
+      stroke-width="1.1"
+      stroke-opacity="0.45"
+    />
+  </g>
+
+  <!-- Divine Core -->
+  <circle cx="250" cy="250" r="10" fill="#ffffff" opacity="0.8"/>
+</svg>

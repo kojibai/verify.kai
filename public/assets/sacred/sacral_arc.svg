@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
+  <defs>
+    <radialGradient id="sacralGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FF9966" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#FF6600" stop-opacity="0.1"/>
+    </radialGradient>
+
+    <filter id="sacralSoftGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <style>
+      .sacral-rotate {
+        animation: sacralSpin 5.236s linear infinite;
+        transform-origin: 250px 250px;
+      }
+      @keyframes sacralSpin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </defs>
+
+  <g class="sacral-rotate">
+    <!-- Horizontal vesica ellipse -->
+    <ellipse cx="250" cy="250" rx="120" ry="180"
+             stroke="url(#sacralGlow)" stroke-width="3"
+             fill="none" filter="url(#sacralSoftGlow)" />
+
+    <!-- Vertical vesica ellipse -->
+    <ellipse cx="250" cy="250" rx="180" ry="120"
+             stroke="url(#sacralGlow)" stroke-width="3"
+             fill="none" filter="url(#sacralSoftGlow)" />
+
+    <!-- Inner womb sphere -->
+    <circle cx="250" cy="250" r="45"
+            fill="#FF6600" opacity="0.85" />
+    <circle cx="250" cy="250" r="10"
+            fill="#FFFFFF" opacity="0.7" />
+  </g>
+</svg>

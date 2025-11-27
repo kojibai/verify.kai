@@ -1,0 +1,14 @@
+{
+  "hash": "8a7ef30abae72cddd264ad0d7f5d0f15aa459d75aae91b498485ef1d3e487e0e",
+  "pulse": 7563819,
+  "beat": 15,
+  "stepIndex": 27,
+  "chakraDay": "Root",
+  "canonicalHash": "8a7ef30abae72cddd264ad0d7f5d0f15aa459d75aae91b498485ef1d3e487e0e",
+  "expiresAtPulse": 7563830,
+  "exportedAt": "2025-08-11T15:55:07.967Z",
+  "overlays": {
+    "qr": true,
+    "eternalPulseBar": false
+  }
+}

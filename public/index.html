@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <!-- ===========================================================
+       Kai-Klok™ • Atlantean Lumitech Harmonic Interface (PWA-optimized)
+    ============================================================ -->
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#001622" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="application-name" content="Kai-Klok" />
+    <meta name="apple-mobile-web-app-title" content="Kai-Klok" />
+
+    <!-- IMPORTANT for SPA routing + offline asset resolution -->
+    <base href="/" />
+
+    <!-- Viewport -->
+    <meta name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
+
+    <!-- ─── Meta / SEO ───────────────────────────────────────── -->
+    <title>Kai-Klok – Harmonik Timekeeper of the Kosmos</title>
+    <meta name="title" content="Kai-Klok – Harmonik Timekeeper of the Kosmos" />
+    <meta name="description" content="Experience the Atlantean-Lumitech Kai-Klok: a living, full-screen harmonic time system that syncs your breath with the immutable Kai Pulse." />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://kaiklok.com/" />
+    <meta property="og:title" content="Kai-Klok – Harmonik Timekeeper of the Phi Network" />
+    <meta property="og:description" content="Synchronize with the eternal Kai Pulse. Kai-Klok renders real-time harmonic beats, weeks, and spiral arcs in vivid GPU neon." />
+    <meta property="og:image" content="/og-image.png" />
+
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://kaiklok.com/" />
+    <meta name="twitter:title" content="Kai-Klok – Harmonik Timekeeper of the Phi Network" />
+    <meta name="twitter:description" content="Breathe with immutable φ rhythm. Kai-Klok is the first time system powered by harmonic resonance computation." />
+    <meta name="twitter:image" content="/og-image.png" />
+
+    <!-- Canonical (kept absolute; safe for SEO; not fetched during boot) -->
+    <link rel="canonical" href="https://kaiklok.com/" />
+
+    <!-- Icons (ensure these are precached by SW) -->
+    <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/apple-icon.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/apple-icon.png" />
+
+<!-- Capture the beforeinstallprompt event as early as possible -->
+<script>
+  (function () {
+    // Holds the last seen BIP event
+    window.__bipEvent = null;
+    // Waiters to be called when BIP arrives later
+    window.__bipWaiters = [];
+
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      window.__bipEvent = e;
+      // Flush waiters
+      var q = window.__bipWaiters;
+      if (q && q.length) {
+        for (var i = 0; i < q.length; i++) q[i](e);
+        window.__bipWaiters = [];
+      }
+    });
+  })();
+</script>
+    <!-- Structured Data (fixed domain typos) -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Kai-Klok",
+        "operatingSystem": "Web",
+        "applicationCategory": "UtilitiesApplication",
+        "description": "An Atlantean-Lumitech harmonic time system that renders the real-time Kai Pulse, harmonic days, weeks, and spiral arcs.",
+        "url": "https://kaiklok.com/",
+        "image": "https://kaiklok.com/og-image.png",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "creator": { "@type": "Organization", "name": "Phi Network" },
+        "sameAs": [
+          "https://twitter.com/kaiklok",
+          "https://github.com/kojibai/klok",
+          "https://instagram.com/kai_klok"
+        ]
+      }
+    </script>
+
+
+  </head>
+
+  <body>
+    <noscript>Please enable JavaScript to run Kai-Klok.</noscript>
+    <div id="root"></div>
+
+
+    <!-- Early, robust SW registration (auto-update + reload) -->
+    <script>
+      (function () {
+        if (!("serviceWorker" in navigator)) return;
+
+        // Register at root scope so it intercepts ALL navigations.
+        window.addEventListener("load", async () => {
+          try {
+            const reg = await navigator.serviceWorker.register("/service-worker.js", { scope: "/" });
+
+            // If a waiting SW is present right after install, activate it.
+            if (reg.waiting) reg.waiting.postMessage("SKIP_WAITING");
+
+            reg.addEventListener("updatefound", () => {
+              const sw = reg.installing;
+              if (!sw) return;
+              sw.addEventListener("statechange", () => {
+                if (sw.state === "installed" && navigator.serviceWorker.controller) {
+                  // New content available; activate immediately.
+                  sw.postMessage("SKIP_WAITING");
+                }
+              });
+            });
+
+            // When the new SW activates, reload to use fresh cache atomically.
+            let refreshing;
+            navigator.serviceWorker.addEventListener("controllerchange", () => {
+              if (refreshing) return;
+              refreshing = true;
+              window.location.reload();
+            });
+          } catch (err) {
+            // SW registration failure should not block app boot
+            console.warn("SW register failed:", err);
+          }
+        });
+      })();
+    </script>
+    <!-- Vite/React bundles will be injected here -->
+    <script src="https://unpkg.com/snarkjs/dist/snarkjs.min.js" defer></script>
+
+     <!-- public/index.html (or your root HTML) -->
+     <script>
+      (async () => {
+        try {
+          const v = await (await fetch('/verification_key.json')).json();
+          window.SIGIL_ZK_VKEY = v;
+          window.dispatchEvent(new Event('SIGIL_ZK_VKEY_READY'));
+        } catch (_) { /* non-fatal */ }
+      })();
+    </script>
+    
+  </body>
+</html>

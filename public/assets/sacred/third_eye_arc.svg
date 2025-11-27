@@ -1,0 +1,54 @@
+<svg
+  viewBox="0 0 500 500"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <defs>
+    <!-- Indigo-Violet Chakra Aura -->
+    <radialGradient id="thirdEyeAura" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6600cc" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#110033" stop-opacity="0.1" />
+    </radialGradient>
+
+    <!-- Glow Filter -->
+    <filter id="thirdEyeGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3.5" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Fractal Spin Animation -->
+    <style>
+      .yantra-spin {
+        animation: yantraSpin 5.236s linear infinite;
+        transform-origin: 250px 250px;
+      }
+
+      @keyframes yantraSpin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </defs>
+
+  <!-- Chakra Aura -->
+  <circle
+    cx="250"
+    cy="250"
+    r="220"
+    fill="url(#thirdEyeAura)"
+    filter="url(#thirdEyeGlow)"
+  />
+
+  <!-- Central Yantra Triangles (Simplified) -->
+  <g class="yantra-spin" stroke="#aa55ff" stroke-width="2.2" fill="none">
+    <polygon points="250,120 330,360 170,360" />
+    <polygon points="250,380 330,140 170,140" />
+    <polygon points="210,160 290,160 250,300" />
+    <polygon points="210,340 290,340 250,200" />
+  </g>
+
+  <!-- Ajna Dot (bindu) -->
+  <circle cx="250" cy="250" r="10" fill="#cc66ff" opacity="0.9"/>
+</svg>
