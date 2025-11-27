@@ -8,7 +8,7 @@
 */
 
 const VERSION = "v99.94"; // ⬅️ bump every deploy
-const PREFIX  = "Kaiklok";
+const PREFIX  = "PHINETWORK";
 const PRECACHE = `${PREFIX}-precache-${VERSION}`;
 const RUNTIME  = `${PREFIX}-runtime-${VERSION}`;
 const ASSETCACHE = `${PREFIX}-assets-${VERSION}`;
