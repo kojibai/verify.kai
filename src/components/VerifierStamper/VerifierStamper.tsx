@@ -1889,7 +1889,6 @@ const pvForChart = useMemo(() => {
       <div className="toolbar">
         <div className="brand-lockup">
           <span className="glyph" aria-hidden />
-          <h3>Verify</h3>
         </div>
         <div className="toolbar-actions">
           <button className="secondary" onClick={openExplorer} aria-haspopup="dialog" aria-controls="explorer-dialog">
