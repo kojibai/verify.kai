@@ -231,7 +231,7 @@ sealed by Proof of Breath™, pulsed by Kai-Signature™, and openly auditable o
                   </div>
 
                   <div className="nav-foot__line">
-                  Sigil-Glyphs are zero-knowledge–proven origin ΦKey seals that
+                 Sigil-Glyphs are zero-knowledge–proven origin ΦKey seals that
 summon, mint, and mature value.
 Derivative glyphs are exhaled notes of that origin —
 lineage-true outflow, transferable, and redeemable by re-inhale.
