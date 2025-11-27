@@ -72,42 +72,9 @@ These lines define the monetary ontology of Φ inside the UI: notes, sigils, lin
 
 ---
 
-## 3. Project Structure (high-level)
-
-```text
-src/
-  App.tsx               # Route shell + Sovereign Gate layout
-  App.css               # ΦNet console shell styles
-
-  components/
-    VerifierStamper/
-      VerifierStamper.tsx
-      VerifierStamper.css
-      SendPhiAmountField.tsx
-      ...               # Verifier subcomponents
-
-    KaiVoh/
-      KaiVohModal.tsx
-      SigilAuthContext.tsx
-      ...               # KaiVoh emission flow
-
-    SigilExplorer.tsx    # Optional sigil viewer / explorer
-    ...                  # Other supporting components
-
-  pages/
-    SigilFeedPage.tsx    # Feed / stream route(s), if enabled
-
-  utils/
-    kai_pulse.ts         # Kairos pulse engine
-    phi-precision.ts     # μΦ locking & fixed-point helpers
-
-vite.config.ts           # Vite config for build / dev
-index.html               # Vite entry HTML
-
-
 ⸻
 
-4. Getting Started (Local Dev)
+3. Getting Started (Local Dev)
 
 Prerequisites
 	•	Node.js ≥ 18
@@ -143,7 +110,7 @@ Open that in a browser to develop against a local ΦNet / test node.
 
 ⸻
 
-5. Build & Deploy
+4. Build & Deploy
 
 Build
 
@@ -171,7 +138,7 @@ The OS will use IKANN as the authoritative root and resolve .kai names.
 
 ⸻
 
-6. Security & Sovereignty Notes
+5. Security & Sovereignty Notes
 	•	Time: Prefer kai_pulse.ts over wall-clock time.
 	•	Type safety: No any in TypeScript; keep typings strict.
 	•	Secrets: Never commit ΦNet node keys, IKANN root material, or signing secrets.
@@ -179,7 +146,7 @@ The OS will use IKANN as the authoritative root and resolve .kai names.
 
 ⸻
 
-7. Contributing
+6. Contributing
 
 This repo powers a live sovereign monetary and identity gate.
 For now, contributions are by invitation only.
@@ -196,7 +163,7 @@ If you see bugs, UX improvements, or performance wins:
 
 ⸻
 
-8. License
+7. License
 
 Copyright © Kai Rex Klok (BJ Klock). All rights reserved.
 
@@ -206,3 +173,37 @@ You may not:
 	•	present any fork as “verify.kai” or as the canonical ΦNet Sovereign Gate.
 
 For partnership or licensing, reach out through KaiOS / Kai-Klok channels.
+
+
+## 8. Project Structure (high-level)
+
+```text
+src/
+  App.tsx               # Route shell + Sovereign Gate layout
+  App.css               # ΦNet console shell styles
+
+  components/
+    VerifierStamper/
+      VerifierStamper.tsx
+      VerifierStamper.css
+      SendPhiAmountField.tsx
+      ...               # Verifier subcomponents
+
+    KaiVoh/
+      KaiVohModal.tsx
+      SigilAuthContext.tsx
+      ...               # KaiVoh emission flow
+
+    SigilExplorer.tsx    # Optional sigil viewer / explorer
+    ...                  # Other supporting components
+
+  pages/
+    SigilFeedPage.tsx    # Feed / stream route(s), if enabled
+
+  utils/
+    kai_pulse.ts         # Kairos pulse engine
+    phi-precision.ts     # μΦ locking & fixed-point helpers
+
+vite.config.ts           # Vite config for build / dev
+index.html               # Vite entry HTML
+
