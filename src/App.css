@@ -13,6 +13,10 @@
    - Less vertical gap between Atrium price chart (workspace-topbar) and Atrium body.
    - Reduced shell padding + row gaps (especially on short-height devices / landscape).
    - Fixed safe-area padding for bottom dock/footer so PhiKey/PhiStream never clip.
+
+   ✅ NEW (this update):
+   - MOBILE NAV TILES: show 2 cards at a time, horizontal swipe to access remaining tiles.
+     (Verifier / Mint / KaiVoh / ΦStream)
 */
 
 /* ────────────────────────────────────────────────────────────────
@@ -707,48 +711,13 @@ a:hover {
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55),
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   overflow: visible;
-  position: relative; 
-
-  /* ✅ tighter */
+  position: relative;
   padding: 0.68rem 0.75rem 0.75rem;
 }
 
 .workspace-topbar > * {
   width: 100%;
   min-width: 0;
-}
-/* Explorer full-screen portal (must be above EVERYTHING) */
-.explorer-pop{
-  position: fixed;
-  inset: 0;
-  z-index: 999999;
-  display: grid;
-  place-items: center;
-  padding: 18px;
-  background: rgba(0,0,0,0.62);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-.explorer-pop__panel{
-  width: min(1100px, calc(100vw - 24px));
-  height: min(860px, calc(100vh - 24px));
-  display: grid;
-  grid-template-rows: auto 1fr;
-  border-radius: 22px;
-  overflow: hidden;
-  box-shadow: 0 30px 90px rgba(0,0,0,0.55);
-  border: 1px solid rgba(51,246,255,0.22);
-  background: linear-gradient(180deg, rgba(10,16,36,0.92), rgba(3,6,16,0.94));
-}
-
-.explorer-pop__body{
-  min-height: 0;
-  overflow: hidden; /* SigilExplorer manages its own scroll */
-}
-
-.explorer-pop__close{
-  cursor: pointer;
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -774,7 +743,7 @@ a:hover {
 }
 
 .nav-head {
-  padding: 0.95rem 1.0rem 0.78rem; /* ✅ tighter */
+  padding: 0.95rem 1rem 0.78rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   background: radial-gradient(
       circle at 20% 0%,
@@ -799,15 +768,15 @@ a:hover {
 }
 
 .nav-list {
-  padding: 0.7rem; /* ✅ tighter */
+  padding: 0.7rem;
   display: grid;
-  gap: 0.5rem; /* ✅ tighter */
-  overflow: hidden; /* ✅ no scrolling in nav rail */
+  gap: 0.5rem;
+  overflow: hidden; /* ✅ no scrolling in nav rail on desktop */
 }
 
 .nav-item {
   border-radius: 16px;
-  padding: 0.78rem 0.8rem; /* ✅ tighter */
+  padding: 0.78rem 0.8rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: radial-gradient(
       circle at 14% 20%,
@@ -868,7 +837,7 @@ a:hover {
 
 .nav-foot {
   margin-top: auto;
-  padding: 0.8rem 1rem 0.9rem; /* ✅ tighter */
+  padding: 0.8rem 1rem 0.9rem;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   background: linear-gradient(
     180deg,
@@ -915,7 +884,7 @@ a:hover {
 }
 
 .panel-head {
-  padding: 0.95rem 1.1rem; /* ✅ tighter */
+  padding: 0.95rem 1.1rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   background: radial-gradient(
       circle at 50% 0%,
@@ -932,10 +901,10 @@ a:hover {
 }
 
 .panel-head__meta {
-  margin-top: 0.48rem; /* ✅ tighter */
+  margin-top: 0.48rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.42rem; /* ✅ tighter */
+  gap: 0.42rem;
 }
 
 .meta-chip {
@@ -952,40 +921,20 @@ a:hover {
   text-transform: uppercase;
 }
 
-/* ✅ PANEL BODY:
-   - Always scrollable if needed
-   - No document scroll; only this region scrolls
-   - ✅ Always has safe-area bottom padding so the last CTAs stay clickable
-*/
+/* ✅ PANEL BODY */
 .panel-body {
   flex: 1 1 auto;
   min-height: 0;
-
-  /* ✅ tighter + safe */
   padding: 0.92rem 1.1rem calc(1.05rem + var(--safe-bottom));
-
-  /* ✅ the guarantee */
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-
-  /* prevent scroll chaining + rubberband pulling the whole app */
   overscroll-behavior: contain;
-
-  /* make scrolling feel stable */
   scroll-padding-bottom: calc(1.05rem + var(--safe-bottom));
-
-  /* (optional) keep layout stable when scrollbar appears */
   scrollbar-gutter: stable both-edges;
-
-  /* ✅ enables pseudo “reserve space” without affecting layout */
   position: relative;
 }
 
-/* ✅ EXTRA SCROLL REACH ONLY WHEN PANEL IS IN SCROLL MODE
-   AppChrome sets data-panel-scroll on .app-shell.
-   This creates “breathing room” so bottom CTA rows (PhiKey / PhiStream) can be
-   scrolled fully above browser UI and remain CLICKABLE. */
 .app-shell[data-panel-scroll="1"] .panel-body::after {
   content: "";
   display: block;
@@ -993,19 +942,16 @@ a:hover {
   width: 100%;
 }
 
-/* Keep "locked" semantics */
 .panel-body--locked {
   overscroll-behavior: contain;
 }
 
-/* Compatibility: if JS toggles this class, it still works */
 .panel-body--scroll {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
 }
 
-/* ✅ CENTERING THAT DOES NOT BREAK SCROLL */
 .panel-center {
   width: 100%;
   min-width: 0;
@@ -1013,21 +959,15 @@ a:hover {
   display: flex;
 }
 
-/* The Outlet root */
 .panel-center > * {
   width: 100%;
-  max-width: 920px; /* centered sweet spot */
+  max-width: 920px;
   min-width: 0;
-
-  /* ✅ the magic */
   margin: auto;
-
-  /* IMPORTANT: do NOT clamp height; let it grow so panel-body can scroll */
   max-height: none;
   min-height: 0;
 }
 
-/* Optional nicer scrollbars (non-invasive) */
 .panel-body {
   scrollbar-width: thin;
   scrollbar-color: rgba(170, 241, 255, 0.18) transparent;
@@ -1048,11 +988,10 @@ a:hover {
   background: rgba(170, 241, 255, 0.28);
 }
 
-/* Footer (dock) — ALWAYS VISIBLE, SAFE-AREA SAFE
-   ✅ Fix: safe-bottom must pad the BOTTOM, not the top, or iOS home bar clips it. */
+/* Footer (dock) — ALWAYS VISIBLE, SAFE-AREA SAFE */
 .panel-foot {
   flex: 0 0 auto;
-  padding: 0.72rem 1.1rem calc(0.72rem + var(--safe-bottom)); /* ✅ never clipped */
+  padding: 0.72rem 1.1rem calc(0.72rem + var(--safe-bottom));
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   align-items: center;
@@ -1064,8 +1003,6 @@ a:hover {
   );
   color: rgba(245, 247, 255, 0.62);
   font-size: 0.78rem;
-
-  /* keep the dock above any inner content glow */
   position: relative;
   z-index: 4;
 }
@@ -1155,7 +1092,7 @@ a:hover {
 
 @media (max-width: 980px) {
   :root {
-    --workspace-gap: 0.78rem; /* ✅ tighter on mobile stack */
+    --workspace-gap: 0.78rem;
   }
 
   .app-stage {
@@ -1185,16 +1122,73 @@ a:hover {
     height: auto;
   }
 
+  /* ✅ MOBILE NAV TILES — 2 visible, horizontal swipe for the rest */
   .nav-list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* switch from grid to horizontal rail */
+    display: flex;
+    flex-wrap: nowrap;
     gap: 0.5rem;
-    overflow: visible;
+
     padding: 0.7rem;
     padding-bottom: calc(0.85rem + var(--safe-bottom));
+
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+
+    /* “official” feel: snap like a vault carousel */
+    scroll-snap-type: x mandatory;
+    scroll-padding-left: 0.7rem;
+    scroll-padding-right: 0.7rem;
+
+    /* no ugly bars (still scrollable) */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* old Edge */
+    position: relative;
+    isolation: isolate;
+    touch-action: pan-x;
+  }
+
+  .nav-list::-webkit-scrollbar {
+    height: 0px; /* WebKit hide */
+  }
+
+  /* edge fades to imply scroll */
+  .nav-list::before,
+  .nav-list::after {
+    content: "";
+    position: absolute;
+    top: 0.55rem;
+    bottom: 0.55rem;
+    width: 22px;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .nav-list::before {
+    left: 0;
+    background: linear-gradient(
+      to right,
+      rgba(6, 14, 35, 0.92),
+      rgba(6, 14, 35, 0)
+    );
+  }
+  .nav-list::after {
+    right: 0;
+    background: linear-gradient(
+      to left,
+      rgba(6, 14, 35, 0.92),
+      rgba(6, 14, 35, 0)
+    );
   }
 
   .nav-item {
+    /* exactly 2 tiles in view (gap accounted) */
+    flex: 0 0 calc((100% - 0.5rem) / 2);
+    min-width: 0;
+
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
     white-space: normal;
   }
 
@@ -1203,14 +1197,14 @@ a:hover {
   }
 
   .workspace-topbar {
-    padding: 0.62rem 0.65rem 0.68rem; /* ✅ tighter */
+    padding: 0.62rem 0.65rem 0.68rem;
   }
 }
 
 @media (max-width: 650px) {
   :root {
     --topbar-h: 72px;
-    --bottom-actions-reserve: 112px; /* a hair more reach on tiny devices */
+    --bottom-actions-reserve: 112px;
     --workspace-gap: 0.72rem;
   }
 
@@ -1227,7 +1221,6 @@ a:hover {
     display: none;
   }
 
-  /* ✅ squeeze chrome slightly so the centered verifier has max room */
   .panel-head {
     padding: 0.82rem 0.95rem;
   }
@@ -1255,8 +1248,7 @@ a:hover {
   }
 }
 
-/* ✅ HEIGHT-BASED SAFETY: short screens / landscape phones
-   Goal: prevent bottom dock (PhiKey/PhiStream) from ever being clipped. */
+/* ✅ HEIGHT-BASED SAFETY: short screens / landscape phones */
 @media (max-height: 820px) {
   :root {
     --workspace-gap: 0.7rem;
@@ -1273,7 +1265,7 @@ a:hover {
   }
 
   .nav-head__sub {
-    display: none; /* reclaim vertical space */
+    display: none;
   }
 }
 
@@ -1294,7 +1286,7 @@ a:hover {
   }
 
   .nav-foot {
-    display: none; /* ✅ hard reclaim: keep panel dock visible */
+    display: none;
   }
 
   .nav-list {
@@ -1317,6 +1309,7 @@ a:hover {
     padding: 0.55rem 0.9rem calc(0.55rem + var(--safe-bottom));
   }
 }
+
 /* ────────────────────────────────────────────────────────────────
    Explorer full-screen portal (PhiStream / ExplorerRoute)
    - NO header text (content is full-bleed)
@@ -1333,24 +1326,27 @@ a:hover {
   display: grid;
   place-items: center;
 
-  /* Safe padding (including iOS notch areas) */
   padding: max(16px, env(safe-area-inset-top, 0px))
     max(16px, env(safe-area-inset-right, 0px))
     max(16px, env(safe-area-inset-bottom, 0px))
     max(16px, env(safe-area-inset-left, 0px));
 
-  background:
-    radial-gradient(1200px 900px at 18% 10%, rgba(51, 246, 255, 0.12), rgba(0, 0, 0, 0) 55%),
-    radial-gradient(1000px 800px at 85% 95%, rgba(155, 91, 255, 0.12), rgba(0, 0, 0, 0) 60%),
+  background: radial-gradient(
+      1200px 900px at 18% 10%,
+      rgba(51, 246, 255, 0.12),
+      rgba(0, 0, 0, 0) 55%
+    ),
+    radial-gradient(
+      1000px 800px at 85% 95%,
+      rgba(155, 91, 255, 0.12),
+      rgba(0, 0, 0, 0) 60%
+    ),
     rgba(0, 0, 0, 0.62);
 
   backdrop-filter: blur(14px) saturate(130%);
   -webkit-backdrop-filter: blur(14px) saturate(130%);
 
-  /* Prevent scroll chaining */
   overscroll-behavior: contain;
-
-  /* Soft “film grain” without images */
   isolation: isolate;
 }
 
@@ -1372,13 +1368,19 @@ a:hover {
 
   border: 1px solid rgba(51, 246, 255, 0.22);
 
-  background:
-    radial-gradient(900px 420px at 18% 0%, rgba(51, 246, 255, 0.10), rgba(0, 0, 0, 0) 60%),
-    radial-gradient(820px 520px at 92% 110%, rgba(155, 91, 255, 0.14), rgba(0, 0, 0, 0) 62%),
+  background: radial-gradient(
+      900px 420px at 18% 0%,
+      rgba(51, 246, 255, 0.1),
+      rgba(0, 0, 0, 0) 60%
+    ),
+    radial-gradient(
+      820px 520px at 92% 110%,
+      rgba(155, 91, 255, 0.14),
+      rgba(0, 0, 0, 0) 62%
+    ),
     linear-gradient(180deg, rgba(10, 16, 36, 0.94), rgba(3, 6, 16, 0.96));
 
-  box-shadow:
-    0 30px 90px rgba(0, 0, 0, 0.58),
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58),
     0 0 0 1px rgba(255, 255, 255, 0.06) inset,
     0 0 70px rgba(51, 246, 255, 0.12);
 
@@ -1386,18 +1388,17 @@ a:hover {
   -webkit-backdrop-filter: blur(18px) saturate(150%);
 
   display: grid;
-  grid-template-rows: 1fr; /* full-bleed body only */
+  grid-template-rows: 1fr;
   min-height: 0;
 }
 
-/* Inner “vault edge” + shimmer */
 .explorer-pop__panel::before {
   content: "";
   position: absolute;
   inset: 1px;
   border-radius: 21px;
   pointer-events: none;
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   opacity: 0.75;
 }
 
@@ -1435,23 +1436,17 @@ a:hover {
   }
 }
 
-/* Body (SigilExplorer owns scroll internally) */
 .explorer-pop__body {
   position: relative;
   min-height: 0;
   overflow: hidden;
 }
 
-/* ────────────────────────────────────────────────────────────────
-   Close “X” — Vault control (sleek, touch-safe, focus-safe)
-──────────────────────────────────────────────────────────────── */
-
 .explorer-pop__close {
   position: absolute;
   top: 14px;
   right: 14px;
 
-  /* Touch target */
   width: 44px;
   height: 44px;
   border-radius: 999px;
@@ -1463,28 +1458,30 @@ a:hover {
   user-select: none;
 
   border: 1px solid rgba(170, 241, 255, 0.22);
-  background:
-    radial-gradient(18px 18px at 30% 25%, rgba(255, 255, 255, 0.16), transparent 60%),
-    radial-gradient(26px 26px at 80% 80%, rgba(51, 246, 255, 0.12), transparent 62%),
+  background: radial-gradient(
+      18px 18px at 30% 25%,
+      rgba(255, 255, 255, 0.16),
+      transparent 60%
+    ),
+    radial-gradient(
+      26px 26px at 80% 80%,
+      rgba(51, 246, 255, 0.12),
+      transparent 62%
+    ),
     linear-gradient(180deg, rgba(10, 20, 48, 0.78), rgba(3, 6, 16, 0.82));
 
-  box-shadow:
-    0 16px 36px rgba(0, 0, 0, 0.55),
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55),
     0 0 0 1px rgba(255, 255, 255, 0.06) inset,
-    0 0 26px rgba(51, 246, 255, 0.10);
+    0 0 26px rgba(51, 246, 255, 0.1);
 
   backdrop-filter: blur(14px) saturate(160%);
   -webkit-backdrop-filter: blur(14px) saturate(160%);
 
-  /* Keep above Explorer content */
   z-index: 20;
 
-  transition:
-    transform var(--transition-fast),
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast),
-    background var(--transition-fast),
-    filter var(--transition-fast);
+  transition: transform var(--transition-fast),
+    border-color var(--transition-fast), box-shadow var(--transition-fast),
+    background var(--transition-fast), filter var(--transition-fast);
 }
 
 .explorer-pop__close span {
@@ -1494,13 +1491,12 @@ a:hover {
   font-size: 18px;
   letter-spacing: 0.02em;
 
-  color: rgba(245, 247, 255, 0.90);
+  color: rgba(245, 247, 255, 0.9);
   text-shadow: 0 10px 24px rgba(0, 0, 0, 0.65);
 
   transform: translateY(-0.5px);
 }
 
-/* Aura ring */
 .explorer-pop__close::before {
   content: "";
   position: absolute;
@@ -1522,7 +1518,6 @@ a:hover {
   transition: opacity var(--transition-fast), filter var(--transition-fast);
 }
 
-/* Subtle inner gloss */
 .explorer-pop__close::after {
   content: "";
   position: absolute;
@@ -1541,13 +1536,11 @@ a:hover {
   mix-blend-mode: soft-light;
 }
 
-/* Hover / active */
 .explorer-pop__close:hover {
   transform: translateY(-1px);
   border-color: rgba(51, 246, 255, 0.34);
-  box-shadow:
-    0 20px 44px rgba(0, 0, 0, 0.62),
-    0 0 0 1px rgba(51, 246, 255, 0.10) inset,
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.62),
+    0 0 0 1px rgba(51, 246, 255, 0.1) inset,
     0 0 40px rgba(51, 246, 255, 0.16);
   filter: brightness(1.08);
 }
@@ -1562,16 +1555,12 @@ a:hover {
   filter: brightness(1.02);
 }
 
-/* Keyboard focus */
 .explorer-pop__close:focus-visible {
   outline: none;
-  box-shadow:
-    var(--ring),
-    0 18px 44px rgba(0, 0, 0, 0.62),
+  box-shadow: var(--ring), 0 18px 44px rgba(0, 0, 0, 0.62),
     0 0 40px rgba(51, 246, 255, 0.16);
 }
 
-/* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .explorer-pop__panel::after {
     animation: none !important;
@@ -1584,7 +1573,6 @@ a:hover {
   }
 }
 
-/* Tiny screens: keep close control reachable and consistent */
 @media (max-width: 520px) {
   .explorer-pop__close {
     top: 12px;
@@ -1594,7 +1582,6 @@ a:hover {
   }
 }
 
-/* Short height / landscape: shrink padding, maximize panel */
 @media (max-height: 680px) {
   .explorer-pop {
     padding: max(10px, env(safe-area-inset-top, 0px))
@@ -1609,9 +1596,6 @@ a:hover {
 
 /* ────────────────────────────────────────────────────────────────
    12) FULL-PAGE routes (SigilPage + SigilFeedPage): scrollable
-   - Home (inside AppChrome) stays app-locked, panel scrolls internally.
-   - For FULL-PAGE pages, wrap your page root with class="fullpage-scroll".
-   ✅ Also safe-area padded so bottom buttons (PhiKey / PhiStream CTAs) are clickable.
    ─────────────────────────────────────────────────────────────── */
 
 .fullpage-scroll {
@@ -1619,8 +1603,6 @@ a:hover {
   left: 0;
   top: 0;
   width: 100%;
-
-  /* Same visible-viewport protection when possible */
   height: 100dvh;
   max-height: 100dvh;
 
@@ -1629,11 +1611,8 @@ a:hover {
   overscroll-behavior: contain;
   touch-action: pan-y;
 
-  /* ✅ safe bottom padding so last CTAs never sit under iOS home bar */
   padding: clamp(1rem, 2.6vw, 2rem);
   padding-bottom: calc(clamp(1rem, 2.6vw, 2rem) + var(--safe-bottom));
-
-  /* ✅ helps scroll-to-bottom keep CTAs in view */
   scroll-padding-bottom: calc(clamp(1rem, 2.6vw, 2rem) + var(--safe-bottom));
 
   background: radial-gradient(
@@ -1650,7 +1629,6 @@ a:hover {
   color: var(--text-main);
 }
 
-/* If dvh unsupported, fall back */
 @supports not (height: 100dvh) {
   .fullpage-scroll {
     height: 100vh;

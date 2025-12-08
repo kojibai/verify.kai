@@ -1,11 +1,12 @@
 /* ────────────────────────────────────────────────────────────────
    SigilModal.tsx · Atlantean Lumitech “Kairos Sigil Viewer”
-   v22.8 — FULL REFACTOR FIX (scheduler + datetime-local)
-   • FIX: deterministic datetime-local parsing (no browser Date parsing quirks)
-   • FIX: no timezone double-adjust + no timezone-less ISO roundtrip
-   • FIX: live scheduler ticks on exact φ-boundaries (uses boundary timestamp)
-   • FIX: strict TS timer handles (window.setTimeout/clearTimeout), no NodeJS.Timeout
-   • FIX: NO stray type re-declare / NO stray timeoutRef writes outside hooks
+   v22.9 — MINT BUTTON ONLY (remove verifier + stargate row)
+   • Keeps: deterministic datetime-local parsing (no browser Date quirks)
+   • Keeps: no timezone double-adjust + no timezone-less ISO roundtrip
+   • Keeps: live scheduler ticks on exact φ-boundaries (uses boundary timestamp)
+   • Keeps: strict TS timer handles (window.setTimeout/clearTimeout), no NodeJS.Timeout
+   • Change: REMOVE 3-button FAB dock, Verifier overlay, Stargate link
+   • Change: ONE obvious action button: “MINT MOMENT” (opens SealMomentModal)
 ────────────────────────────────────────────────────────────────── */
 
 import {
@@ -28,16 +29,18 @@ import KaiSigil, {
   type KaiSigilHandle,
 } from "./KaiSigil";
 
-import VerifierStamper from "./VerifierStamper/VerifierStamper";
 import SealMomentModal from "./SealMomentModal";
 import { makeSigilUrl, type SigilSharePayload } from "../utils/sigilUrl";
 import "./SigilModal.css";
 
 /* ────────────────────────────────────────────────────────────────
-   Strict browser timer handle types (fixes NodeJS.Timeout mismatch)
+   Strict browser timer handle types (FIX)
+   IMPORTANT: Do NOT use ReturnType<typeof setTimeout> here — setTimeout is
+   overloaded when Node typings are present, and ReturnType picks the last
+   overload (often `Timeout`) while window.setTimeout returns `number`.
 ────────────────────────────────────────────────────────────────── */
-type TimeoutHandle = ReturnType<typeof window.setTimeout>; // number
-type IntervalHandle = ReturnType<typeof window.setInterval>; // number
+type TimeoutHandle = number; // window.setTimeout(...) -> number (browser)
+type IntervalHandle = number; // window.setInterval(...) -> number (browser)
 
 /* html2canvas typing compatibility (no `any`, extra-props allowed) */
 type H2COptions = NonNullable<Parameters<typeof html2canvas>[1]>;
@@ -301,6 +304,27 @@ const CloseIcon: FC = () => (
       stroke="currentColor"
       strokeWidth="1.2"
       opacity=".25"
+    />
+  </svg>
+);
+
+const MintIcon: FC = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    <path
+      d="M12 6v6l3.5 3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M8.2 15.8l2.1-2.1"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
     />
   </svg>
 );
@@ -691,8 +715,8 @@ const getArkColor = (label?: string): string => {
   return ARK_COLORS[key] ?? ARK_COLORS[normalized] ?? "#ffd600";
 };
 
-/* ═════════════ sticky FAB dock styles ═════════════ */
-const FabDockStyles = () => (
+/* ═════════════ sticky MINT dock styles ═════════════ */
+const MintDockStyles = () => (
   <style>{`
     .sigil-modal { position: relative; isolation: isolate; }
 
@@ -703,75 +727,112 @@ const FabDockStyles = () => (
     }
     .sigil-modal .close-btn svg { pointer-events: none; }
 
-    .modal-bottom-spacer { height: clamp(86px, 13vh, 120px); }
+    .modal-bottom-spacer { height: clamp(96px, 14vh, 140px); }
 
-    .fab-dock {
-      position: sticky;
-      bottom: max(10px, env(safe-area-inset-bottom));
-      display: flex;
-      justify-content: center;
-      align-items: center;
+.mint-dock{
+  position: sticky;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  z-index: 6;
+
+  /* 🔒 NOT a bar */
+  display: grid;          /* centers child without creating a row bar */
+  place-items: center;
+  width: fit-content;     /* shrink-wrap to the button */
+  max-width: 100%;
+  margin: 0 auto;         /* center the shrink-wrapped dock */
+  padding: 0;             /* remove bar padding */
+  background: transparent;/* no bar surface */
+  border: 0;
+  box-shadow: none;
+
+  contain: layout paint style;
+  -webkit-transform: translateZ(0);
+          transform: translateZ(0);
+}
+
+/* hard stop: prevent child from stretching wide */
+.mint-dock > *{
+  width: auto;
+  max-width: 100%;
+  flex: 0 0 auto;
+}
+
+/* if your button is an <a> or <button> and inherits block styles elsewhere */
+.mint-dock button,
+.mint-dock a{
+  display: inline-flex;
+}
+
+
+    .mint-btn {
+      width: min(520px, calc(100% - 2px));
+      display: grid;
+      grid-template-columns: 54px 1fr;
       gap: 12px;
-      padding: 0 12px;
-      pointer-events: none;
-      z-index: 6;
-      contain: layout paint style;
-      -webkit-transform: translateZ(0);
-              transform: translateZ(0);
-      flex-wrap: wrap;
-    }
-    .fab-dock > * { pointer-events: auto; }
-
-    .fab-dock[data-blocked="true"] { pointer-events: none; }
-    .fab-dock[data-blocked="true"] > * { pointer-events: none; }
-
-    .fab, .verifier-fab {
-      position: relative;
-      display: inline-flex;
       align-items: center;
-      justify-content: center;
-      width: clamp(52px, 8.5vw, 68px);
-      height: clamp(52px, 8.5vw, 68px);
-      border-radius: 999px;
+
       border: 0;
       cursor: pointer;
       color: inherit;
+      padding: 12px 14px;
+      border-radius: 18px;
+
       background:
-        radial-gradient(140% 140% at 50% 0%, rgba(255,255,255,.14), rgba(255,255,255,.06)),
-        linear-gradient(180deg, rgba(255,255,255,.15), rgba(255,255,255,.05));
-      backdrop-filter: blur(8px) saturate(120%);
-      -webkit-backdrop-filter: blur(8px) saturate(120%);
+        radial-gradient(900px 220px at 30% 0%, rgba(255,230,150,.18), rgba(0,0,0,0) 60%),
+        radial-gradient(900px 280px at 80% 10%, rgba(120,220,255,.16), rgba(0,0,0,0) 55%),
+        linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.06));
+      backdrop-filter: blur(10px) saturate(140%);
+      -webkit-backdrop-filter: blur(10px) saturate(140%);
+
       box-shadow:
-        0 8px 28px rgba(0,0,0,.35),
-        inset 0 0 0 1px rgba(255,255,255,.25),
-        0 0 40px rgba(255, 215, 120, .08);
-      transition: transform .2s ease, box-shadow .2s ease, filter .2s ease, opacity .2s ease;
+        0 10px 34px rgba(0,0,0,.45),
+        inset 0 0 0 1px rgba(255,255,255,.22),
+        0 0 44px rgba(255, 215, 120, .12);
+
+      transition: transform .18s ease, box-shadow .18s ease, filter .18s ease, opacity .18s ease;
       will-change: transform;
       touch-action: manipulation;
     }
-    .fab::before, .verifier-fab::before {
+
+    .mint-btn::before {
       content: "";
-      position: absolute; inset: -8px;
-      border-radius: inherit;
-      background: radial-gradient(120% 120% at 50% 20%, rgba(255,230,150,.35), rgba(255,255,255,0));
-      filter: blur(12px);
+      position: absolute;
+      inset: -1px;
+      border-radius: 19px;
+      background:
+        linear-gradient(90deg,
+          rgba(255,215,140,.0),
+          rgba(255,215,140,.55),
+          rgba(120,220,255,.35),
+          rgba(155, 91, 255, .35),
+          rgba(255,215,140,.0)
+        );
+      filter: blur(10px);
       opacity: .55;
-      transition: opacity .2s ease;
       pointer-events: none;
     }
-    .fab:hover, .verifier-fab:hover { transform: translateY(-2px) scale(1.02); }
-    .fab:active, .verifier-fab:active { transform: translateY(0) scale(.98); }
-    .fab:hover::before, .verifier-fab:hover::before { opacity: .85; }
 
-    .fab[data-active="true"], .verifier-fab[data-active="true"] {
+    .mint-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 44px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.28), 0 0 60px rgba(255, 215, 120, .16); }
+    .mint-btn:active { transform: translateY(0px) scale(.99); }
+
+    .mint-btn__icon {
+      width: 54px;
+      height: 54px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+
+      background:
+        radial-gradient(120% 120% at 50% 0%, rgba(255,255,255,.16), rgba(255,255,255,.06)),
+        linear-gradient(180deg, rgba(12, 20, 48, .62), rgba(3, 6, 16, .72));
       box-shadow:
-        0 0 0 2px rgba(255,255,255,.55),
-        0 10px 34px rgba(0,0,0,.45),
-        0 0 44px rgba(255, 215, 120, .18);
+        inset 0 0 0 1px rgba(255,255,255,.22),
+        0 10px 26px rgba(0,0,0,.35);
     }
 
-    .fab img, .fab svg,
-    .verifier-fab img, .verifier-fab svg {
+    .mint-btn__icon img,
+    .mint-btn__icon svg {
       width: 56%;
       height: 56%;
       display: block;
@@ -779,13 +840,28 @@ const FabDockStyles = () => (
       -webkit-user-drag: none;
     }
 
-    .fab--seal::before { background: radial-gradient(120% 120% at 50% 20%, rgba(255,210,160,.40), rgba(255,255,255,0)); }
-    .fab--gate::before { background: radial-gradient(120% 120% at 50% 20%, rgba(160,220,255,.35), rgba(255,255,255,0)); }
+    .mint-btn__text { text-align: left; line-height: 1.1; }
+    .mint-btn__title {
+      font-weight: 800;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      font-size: 13px;
+      opacity: .98;
+    }
+    .mint-btn__sub {
+      margin-top: 4px;
+      font-size: 12px;
+      opacity: .78;
+    }
 
-    @media (pointer: coarse) { .fab, .verifier-fab { width: 68px; height: 68px; } }
+    @media (pointer: coarse) {
+      .mint-btn { padding: 14px 14px; }
+      .mint-btn__icon { width: 58px; height: 58px; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
-      .fab, .verifier-fab { transition: none; }
-      .fab::before, .verifier-fab::before { transition: none; }
+      .mint-btn { transition: none; }
+      .mint-btn:hover { transform: none; }
     }
   `}</style>
 );
@@ -867,13 +943,8 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
   const [dateISO, setDateISO] = useState(""); // datetime-local string
   const [breathIdx, setBreathIdx] = useState(1);
 
-  /* verifier */
-  const [showVerifier, setShowVerifier] = useState(false);
-  const [verifySvgOk, setVerifySvgOk] = useState(true);
-
-  /* seal/stargate asset fallbacks */
-  const [sealSvgOk, setSealSvgOk] = useState(true);
-  const [gateSvgOk, setGateSvgOk] = useState(true);
+  /* Mint icon fallback */
+  const [mintSvgOk, setMintSvgOk] = useState(true);
 
   /* SealMomentModal */
   const [sealOpen, setSealOpen] = useState(false);
@@ -959,7 +1030,7 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
     [syncCloseBtn, syncGlobalPulseVars]
   );
 
-  /* ✅ aligned scheduler (FIXED: no stray writes, no early-boundary apply) */
+  /* ✅ aligned scheduler */
   const clearAlignedTimer = useCallback(() => {
     if (timeoutRef.current !== null) {
       window.clearTimeout(timeoutRef.current);
@@ -977,26 +1048,22 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
       const nowMs = epochNow();
       const nextBoundary = targetBoundaryRef.current;
 
-      // If we fired early (shouldn't, but happens on some platforms), just re-arm.
       if (nowMs < nextBoundary) {
         timeoutRef.current = window.setTimeout(fire, Math.max(0, nextBoundary - nowMs));
         return;
       }
 
-      // We are at/after boundary: compute the LAST boundary that occurred, apply once.
-      const missed = Math.floor((nowMs - nextBoundary) / PULSE_MS) + 1; // >=1
+      const missed = Math.floor((nowMs - nextBoundary) / PULSE_MS) + 1;
       const lastBoundary = nextBoundary + (missed - 1) * PULSE_MS;
 
       applyKaiFromDate(new Date(lastBoundary), lastBoundary);
 
-      // Advance to next boundary after the last one we applied.
       targetBoundaryRef.current = nextBoundary + missed * PULSE_MS;
 
       const delay = Math.max(0, targetBoundaryRef.current - nowMs);
       timeoutRef.current = window.setTimeout(fire, delay);
     };
 
-    // Kick state update ASAP (still via timer callback, not directly in the effect body)
     timeoutRef.current = window.setTimeout(() => {
       const nowMs = epochNow();
       applyKaiFromDate(new Date(nowMs), nowMs);
@@ -1008,7 +1075,7 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
 
   /* LIVE mode start/stop (boundaries) */
   useEffect(() => {
-    if (dateISO) return; // static mode -> no live scheduler
+    if (dateISO) return;
 
     scheduleAlignedTick();
 
@@ -1041,12 +1108,10 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
     setDateISO(val);
 
     if (!val) {
-      // back to LIVE
       setBreathIdx(1);
       return;
     }
 
-    // immediately stop live ticks (no “race”)
     clearAlignedTimer();
     applyStatic(val, breathIdx);
   };
@@ -1054,7 +1119,7 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
   const onBreathChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const idx = Number(e.target.value);
     setBreathIdx(idx);
-    if (!dateISO) return; // live mode
+    if (!dateISO) return;
     applyStatic(dateISO, idx);
   };
 
@@ -1068,7 +1133,6 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
     }
     setDateISO("");
     setBreathIdx(1);
-    // LIVE scheduler effect will restart; also apply instantly:
     const now = epochNow();
     applyKaiFromDate(new Date(now), now);
   };
@@ -1144,7 +1208,8 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
     };
   };
 
-  const openSealMoment = async () => {
+  /* ── MINT MOMENT (opens SealMomentModal) ─────────────────────── */
+  const mintMoment = async () => {
     let hash = (lastHash || "").toLowerCase();
     if (!hash) {
       const svg = getSVGElement();
@@ -1158,34 +1223,6 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
     setSealHash(hash);
     setSealUrl(url);
     setSealOpen(true);
-  };
-
-  const openStargate = async () => {
-    const w = window.open("about:blank", "_blank", "noopener,noreferrer");
-
-    let hash = (lastHash || "").toLowerCase();
-    if (!hash) {
-      const svg = getSVGElement();
-      const basis = svg
-        ? new XMLSerializer().serializeToString(svg)
-        : JSON.stringify({ pulse, beat, stepPct, chakraDay });
-      hash = (await sha256Hex(basis)).toLowerCase();
-    }
-
-    const payload = makeSharePayload(hash);
-    const url = makeSigilUrl(hash, payload);
-
-    fireAndForget(copyText(url));
-
-    if (w) {
-      try {
-        w.location.href = url;
-      } catch {
-        window.location.href = url;
-      }
-    } else {
-      window.location.href = url;
-    }
   };
 
   const saveZipBundle = async () => {
@@ -1223,7 +1260,6 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
   };
 
   const handleClose = () => {
-    setShowVerifier(false);
     onClose();
   };
 
@@ -1243,11 +1279,9 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
     ? Math.max(0, Math.min(100, (kairos.kaiPulseToday / DAY_PULSES) * 100))
     : 0;
 
-  const openVerifier = () => setShowVerifier(true);
-
   return createPortal(
     <>
-      <FabDockStyles />
+      <MintDockStyles />
 
       <div
         ref={overlayRef}
@@ -1417,131 +1451,32 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
 
           <div className="modal-bottom-spacer" aria-hidden="true" />
 
-          <div className="fab-dock" data-blocked={showVerifier ? "true" : "false"}>
+          {/* ONE ACTION ONLY: MINT MOMENT */}
+          <div className="mint-dock">
             <button
-              className="fab verifier-fab"
+              className="mint-btn"
               type="button"
-              aria-label={showVerifier ? "Verifier open" : "Open verifier"}
-              title={showVerifier ? "Verifier open" : "Open verifier"}
-              data-active={showVerifier ? "true" : "false"}
-              onClick={openVerifier}
+              aria-label="Mint this moment"
+              title="Mint this moment"
+              onClick={mintMoment}
             >
-              {verifySvgOk ? (
-                <img
-                  src="/assets/verify.svg"
-                  alt=""
-                  loading="eager"
-                  decoding="async"
-                  onError={() => setVerifySvgOk(false)}
-                />
-              ) : (
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                  <path
-                    d="M7.5 12.2l3.2 3.2 5.8-6.9"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+              <span className="mint-btn__icon" aria-hidden="true">
+                {mintSvgOk ? (
+                  <img
+                    src="/assets/seal.svg"
+                    alt=""
+                    loading="eager"
+                    decoding="async"
+                    onError={() => setMintSvgOk(false)}
                   />
-                </svg>
-              )}
-            </button>
-
-            <button
-              className="fab fab--seal"
-              type="button"
-              aria-label="Seal this moment"
-              title="Seal this moment"
-              onClick={openSealMoment}
-            >
-              {sealSvgOk ? (
-                <img
-                  src="/assets/seal.svg"
-                  alt=""
-                  loading="eager"
-                  decoding="async"
-                  onError={() => setSealSvgOk(false)}
-                />
-              ) : (
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-                  <path
-                    d="M12 6v6l3.5 3.5"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M8.2 15.8l2.1-2.1"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              )}
-            </button>
-
-            <button
-              className="fab fab--gate"
-              type="button"
-              aria-label="Stargate (open share link)"
-              title="Stargate"
-              onClick={openStargate}
-            >
-              {gateSvgOk ? (
-                <img
-                  src="/assets/stargate.svg"
-                  alt=""
-                  loading="eager"
-                  decoding="async"
-                  onError={() => setGateSvgOk(false)}
-                />
-              ) : (
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-                  <path d="M9 12h6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                  <path d="M12 9v6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-              )}
+                ) : (
+                  <MintIcon />
+                )}
+              </span>
             </button>
           </div>
         </div>
       </div>
-
-      {showVerifier && (
-        <div
-          className="verifier-container"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Kai-Sigil Verifier"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              e.stopPropagation();
-              e.preventDefault();
-            }
-          }}
-        >
-          <div className="verifier-bg" aria-hidden="true" />
-          <button
-            className="verifier-exit"
-            aria-label="Close verifier"
-            onClick={() => setShowVerifier(false)}
-          >
-            ✕
-          </button>
-          <div className="container-shell" onClick={(e) => e.stopPropagation()}>
-            <VerifierStamper />
-          </div>
-        </div>
-      )}
 
       <SealMomentModal
         open={sealOpen}

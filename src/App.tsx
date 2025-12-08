@@ -420,6 +420,32 @@ function AppChrome(): React.JSX.Element {
     };
   }, [panelShouldScroll]);
 
+  /* ✅ Mobile nav: keep ACTIVE item in view when the rail is horizontally scrollable */
+  const navListRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const list = navListRef.current;
+    if (!list) return;
+
+    // only do this when the mobile layout is active
+    if (!window.matchMedia("(max-width: 980px)").matches) return;
+
+    const active = list.querySelector<HTMLElement>(".nav-item--active");
+    if (!active) return;
+
+    window.requestAnimationFrame(() => {
+      try {
+        active.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "center",
+        });
+      } catch {
+        active.scrollIntoView();
+      }
+    });
+  }, [location.pathname]);
+
   return (
     <div
       className="app-shell"
@@ -491,7 +517,11 @@ function AppChrome(): React.JSX.Element {
                       borderRadius: "inherit",
                     }}
                   >
-                    <HomePriceChartCard apiBase="https://pay.kaiklok.com" ctaAmountUsd={144} chartHeight={chartHeight} />
+                    <HomePriceChartCard
+                      apiBase="https://pay.kaiklok.com"
+                      ctaAmountUsd={144}
+                      chartHeight={chartHeight}
+                    />
                   </div>
                 </div>
               )}
@@ -502,7 +532,7 @@ function AppChrome(): React.JSX.Element {
                   <div className="nav-head__sub">Breath-Sealed Identity · Kairos-ZK Proof</div>
                 </div>
 
-                <div className="nav-list" role="list">
+                <div ref={navListRef} className="nav-list" role="list" aria-label="Atrium navigation tiles">
                   {navItems.map((item) => (
                     <NavLink
                       key={item.to}
