@@ -270,10 +270,10 @@ canvas {
 .toolbar-actions {
   display: flex;
   align-items: center;
-  gap: clamp(8px, 1.2vw, 14px);
+  gap: clamp(6px, 1vw, 10px);
   flex-wrap: wrap;
 
-  padding: 6px;
+  padding: 4px;                 /* ✅ slimmer */
   border-radius: var(--pill);
 
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03)),
@@ -286,16 +286,26 @@ canvas {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
+
 .toolbar-actions > * {
   white-space: nowrap;
-  height: 38px;
+  height: 34px;                 /* ✅ slimmer */
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;                     /* ✅ tighter */
   border-radius: 999px;
   box-shadow: none;
   max-width: 100%;
 }
+
+/* ✅ Slim padding + type ONLY inside toolbar (does not touch footer CTAs) */
+.toolbar-actions button,
+.toolbar-actions a {
+  padding: 7px 10px;            /* ✅ slimmer */
+  font-size: 0.78rem;           /* ✅ slightly smaller */
+  line-height: 1;
+}
+
 
 /* ───────────────────────────────────────────────────────────────
    4) Buttons
