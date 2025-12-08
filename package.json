@@ -12,6 +12,8 @@
   "dependencies": {
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.4.0",
+    "@stripe/react-stripe-js": "^5.4.1",
+    "@stripe/stripe-js": "^8.5.3",
     "blakejs": "^1.2.1",
     "buffer": "^6.0.3",
     "decimal.js": "^10.6.0",

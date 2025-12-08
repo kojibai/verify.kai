@@ -64,7 +64,6 @@ import StatusChips from "../verifier/ui/StatusChips";
 
 /* Existing flows kept */
 import SealMomentModal from "../SealMomentModalTransfer";
-import SigilExplorer from "../SigilExplorer";
 import ValuationModal from "../ValuationModal";
 import {
   buildValueSeal,
@@ -317,7 +316,6 @@ const VerifierStamperInner: React.FC = () => {
   const svgInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const dlgRef = useRef<HTMLDialogElement>(null);
-  const explorerDlgRef = useRef<HTMLDialogElement>(null);
   const noteDlgRef = useRef<HTMLDialogElement>(null);
 
   const [pulseNow, setPulseNow] = useState<number>(kaiPulseNow());
@@ -355,7 +353,6 @@ const VerifierStamperInner: React.FC = () => {
   const [sealOpen, setSealOpen] = useState<boolean>(false);
   const [sealUrl, setSealUrl] = useState<string>("");
   const [sealHash, setSealHash] = useState<string>("");
-  const [explorerOpen, setExplorerOpen] = useState<boolean>(false);
   const [valuationOpen, setValuationOpen] = useState<boolean>(false);
   const [noteOpen, setNoteOpen] = useState<boolean>(false);
   const [sigilSvgRaw, setSigilSvgRaw] = useState<string | null>(null);
@@ -418,16 +415,6 @@ const VerifierStamperInner: React.FC = () => {
 
     dlgRef.current?.close();
     dlgRef.current?.setAttribute("data-open", "false");
-  };
-
-  const openExplorer = () => {
-    safeShowDialog(explorerDlgRef.current);
-    setExplorerOpen(true);
-  };
-  const closeExplorer = () => {
-    explorerDlgRef.current?.close();
-    explorerDlgRef.current?.setAttribute("data-open", "false");
-    setExplorerOpen(false);
   };
 
   const noteInitial = useMemo<NoteBanknoteInputs>(
@@ -1898,15 +1885,6 @@ const VerifierStamperInner: React.FC = () => {
 
           <div className="toolbar-actions" aria-label="Verifier actions">
             <button
-              className="secondary"
-              onClick={openExplorer}
-              aria-haspopup="dialog"
-              aria-controls="explorer-dialog"
-              type="button"
-            >
-              ΦStream
-            </button>
-            <button
               className="primary"
               onClick={() => svgInput.current?.click()}
               type="button"
@@ -2524,35 +2502,6 @@ const VerifierStamperInner: React.FC = () => {
             ) : (
               <div style={{ padding: 16, color: "var(--dim)" }}>Load a sigil to print a note.</div>
             )}
-          </div>
-        </div>
-      </dialog>
-
-      {/* Explorer */}
-      <dialog
-        ref={explorerDlgRef}
-        className="explorer-dialog"
-        id="explorer-dialog"
-        aria-label="Sigil Explorer"
-        data-open={explorerOpen ? "true" : "false"}
-        style={{ width: "100vw", height: "100dvh", margin: 0, padding: 0, overflow: "hidden" }}
-      >
-        <div className="explorer-chrome" style={{ display: "flex", flexDirection: "column", height: "100%", maxWidth: "100vw" }}>
-          <div className="explorer-topbar" style={S.gridBar}>
-            <h3 className="explorer-title">ΦStream</h3>
-            <button
-              className="close-btn holo"
-              data-aurora="true"
-              aria-label="Close explorer"
-              title="Close"
-              onClick={closeExplorer}
-              style={{ justifySelf: "end", marginRight: 6 }}
-            >
-              ×
-            </button>
-          </div>
-          <div className="explorer-body" style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", overflowX: "hidden" }}>
-            <SigilExplorer />
           </div>
         </div>
       </dialog>

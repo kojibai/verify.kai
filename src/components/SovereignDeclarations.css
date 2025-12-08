@@ -1,0 +1,911 @@
+/* ───────────────────────────────────────────────────────────────
+   Sovereign Declarations — KAI VAULT POPOVER (v∞)
+   Sleek • Refined • Glossy Crystal • Audit-Grade • Breath-Alive
+
+   ✅ Drop-in replacement (same class names)
+   ✅ Kai-breath sync: 5.236s (everything inhales/exhales together)
+   ✅ Center popover vault (not bottom sheet)
+   ✅ Internal scroll, safe-area friendly, reduced-motion safe
+──────────────────────────────────────────────────────────────── */
+
+/* ───────────────────────────────────────────────────────────────
+   0) Kai Breath Tokens + Robust Fallback Palette
+──────────────────────────────────────────────────────────────── */
+
+:root {
+  --kai-breath: 5.236s;
+  --kai-breath-ease: cubic-bezier(0.37, 0, 0.63, 1); /* inhale/exhale symmetry */
+
+  /* Use your global --ink if present; otherwise fallback */
+  --kai-ink: var(--ink, #e9fbff);
+
+  /* Optional global tokens; safe fallbacks */
+  --kai-bg-0: var(--bg-0, #02030a);
+  --kai-bg-1: var(--bg-1, #03091b);
+  --kai-bg-2: var(--bg-2, #040f24);
+
+  --kai-cyan: var(--accent-cyan, #33f6ff);
+  --kai-teal: var(--accent-teal, #26ffc4);
+  --kai-violet: var(--accent-violet, #9b5bff);
+
+  --kai-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --kai-safe-top: env(safe-area-inset-top, 0px);
+}
+
+/* Helpful defaults if your app doesn’t already set them */
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  letter-spacing: 0.02em;
+}
+
+/* ───────────────────────────────────────────────────────────────
+   1) Footer Trigger (Official Summary Button)
+──────────────────────────────────────────────────────────────── */
+
+.nav-foot {
+  margin-top: 10px;
+}
+
+/* The trigger is built to WRAP cleanly on small screens (no truncation). */
+.nav-foot__toggle {
+  position: relative;
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+
+  padding: 12px 14px;
+  border-radius: 16px;
+
+  color: var(--kai-ink);
+  cursor: pointer;
+  overflow: hidden;
+  isolation: isolate;
+  transform: translateZ(0);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+
+  /* Crystal base */
+  border: 1px solid rgba(120, 220, 255, 0.22);
+  background:
+    radial-gradient(820px 210px at 24% 0%, rgba(51, 246, 255, 0.18), rgba(0, 0, 0, 0) 60%),
+    radial-gradient(760px 240px at 92% 18%, rgba(155, 91, 255, 0.10), rgba(0, 0, 0, 0) 62%),
+    linear-gradient(180deg, rgba(12, 20, 48, 0.84), rgba(3, 6, 16, 0.88));
+
+  box-shadow:
+    0 14px 46px rgba(0, 0, 0, 0.60),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 120ms ease;
+}
+
+/* Aurora halo behind trigger (breath + spin) */
+.nav-foot__toggle::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 18px;
+
+  background: conic-gradient(
+    from 180deg,
+    rgba(51, 246, 255, 0.00),
+    rgba(51, 246, 255, 0.26),
+    rgba(38, 255, 196, 0.16),
+    rgba(155, 91, 255, 0.22),
+    rgba(51, 246, 255, 0.00)
+  );
+
+  filter: blur(14px);
+  opacity: 0.70;
+  z-index: 0;
+  pointer-events: none;
+
+  animation:
+    navAuroraSpin 26.18s linear infinite,
+    navBreathAurora var(--kai-breath) var(--kai-breath-ease) infinite;
+}
+
+/* Gentle living sheen on trigger (breath), hover overrides with fast shimmer */
+.nav-foot__toggle::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.10) 18%,
+    rgba(51, 246, 255, 0.10) 26%,
+    rgba(255, 255, 255, 0) 44%
+  );
+
+  transform: translateX(-62%) skewX(-14deg);
+  opacity: 0.18;
+  z-index: 1;
+  pointer-events: none;
+
+  animation: navBreathSheen var(--kai-breath) var(--kai-breath-ease) infinite;
+}
+
+.nav-foot__toggle:hover {
+  border-color: rgba(120, 220, 255, 0.38);
+  box-shadow:
+    0 18px 58px rgba(0, 0, 0, 0.66),
+    0 0 0 1px rgba(51, 246, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.nav-foot__toggle:hover::after {
+  animation: navShimmer 900ms ease-out forwards;
+}
+
+.nav-foot__toggle:active {
+  transform: translateY(1px);
+}
+
+.nav-foot__toggle:focus-visible {
+  outline: 2px solid rgba(51, 246, 255, 0.92);
+  outline-offset: 3px;
+}
+
+/* Badge — crystal capsule + breath pulse */
+.nav-foot__badge {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  z-index: 2;
+
+  background:
+    radial-gradient(circle at 30% 30%, rgba(51, 246, 255, 0.24), rgba(0, 0, 0, 0) 62%),
+    linear-gradient(180deg, rgba(10, 14, 32, 0.76), rgba(0, 0, 0, 0.22));
+  border: 1px solid rgba(51, 246, 255, 0.26);
+
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+
+  animation: navBreathBadge var(--kai-breath) var(--kai-breath-ease) infinite;
+}
+
+.nav-foot__badge::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(155, 91, 255, 0.20);
+  opacity: 0.90;
+  pointer-events: none;
+}
+
+.nav-foot__main {
+  display: grid;
+  gap: 3px;
+  min-width: 0; /* critical for wrapping in grid */
+  z-index: 2;
+}
+
+.nav-foot__kicker {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.96;
+}
+
+/* ✅ NO TRUNCATION: wrap naturally; never ellipsis */
+.nav-foot__summary {
+  font-size: 12.5px;
+  opacity: 0.86;
+
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  min-width: 0;
+
+  /* Make long phrases behave on tiny screens */
+  overflow-wrap: anywhere;
+  word-break: normal;
+  line-height: 1.25;
+}
+
+/* “View” pill */
+.nav-foot__chev {
+  z-index: 2;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  font-size: 12px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  opacity: 0.95;
+
+  padding: 7px 12px;
+  border-radius: 14px;
+
+  border: 1px solid rgba(155, 91, 255, 0.24);
+  background:
+    radial-gradient(220px 54px at 30% 0%, rgba(155, 91, 255, 0.18), rgba(0, 0, 0, 0) 70%),
+    linear-gradient(180deg, rgba(155, 91, 255, 0.10), rgba(0, 0, 0, 0));
+
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.46),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.nav-foot__chevIcon {
+  display: grid;
+  place-items: center;
+  opacity: 0.92;
+}
+
+.nav-foot__toggle:hover .nav-foot__chevIcon {
+  transform: translateX(1px);
+  transition: transform 160ms ease;
+}
+
+/* Responsive: slightly tighter on very small widths */
+@media (max-width: 380px) {
+  .nav-foot__toggle {
+    padding: 11px 12px;
+    gap: 10px;
+  }
+  .nav-foot__kicker {
+    font-size: 10px;
+  }
+  .nav-foot__summary {
+    font-size: 12px;
+  }
+  .nav-foot__chev {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   2) Center Vault Popover
+──────────────────────────────────────────────────────────────── */
+
+.nav-footSheet {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+
+  display: grid;
+  place-items: center;
+  padding: 18px;
+
+  /* Prevent weird scroll chaining while open */
+  overscroll-behavior: none;
+}
+
+/* Backdrop: deep vignette + aurora haze (breath)
+   Works for both <div> and <button> backdrops. */
+.nav-footSheet__backdrop {
+  position: absolute;
+  inset: 0;
+
+  background:
+    radial-gradient(1400px 900px at 50% 18%, rgba(51, 246, 255, 0.10), rgba(0, 0, 0, 0) 58%),
+    radial-gradient(900px 650px at 70% 30%, rgba(155, 91, 255, 0.08), rgba(0, 0, 0, 0) 62%),
+    rgba(0, 0, 0, 0.66);
+
+  animation: navBreathBackdrop var(--kai-breath) var(--kai-breath-ease) infinite;
+
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: default;
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .nav-footSheet__backdrop {
+    backdrop-filter: blur(12px);
+  }
+}
+
+/* The Vault */
+.nav-footSheet__panel {
+  position: relative;
+  width: min(780px, 92vw);
+
+  /* dvh-safe; capped for desktop */
+  max-height: min(78dvh, 820px);
+
+  overflow: hidden;
+  border-radius: 22px;
+
+  border: 1px solid rgba(120, 220, 255, 0.22);
+
+  /* Crystal glass base */
+  background:
+    radial-gradient(1100px 520px at 18% 0%, rgba(51, 246, 255, 0.16), rgba(0, 0, 0, 0) 60%),
+    radial-gradient(940px 420px at 92% 18%, rgba(155, 91, 255, 0.12), rgba(0, 0, 0, 0) 62%),
+    linear-gradient(180deg, rgba(10, 14, 32, 0.94), rgba(2, 3, 10, 0.95));
+
+  box-shadow:
+    0 34px 120px rgba(0, 0, 0, 0.74),
+    0 0 0 1px rgba(51, 246, 255, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  transform: translateY(10px) scale(0.985);
+  opacity: 0;
+
+  /* Open + Breath (breath starts after open finishes) */
+  animation:
+    navVaultIn 220ms cubic-bezier(0.2, 0.9, 0.2, 1) forwards,
+    navBreathPanel var(--kai-breath) var(--kai-breath-ease) 220ms infinite;
+
+  isolation: isolate;
+}
+
+/* Outer aurora ring: breath + slow spin */
+.nav-footSheet__panel::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 24px;
+
+  background: conic-gradient(
+    from 180deg,
+    rgba(51, 246, 255, 0.00),
+    rgba(51, 246, 255, 0.22),
+    rgba(38, 255, 196, 0.14),
+    rgba(155, 91, 255, 0.20),
+    rgba(51, 246, 255, 0.00)
+  );
+
+  filter: blur(20px);
+  opacity: 0.80;
+  z-index: 0;
+  pointer-events: none;
+
+  animation:
+    navAuroraSpin 26.18s linear infinite,
+    navBreathAurora var(--kai-breath) var(--kai-breath-ease) infinite;
+}
+
+/* Audit grid + film + scanline pass (breath) */
+.nav-footSheet__panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  z-index: 1;
+  pointer-events: none;
+
+  background:
+    /* crisp audit grid */
+    linear-gradient(rgba(51, 246, 255, 0.06) 1px, rgba(0, 0, 0, 0) 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, rgba(155, 91, 255, 0.05) 1px, rgba(0, 0, 0, 0) 1px) 0 0 / 28px 28px,
+
+    /* glass micro-film */
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.018) 0px,
+      rgba(255, 255, 255, 0.018) 1px,
+      rgba(0, 0, 0, 0) 3px,
+      rgba(0, 0, 0, 0) 7px
+    ),
+
+    /* breathing scanline (subtle) */
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(51, 246, 255, 0.10) 46%,
+      rgba(255, 255, 255, 0) 70%
+    );
+
+  background-size:
+    28px 28px,
+    28px 28px,
+    auto,
+    100% 220%;
+
+  background-position:
+    0 0,
+    0 0,
+    0 0,
+    0 -120%;
+
+  opacity: 0.58;
+  mix-blend-mode: screen;
+
+  animation:
+    navBreathGrid var(--kai-breath) var(--kai-breath-ease) infinite,
+    navScanline var(--kai-breath) var(--kai-breath-ease) infinite;
+}
+
+/* ───────────────────────────────────────────────────────────────
+   3) Vault Header / Body / Footer
+──────────────────────────────────────────────────────────────── */
+
+.nav-footSheet__head {
+  position: relative;
+  z-index: 2;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(120, 220, 255, 0.14);
+
+  background:
+    radial-gradient(700px 90px at 20% 0%, rgba(51, 246, 255, 0.10), rgba(0, 0, 0, 0) 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0));
+}
+
+.nav-footSheet__title {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--kai-ink);
+  opacity: 0.98;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* (If your TS has a subtitle block, this makes it look official) */
+.nav-footSheet__sub {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.25;
+  opacity: 0.78;
+  color: var(--kai-ink);
+  overflow-wrap: anywhere;
+}
+
+/* Close button (crystal) */
+.nav-footSheet__close {
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+
+  display: grid;
+  place-items: center;
+
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background:
+    radial-gradient(220px 60px at 30% 0%, rgba(51, 246, 255, 0.12), rgba(0, 0, 0, 0) 70%),
+    rgba(255, 255, 255, 0.06);
+
+  color: var(--kai-ink);
+  cursor: pointer;
+
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  transition: background 160ms ease, border-color 160ms ease, transform 120ms ease, box-shadow 160ms ease;
+}
+
+.nav-footSheet__close:hover {
+  border-color: rgba(120, 220, 255, 0.24);
+  background:
+    radial-gradient(220px 60px at 30% 0%, rgba(155, 91, 255, 0.14), rgba(0, 0, 0, 0) 70%),
+    rgba(255, 255, 255, 0.08);
+
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.56),
+    0 0 34px rgba(155, 91, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.nav-footSheet__close:active {
+  transform: translateY(1px);
+}
+
+.nav-footSheet__close:focus-visible {
+  outline: 2px solid rgba(51, 246, 255, 0.92);
+  outline-offset: 3px;
+}
+
+.nav-footSheet__body {
+  position: relative;
+  z-index: 2;
+
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+
+  /* header ~56px, footer ~64px; keep body scroll inside */
+  max-height: calc(min(78dvh, 820px) - 56px - 64px);
+
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+
+  /* nicer scrollbars without being loud */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(51, 246, 255, 0.22) rgba(0, 0, 0, 0.2);
+}
+
+.nav-footSheet__body::-webkit-scrollbar {
+  width: 10px;
+}
+.nav-footSheet__body::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 12px;
+}
+.nav-footSheet__body::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(51, 246, 255, 0.28), rgba(155, 91, 255, 0.18));
+  border: 2px solid rgba(0, 0, 0, 0.25);
+  border-radius: 12px;
+}
+
+/* Declaration blocks: glossy “crystal cards” */
+.nav-foot__line {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--kai-ink);
+  opacity: 0.95;
+
+  padding: 12px 12px;
+  border-radius: 16px;
+
+  border: 1px solid rgba(120, 220, 255, 0.14);
+  background:
+    radial-gradient(560px 170px at 22% 0%, rgba(51, 246, 255, 0.11), rgba(0, 0, 0, 0) 72%),
+    radial-gradient(520px 150px at 92% 12%, rgba(155, 91, 255, 0.07), rgba(0, 0, 0, 0) 76%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0));
+
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.44),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+  animation: navBreathCard var(--kai-breath) var(--kai-breath-ease) infinite;
+}
+
+/* Optional “fine print” line if you add it */
+.nav-foot__line--fine {
+  opacity: 0.80;
+  font-size: 12.5px;
+}
+
+/* Divider if present in TS */
+.nav-footSheet__divider {
+  height: 1px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(51, 246, 255, 0.00),
+    rgba(51, 246, 255, 0.18),
+    rgba(155, 91, 255, 0.16),
+    rgba(51, 246, 255, 0.00)
+  );
+  opacity: 0.75;
+  margin: 2px 2px;
+}
+
+.nav-footSheet__foot {
+  position: relative;
+  z-index: 2;
+
+  padding: 12px 16px calc(16px + var(--kai-safe-bottom));
+  border-top: 1px solid rgba(120, 220, 255, 0.14);
+
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+
+  background:
+    radial-gradient(700px 90px at 30% 0%, rgba(51, 246, 255, 0.08), rgba(0, 0, 0, 0) 70%),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0));
+}
+
+.nav-footSheet__cta {
+  padding: 10px 14px;
+  border-radius: 16px;
+  cursor: pointer;
+
+  color: var(--kai-ink);
+  border: 1px solid rgba(51, 246, 255, 0.26);
+
+  background:
+    radial-gradient(360px 70px at 20% 0%, rgba(51, 246, 255, 0.18), rgba(0, 0, 0, 0) 72%),
+    linear-gradient(180deg, rgba(51, 246, 255, 0.10), rgba(0, 0, 0, 0));
+
+  box-shadow:
+    0 16px 38px rgba(0, 0, 0, 0.56),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  transition: border-color 160ms ease, transform 120ms ease, box-shadow 160ms ease;
+  animation: navBreathCTA var(--kai-breath) var(--kai-breath-ease) infinite;
+
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nav-footSheet__cta:hover {
+  border-color: rgba(51, 246, 255, 0.44);
+  box-shadow:
+    0 18px 46px rgba(0, 0, 0, 0.62),
+    0 0 46px rgba(51, 246, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.nav-footSheet__cta:active {
+  transform: translateY(1px);
+}
+
+.nav-footSheet__cta:focus-visible {
+  outline: 2px solid rgba(51, 246, 255, 0.92);
+  outline-offset: 3px;
+}
+
+/* Mobile: tighter vault spacing, slightly taller usable body */
+@media (max-width: 520px) {
+  .nav-footSheet {
+    padding: 14px;
+  }
+
+  .nav-footSheet__panel {
+    width: min(780px, 96vw);
+    max-height: min(82dvh, 820px);
+  }
+
+  .nav-footSheet__body {
+    max-height: calc(min(82dvh, 820px) - 56px - 64px);
+    padding: 14px;
+  }
+
+  .nav-foot__line {
+    font-size: 13px;
+    padding: 11px 11px;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   4) Animations (Kai Breath 5.236s)
+──────────────────────────────────────────────────────────────── */
+
+@keyframes navVaultIn {
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes navAuroraSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* fast hover shimmer (one-shot) */
+@keyframes navShimmer {
+  0% {
+    transform: translateX(-70%) skewX(-14deg);
+    opacity: 0.0;
+  }
+  20% {
+    opacity: 0.75;
+  }
+  100% {
+    transform: translateX(140%) skewX(-14deg);
+    opacity: 0.0;
+  }
+}
+
+/* panel breath: glow + border + micro-luminance */
+@keyframes navBreathPanel {
+  0% {
+    border-color: rgba(120, 220, 255, 0.18);
+    box-shadow:
+      0 34px 120px rgba(0, 0, 0, 0.74),
+      0 0 0 1px rgba(51, 246, 255, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    filter: saturate(1) brightness(1);
+  }
+  50% {
+    border-color: rgba(120, 220, 255, 0.30);
+    box-shadow:
+      0 40px 140px rgba(0, 0, 0, 0.80),
+      0 0 0 1px rgba(51, 246, 255, 0.16),
+      0 0 70px rgba(51, 246, 255, 0.10),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    filter: saturate(1.10) brightness(1.04);
+  }
+  100% {
+    border-color: rgba(120, 220, 255, 0.18);
+    box-shadow:
+      0 34px 120px rgba(0, 0, 0, 0.74),
+      0 0 0 1px rgba(51, 246, 255, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    filter: saturate(1) brightness(1);
+  }
+}
+
+/* aurora breath */
+@keyframes navBreathAurora {
+  0%   { opacity: 0.70; filter: blur(18px); }
+  50%  { opacity: 0.98; filter: blur(22px); }
+  100% { opacity: 0.70; filter: blur(18px); }
+}
+
+/* grid breath */
+@keyframes navBreathGrid {
+  0%   { opacity: 0.46; }
+  50%  { opacity: 0.72; }
+  100% { opacity: 0.46; }
+}
+
+/* living sheen breath */
+@keyframes navBreathSheen {
+  0%   { transform: translateX(-62%) skewX(-14deg); opacity: 0.06; }
+  50%  { transform: translateX(-40%) skewX(-14deg); opacity: 0.14; }
+  100% { transform: translateX(-62%) skewX(-14deg); opacity: 0.06; }
+}
+
+/* badge breath */
+@keyframes navBreathBadge {
+  0% {
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  50% {
+    box-shadow:
+      0 14px 34px rgba(0, 0, 0, 0.58),
+      0 0 30px rgba(51, 246, 255, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  }
+  100% {
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* cards breath (tiny) */
+@keyframes navBreathCard {
+  0%   { transform: translateZ(0); border-color: rgba(120, 220, 255, 0.12); }
+  50%  { transform: translateZ(0); border-color: rgba(120, 220, 255, 0.18); }
+  100% { transform: translateZ(0); border-color: rgba(120, 220, 255, 0.12); }
+}
+
+/* CTA breath (a little more “alive”) */
+@keyframes navBreathCTA {
+  0%   { filter: brightness(1); }
+  50%  { filter: brightness(1.06); }
+  100% { filter: brightness(1); }
+}
+
+/* Backdrop breath (subtle haze) */
+@keyframes navBreathBackdrop {
+  0%   { filter: brightness(1) saturate(1); }
+  50%  { filter: brightness(1.04) saturate(1.06); }
+  100% { filter: brightness(1) saturate(1); }
+}
+
+/* Scanline pass synchronized to breath (moves once per cycle) */
+@keyframes navScanline {
+  0%   { background-position: 0 0, 0 0, 0 0, 0 -120%; }
+  50%  { background-position: 0 0, 0 0, 0 0, 0 20%; }
+  100% { background-position: 0 0, 0 0, 0 0, 0 140%; }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   5) Reduced Motion
+──────────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-footSheet__panel,
+  .nav-foot__toggle::before,
+  .nav-foot__toggle::after,
+  .nav-footSheet__panel::before,
+  .nav-footSheet__panel::after,
+  .nav-foot__badge,
+  .nav-foot__line,
+  .nav-footSheet__cta,
+  .nav-footSheet__backdrop {
+    animation: none !important;
+  }
+
+  .nav-footSheet__panel {
+    transform: none;
+    opacity: 1;
+  }
+
+  .nav-foot__toggle:hover::after {
+    animation: none !important;
+  }
+}
+/* ───────────────────────────────────────────────────────────────
+   ULTRA-THIN PATCH — even slimmer trigger bar
+   Paste BELOW your current refinement patch (last wins)
+──────────────────────────────────────────────────────────────── */
+
+.nav-foot {
+  margin-top: 6px;
+}
+
+/* Ultra-thin, still premium */
+.nav-foot__toggle {
+  padding: 7px 10px;          /* ↓ thinner */
+  border-radius: 13px;
+  gap: 9px;
+}
+
+/* Slightly smaller aura so it doesn’t add perceived height */
+.nav-foot__toggle::before {
+  filter: blur(10px);
+  opacity: 0.56;
+}
+
+.nav-foot__toggle::after {
+  opacity: 0.12;
+}
+
+/* Smaller badge + tighter inner ring */
+.nav-foot__badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 11px;
+}
+.nav-foot__badge::after {
+  inset: 4px;
+  border-radius: 9px;
+}
+
+/* Tight text */
+.nav-foot__main {
+  gap: 1px;
+}
+
+.nav-foot__kicker {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  line-height: 1.0;
+  opacity: 0.92;
+}
+
+.nav-foot__summary {
+  font-size: 11.25px;
+  line-height: 1.08;
+  opacity: 0.82;
+}
+
+/* Slim “Open” pill */
+.nav-foot__chev {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  gap: 5px;
+}
+
+/* Compact chevron */
+.nav-foot__chevIcon svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Micro-compact for tiny screens */
+@media (max-width: 380px) {
+  .nav-foot__toggle {
+    padding: 6px 9px;
+    gap: 8px;
+  }
+  .nav-foot__badge {
+    width: 26px;
+    height: 26px;
+  }
+  .nav-foot__kicker {
+    font-size: 8.5px;
+  }
+  .nav-foot__summary {
+    font-size: 11px;
+  }
+  .nav-foot__chev {
+    padding: 4px 7px;
+    font-size: 9.75px;
+  }
+}

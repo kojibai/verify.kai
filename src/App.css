@@ -8,6 +8,11 @@
    - When content fits, it stays perfectly centered with no scrolling.
    - Bottom actions (PhiKey / PhiStream) remain reachable + CLICKABLE on all device sizes,
      including iOS Safari + Android Chrome dynamic bars + safe-area home indicator.
+
+   ✅ Tightness upgrades (this update):
+   - Less vertical gap between Atrium price chart (workspace-topbar) and Atrium body.
+   - Reduced shell padding + row gaps (especially on short-height devices / landscape).
+   - Fixed safe-area padding for bottom dock/footer so PhiKey/PhiStream never clip.
 */
 
 /* ────────────────────────────────────────────────────────────────
@@ -70,6 +75,7 @@
   /* Layout */
   --topbar-h: 76px;
   --breath: 5.236s; /* golden breath cadence */
+  --breath-s: var(--breath);
   --ring: 0 0 0 3px rgba(51, 246, 255, 0.24),
     0 0 0 1px rgba(255, 255, 255, 0.12) inset;
 
@@ -79,6 +85,13 @@
 
   /* Safe area */
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* ✅ Tighter shell controls */
+  --stage-pad: clamp(1.05rem, 2.4vw, 2.5rem);
+  --frame-pad: clamp(1.05rem, 2.1vw, 2rem);
+
+  /* ✅ tighter atrium grid spacing (chart ↔ atrium body) */
+  --workspace-gap: 0.85rem;
 
   /* ✅ Extra “reach space” ONLY when panel scrolls:
      ensures bottom CTA bars/buttons (PhiKey / PhiStream) can be scrolled above
@@ -577,9 +590,9 @@ a:hover {
   align-items: center;
   justify-content: center;
 
-  /* ✅ safe-area aware padding so the frame is *visually* centered on iPhone */
-  padding: clamp(1.25rem, 3vw, 3rem);
-  padding-bottom: calc(clamp(1.25rem, 3vw, 3rem) + var(--safe-bottom));
+  /* ✅ tighter + safe-area aware padding */
+  padding: var(--stage-pad);
+  padding-bottom: calc(var(--stage-pad) + var(--safe-bottom));
 
   overflow: hidden;
 }
@@ -643,7 +656,7 @@ a:hover {
 .app-frame-inner {
   position: relative;
   z-index: 1;
-  padding: clamp(1.25rem, 2.4vw, 2.25rem);
+  padding: var(--frame-pad); /* ✅ tighter via token */
   border-radius: calc(var(--radius-xl) - 6px);
   background: radial-gradient(
       circle at 10% 0%,
@@ -665,12 +678,77 @@ a:hover {
   height: 100%;
 }
 
+/* ✅ Workspace: atrium topbar (chart) + atrium body (nav+panel) */
 .app-workspace {
   display: grid;
   grid-template-columns: 320px 1fr;
-  gap: 1.1rem;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--workspace-gap); /* ✅ tighter chart↔atrium spacing */
   height: 100%;
   min-height: 0;
+}
+
+/* ✅ Atrium-level chart bar (spans both columns; NOT inside the verifier panel) */
+.workspace-topbar {
+  grid-column: 1 / -1;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(170, 241, 255, 0.22);
+  background: radial-gradient(
+      circle at 18% 0%,
+      rgba(51, 246, 255, 0.12),
+      transparent 58%
+    ),
+    radial-gradient(
+      circle at 82% 100%,
+      rgba(155, 91, 255, 0.1),
+      transparent 60%
+    ),
+    linear-gradient(145deg, rgba(6, 14, 35, 0.62), rgba(3, 8, 24, 0.92));
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  overflow: visible;
+  position: relative; 
+
+  /* ✅ tighter */
+  padding: 0.68rem 0.75rem 0.75rem;
+}
+
+.workspace-topbar > * {
+  width: 100%;
+  min-width: 0;
+}
+/* Explorer full-screen portal (must be above EVERYTHING) */
+.explorer-pop{
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0,0,0,0.62);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.explorer-pop__panel{
+  width: min(1100px, calc(100vw - 24px));
+  height: min(860px, calc(100vh - 24px));
+  display: grid;
+  grid-template-rows: auto 1fr;
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: 0 30px 90px rgba(0,0,0,0.55);
+  border: 1px solid rgba(51,246,255,0.22);
+  background: linear-gradient(180deg, rgba(10,16,36,0.92), rgba(3,6,16,0.94));
+}
+
+.explorer-pop__body{
+  min-height: 0;
+  overflow: hidden; /* SigilExplorer manages its own scroll */
+}
+
+.explorer-pop__close{
+  cursor: pointer;
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -696,7 +774,7 @@ a:hover {
 }
 
 .nav-head {
-  padding: 1.1rem 1.05rem 0.95rem;
+  padding: 0.95rem 1.0rem 0.78rem; /* ✅ tighter */
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   background: radial-gradient(
       circle at 20% 0%,
@@ -715,21 +793,21 @@ a:hover {
 }
 
 .nav-head__sub {
-  margin-top: 0.25rem;
+  margin-top: 0.22rem;
   font-size: 0.82rem;
   color: rgba(245, 247, 255, 0.68);
 }
 
 .nav-list {
-  padding: 0.75rem;
+  padding: 0.7rem; /* ✅ tighter */
   display: grid;
-  gap: 0.55rem;
+  gap: 0.5rem; /* ✅ tighter */
   overflow: hidden; /* ✅ no scrolling in nav rail */
 }
 
 .nav-item {
   border-radius: 16px;
-  padding: 0.85rem 0.85rem;
+  padding: 0.78rem 0.8rem; /* ✅ tighter */
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: radial-gradient(
       circle at 14% 20%,
@@ -750,7 +828,7 @@ a:hover {
 }
 
 .nav-item__desc {
-  margin-top: 0.18rem;
+  margin-top: 0.16rem;
   font-size: 0.82rem;
   color: rgba(245, 247, 255, 0.68);
 }
@@ -790,7 +868,7 @@ a:hover {
 
 .nav-foot {
   margin-top: auto;
-  padding: 0.9rem 1.05rem 1.05rem;
+  padding: 0.8rem 1rem 0.9rem; /* ✅ tighter */
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   background: linear-gradient(
     180deg,
@@ -837,7 +915,7 @@ a:hover {
 }
 
 .panel-head {
-  padding: 1.1rem 1.25rem;
+  padding: 0.95rem 1.1rem; /* ✅ tighter */
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   background: radial-gradient(
       circle at 50% 0%,
@@ -854,10 +932,10 @@ a:hover {
 }
 
 .panel-head__meta {
-  margin-top: 0.55rem;
+  margin-top: 0.48rem; /* ✅ tighter */
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.42rem; /* ✅ tighter */
 }
 
 .meta-chip {
@@ -883,8 +961,8 @@ a:hover {
   flex: 1 1 auto;
   min-height: 0;
 
-  /* ✅ ALWAYS include safe-bottom so bottom buttons never sit behind iOS home bar */
-  padding: 1.05rem 1.25rem calc(1.25rem + var(--safe-bottom));
+  /* ✅ tighter + safe */
+  padding: 0.92rem 1.1rem calc(1.05rem + var(--safe-bottom));
 
   /* ✅ the guarantee */
   overflow-y: auto;
@@ -895,7 +973,7 @@ a:hover {
   overscroll-behavior: contain;
 
   /* make scrolling feel stable */
-  scroll-padding-bottom: calc(1.25rem + var(--safe-bottom));
+  scroll-padding-bottom: calc(1.05rem + var(--safe-bottom));
 
   /* (optional) keep layout stable when scrollbar appears */
   scrollbar-gutter: stable both-edges;
@@ -927,11 +1005,7 @@ a:hover {
   -webkit-overflow-scrolling: touch;
 }
 
-/* ✅ CENTERING THAT DOES NOT BREAK SCROLL:
-   The trick is: center the child with auto margins.
-   - If the child fits: margins center it.
-   - If the child is taller: margins collapse to 0 and the panel scrolls naturally.
-*/
+/* ✅ CENTERING THAT DOES NOT BREAK SCROLL */
 .panel-center {
   width: 100%;
   min-width: 0;
@@ -974,9 +1048,11 @@ a:hover {
   background: rgba(170, 241, 255, 0.28);
 }
 
-/* Footer */
+/* Footer (dock) — ALWAYS VISIBLE, SAFE-AREA SAFE
+   ✅ Fix: safe-bottom must pad the BOTTOM, not the top, or iOS home bar clips it. */
 .panel-foot {
-  padding: calc(0.85rem + var(--safe-bottom)) 1.25rem 0.85rem;
+  flex: 0 0 auto;
+  padding: 0.72rem 1.1rem calc(0.72rem + var(--safe-bottom)); /* ✅ never clipped */
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   align-items: center;
@@ -988,6 +1064,10 @@ a:hover {
   );
   color: rgba(245, 247, 255, 0.62);
   font-size: 0.78rem;
+
+  /* keep the dock above any inner content glow */
+  position: relative;
+  z-index: 4;
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -1074,9 +1154,13 @@ a:hover {
    ─────────────────────────────────────────────────────────────── */
 
 @media (max-width: 980px) {
+  :root {
+    --workspace-gap: 0.78rem; /* ✅ tighter on mobile stack */
+  }
+
   .app-stage {
-    padding: 1rem;
-    padding-bottom: calc(1rem + var(--safe-bottom));
+    padding: 0.95rem;
+    padding-bottom: calc(0.95rem + var(--safe-bottom));
   }
 
   .app-frame {
@@ -1084,13 +1168,14 @@ a:hover {
   }
 
   .app-frame-inner {
-    padding: 1rem;
+    padding: 0.95rem;
   }
 
+  /* ✅ Now: topbar (chart) + nav + panel */
   .app-workspace {
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 0.9rem;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: var(--workspace-gap);
     height: 100%;
     min-height: 0;
   }
@@ -1103,10 +1188,10 @@ a:hover {
   .nav-list {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.55rem;
+    gap: 0.5rem;
     overflow: visible;
-    padding: 0.75rem;
-    padding-bottom: calc(0.95rem + var(--safe-bottom));
+    padding: 0.7rem;
+    padding-bottom: calc(0.85rem + var(--safe-bottom));
   }
 
   .nav-item {
@@ -1116,12 +1201,17 @@ a:hover {
   .panel-center > * {
     max-width: 100%;
   }
+
+  .workspace-topbar {
+    padding: 0.62rem 0.65rem 0.68rem; /* ✅ tighter */
+  }
 }
 
 @media (max-width: 650px) {
   :root {
     --topbar-h: 72px;
     --bottom-actions-reserve: 112px; /* a hair more reach on tiny devices */
+    --workspace-gap: 0.72rem;
   }
 
   .app-frame {
@@ -1129,7 +1219,7 @@ a:hover {
   }
 
   .app-frame-inner {
-    padding: 0.9rem;
+    padding: 0.85rem;
     border-radius: 16px;
   }
 
@@ -1139,22 +1229,381 @@ a:hover {
 
   /* ✅ squeeze chrome slightly so the centered verifier has max room */
   .panel-head {
-    padding: 0.9rem 1rem;
+    padding: 0.82rem 0.95rem;
   }
   .panel-body {
-    padding: 0.85rem 1rem calc(1rem + var(--safe-bottom));
-    scroll-padding-bottom: calc(1rem + var(--safe-bottom));
+    padding: 0.78rem 0.95rem calc(0.95rem + var(--safe-bottom));
+    scroll-padding-bottom: calc(0.95rem + var(--safe-bottom));
   }
   .panel-foot {
-    padding: calc(0.65rem + var(--safe-bottom)) 1rem 0.65rem;
+    padding: 0.62rem 0.95rem calc(0.62rem + var(--safe-bottom));
     font-size: 0.72rem;
   }
+  .nav-head {
+    padding: 0.85rem 0.9rem 0.7rem;
+  }
   .nav-foot {
-    padding: 0.75rem 0.9rem 0.85rem;
+    padding: 0.7rem 0.9rem 0.8rem;
   }
   .nav-foot__line {
     font-size: 0.72rem;
     line-height: 1.25;
+  }
+
+  .workspace-topbar {
+    padding: 0.58rem 0.58rem 0.64rem;
+  }
+}
+
+/* ✅ HEIGHT-BASED SAFETY: short screens / landscape phones
+   Goal: prevent bottom dock (PhiKey/PhiStream) from ever being clipped. */
+@media (max-height: 820px) {
+  :root {
+    --workspace-gap: 0.7rem;
+    --stage-pad: 0.9rem;
+    --frame-pad: 0.9rem;
+  }
+
+  .app-topbar {
+    padding: 0.75rem 1rem;
+  }
+
+  .workspace-topbar {
+    padding: 0.56rem 0.6rem 0.62rem;
+  }
+
+  .nav-head__sub {
+    display: none; /* reclaim vertical space */
+  }
+}
+
+@media (max-height: 740px) {
+  :root {
+    --topbar-h: 68px;
+    --workspace-gap: 0.64rem;
+    --bottom-actions-reserve: 96px;
+  }
+
+  .app-stage {
+    padding: 0.8rem;
+    padding-bottom: calc(0.8rem + var(--safe-bottom));
+  }
+
+  .app-frame-inner {
+    padding: 0.8rem;
+  }
+
+  .nav-foot {
+    display: none; /* ✅ hard reclaim: keep panel dock visible */
+  }
+
+  .nav-list {
+    gap: 0.45rem;
+    padding: 0.62rem;
+  }
+
+  .nav-item {
+    padding: 0.7rem 0.72rem;
+  }
+
+  .panel-head {
+    padding: 0.78rem 0.9rem;
+  }
+  .panel-body {
+    padding: 0.7rem 0.9rem calc(0.9rem + var(--safe-bottom));
+    scroll-padding-bottom: calc(0.9rem + var(--safe-bottom));
+  }
+  .panel-foot {
+    padding: 0.55rem 0.9rem calc(0.55rem + var(--safe-bottom));
+  }
+}
+/* ────────────────────────────────────────────────────────────────
+   Explorer full-screen portal (PhiStream / ExplorerRoute)
+   - NO header text (content is full-bleed)
+   - Close “X” is a floating vault control (top-right)
+   - Above EVERYTHING
+──────────────────────────────────────────────────────────────── */
+
+/* Backdrop */
+.explorer-pop {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+
+  display: grid;
+  place-items: center;
+
+  /* Safe padding (including iOS notch areas) */
+  padding: max(16px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+
+  background:
+    radial-gradient(1200px 900px at 18% 10%, rgba(51, 246, 255, 0.12), rgba(0, 0, 0, 0) 55%),
+    radial-gradient(1000px 800px at 85% 95%, rgba(155, 91, 255, 0.12), rgba(0, 0, 0, 0) 60%),
+    rgba(0, 0, 0, 0.62);
+
+  backdrop-filter: blur(14px) saturate(130%);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+
+  /* Prevent scroll chaining */
+  overscroll-behavior: contain;
+
+  /* Soft “film grain” without images */
+  isolation: isolate;
+}
+
+@supports not ((backdrop-filter: blur(1px))) {
+  .explorer-pop {
+    background: rgba(0, 0, 0, 0.78);
+  }
+}
+
+/* Panel */
+.explorer-pop__panel {
+  position: relative;
+
+  width: min(1100px, calc(100vw - 24px));
+  height: min(860px, calc(var(--vvh-px, 100dvh) - 24px));
+
+  border-radius: 22px;
+  overflow: hidden;
+
+  border: 1px solid rgba(51, 246, 255, 0.22);
+
+  background:
+    radial-gradient(900px 420px at 18% 0%, rgba(51, 246, 255, 0.10), rgba(0, 0, 0, 0) 60%),
+    radial-gradient(820px 520px at 92% 110%, rgba(155, 91, 255, 0.14), rgba(0, 0, 0, 0) 62%),
+    linear-gradient(180deg, rgba(10, 16, 36, 0.94), rgba(3, 6, 16, 0.96));
+
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, 0.58),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 0 70px rgba(51, 246, 255, 0.12);
+
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+
+  display: grid;
+  grid-template-rows: 1fr; /* full-bleed body only */
+  min-height: 0;
+}
+
+/* Inner “vault edge” + shimmer */
+.explorer-pop__panel::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 21px;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  opacity: 0.75;
+}
+
+.explorer-pop__panel::after {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  pointer-events: none;
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.16) 45%,
+    transparent 70%
+  );
+  transform: rotate(18deg) translateX(-40%);
+  animation: explorerSheen calc(var(--breath, 5.236s) * 2) ease-in-out infinite;
+  opacity: 0.45;
+  mix-blend-mode: soft-light;
+}
+
+@keyframes explorerSheen {
+  0% {
+    transform: rotate(18deg) translateX(-58%);
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.42;
+  }
+  70% {
+    transform: rotate(18deg) translateX(58%);
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Body (SigilExplorer owns scroll internally) */
+.explorer-pop__body {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Close “X” — Vault control (sleek, touch-safe, focus-safe)
+──────────────────────────────────────────────────────────────── */
+
+.explorer-pop__close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+
+  /* Touch target */
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+
+  display: grid;
+  place-items: center;
+
+  cursor: pointer;
+  user-select: none;
+
+  border: 1px solid rgba(170, 241, 255, 0.22);
+  background:
+    radial-gradient(18px 18px at 30% 25%, rgba(255, 255, 255, 0.16), transparent 60%),
+    radial-gradient(26px 26px at 80% 80%, rgba(51, 246, 255, 0.12), transparent 62%),
+    linear-gradient(180deg, rgba(10, 20, 48, 0.78), rgba(3, 6, 16, 0.82));
+
+  box-shadow:
+    0 16px 36px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 0 26px rgba(51, 246, 255, 0.10);
+
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+
+  /* Keep above Explorer content */
+  z-index: 20;
+
+  transition:
+    transform var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background var(--transition-fast),
+    filter var(--transition-fast);
+}
+
+.explorer-pop__close span {
+  display: block;
+  line-height: 1;
+  font-weight: 900;
+  font-size: 18px;
+  letter-spacing: 0.02em;
+
+  color: rgba(245, 247, 255, 0.90);
+  text-shadow: 0 10px 24px rgba(0, 0, 0, 0.65);
+
+  transform: translateY(-0.5px);
+}
+
+/* Aura ring */
+.explorer-pop__close::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 999px;
+  pointer-events: none;
+
+  background: conic-gradient(
+    from 220deg,
+    rgba(38, 255, 196, 0.26),
+    rgba(51, 246, 255, 0),
+    rgba(155, 91, 255, 0.28),
+    rgba(255, 217, 121, 0.14),
+    rgba(38, 255, 196, 0.26)
+  );
+
+  filter: blur(10px);
+  opacity: 0.55;
+  transition: opacity var(--transition-fast), filter var(--transition-fast);
+}
+
+/* Subtle inner gloss */
+.explorer-pop__close::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 999px;
+  pointer-events: none;
+
+  background: linear-gradient(
+    120deg,
+    rgba(255, 255, 255, 0.18),
+    transparent 36%,
+    transparent 68%,
+    rgba(51, 246, 255, 0.14)
+  );
+  opacity: 0.35;
+  mix-blend-mode: soft-light;
+}
+
+/* Hover / active */
+.explorer-pop__close:hover {
+  transform: translateY(-1px);
+  border-color: rgba(51, 246, 255, 0.34);
+  box-shadow:
+    0 20px 44px rgba(0, 0, 0, 0.62),
+    0 0 0 1px rgba(51, 246, 255, 0.10) inset,
+    0 0 40px rgba(51, 246, 255, 0.16);
+  filter: brightness(1.08);
+}
+
+.explorer-pop__close:hover::before {
+  opacity: 0.78;
+  filter: blur(9px);
+}
+
+.explorer-pop__close:active {
+  transform: translateY(0px) scale(0.98);
+  filter: brightness(1.02);
+}
+
+/* Keyboard focus */
+.explorer-pop__close:focus-visible {
+  outline: none;
+  box-shadow:
+    var(--ring),
+    0 18px 44px rgba(0, 0, 0, 0.62),
+    0 0 40px rgba(51, 246, 255, 0.16);
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .explorer-pop__panel::after {
+    animation: none !important;
+  }
+  .explorer-pop__close {
+    transition: none !important;
+  }
+  .explorer-pop__close::before {
+    transition: none !important;
+  }
+}
+
+/* Tiny screens: keep close control reachable and consistent */
+@media (max-width: 520px) {
+  .explorer-pop__close {
+    top: 12px;
+    right: 12px;
+    width: 46px;
+    height: 46px;
+  }
+}
+
+/* Short height / landscape: shrink padding, maximize panel */
+@media (max-height: 680px) {
+  .explorer-pop {
+    padding: max(10px, env(safe-area-inset-top, 0px))
+      max(10px, env(safe-area-inset-right, 0px))
+      max(10px, env(safe-area-inset-bottom, 0px))
+      max(10px, env(safe-area-inset-left, 0px));
+  }
+  .explorer-pop__panel {
+    height: min(860px, calc(var(--vvh-px, 100dvh) - 18px));
   }
 }
 
