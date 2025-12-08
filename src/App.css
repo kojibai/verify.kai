@@ -1752,11 +1752,11 @@ a:hover {
     height: 26px !important;
   }
   .nav-foot__summary {
-    font-size: 11px !important;
+    font-size: 9px !important;
     line-height: 1.08 !important;
   }
   .nav-foot__chev {
-    padding: 4px 7px !important;
-    font-size: 9.75px !important;
+    padding: 2px 5px !important;
+    font-size: 7.75px !important;
   }
 }
