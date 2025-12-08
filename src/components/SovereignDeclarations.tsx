@@ -225,7 +225,7 @@ export default function SovereignDeclarations(): React.JSX.Element {
                 <div className="nav-footSheet__divider" role="separator" aria-hidden="true" />
 
                 <p className="nav-foot__line nav-foot__line--fine">
-                 Operational Mandate: readable offline; provable by method; bound to Invariant seals.
+                 Operational Mandate: readable offline; provable by method; bound to determinate seals.
                 </p>
               </div>
 
