@@ -174,7 +174,7 @@ export default function SovereignDeclarations(): React.JSX.Element {
                     <span className="mono" aria-hidden="true">
                       Φ
                     </span>{" "}
-                    Sovereign Declarations
+                    Sovereign Writ
                   </div>
 
                   <div className="nav-footSheet__sub">
