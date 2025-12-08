@@ -126,7 +126,7 @@ export default function SovereignDeclarations(): React.JSX.Element {
           </span>
 
           <span className="nav-foot__main">
-            <span className="nav-foot__kicker">SOVEREIGN DECLARATIONS</span>
+            <span className="nav-foot__kicker">SOVEREIGN DEKLARATIONS</span>
             <span className="nav-foot__summary">{triggerSummary}</span>
           </span>
 
@@ -225,7 +225,7 @@ export default function SovereignDeclarations(): React.JSX.Element {
                 <div className="nav-footSheet__divider" role="separator" aria-hidden="true" />
 
                 <p className="nav-foot__line nav-foot__line--fine">
-                  Operational claim: readable offline; checkable by procedure; bound to deterministic seals.
+                 Operational Mandate: readable offline; provable by method; bound to Invariant seals.
                 </p>
               </div>
 
