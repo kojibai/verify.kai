@@ -1874,7 +1874,6 @@ const VerifierStamperInner: React.FC = () => {
       <div className="toolbar">
         <div className="toolbar-main">
           <div className="brand-lockup" aria-label="Kairos live status">
-            <span className="glyph live-dot" aria-hidden />
             <div className="brand-text">
               <div className="live-pulse">
               <span className="now">LIVE</span>
@@ -1884,25 +1883,17 @@ const VerifierStamperInner: React.FC = () => {
           </div>
 
           <div className="toolbar-actions" aria-label="Verifier actions">
-            <button
-              className="primary"
-              onClick={() => svgInput.current?.click()}
-              type="button"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-                className="ico"
-                width="18"
-                height="18"
-                style={{ marginRight: 8, display: "inline-block", verticalAlign: "middle" }}
-              >
-                <path d="M12 19V7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                <path d="M8 11l4-4 4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                <path d="M4 5h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" opacity=".6" />
-              </svg>
-              <span>ΦKey</span>
-            </button>
+         <button
+  className="primary upload-phikey"
+  onClick={() => svgInput.current?.click()}
+  type="button"
+>
+  <span className="phi-iconbox" aria-hidden="true">
+    <img className="phi-mark" src="/phi.svg" alt="" />
+  </span>
+  <span>ΦKey</span>
+</button>
+
           </div>
         </div>
       </div>
