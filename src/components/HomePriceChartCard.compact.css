@@ -444,4 +444,88 @@
     align-items: center;
     gap: 8px;
   }
-  
+  /* ───────────────────────────────────────────────────────────────
+   KAI Pulse axis — NO OVERLAP on mobile + NO CLIP
+   Paste LAST (last wins).
+──────────────────────────────────────────────────────────────── */
+
+.hp-chart{
+  /* let axis labels breathe (prevents clip at bottom) */
+  overflow: visible !important;
+  padding-bottom: 10px; /* creates safe runway for tick text */
+}
+
+/* If your chart is SVG-based, don’t clip text */
+.hp-chart svg{
+  overflow: visible !important;
+}
+
+/* Make ticks smaller + tighter by default */
+.hp-chart .kpc-axis,
+.hp-chart .kpc-tick,
+.hp-chart .kpc-grid-label{
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .06em;
+  paint-order: stroke fill;
+  stroke: rgba(3, 8, 24, 0.85); /* keeps text readable over glow */
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* Recharts-safe tick text polish (no-op if not using Recharts) */
+.hp-chart .recharts-cartesian-axis-tick text{
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .06em;
+  paint-order: stroke fill;
+  stroke: rgba(3, 8, 24, 0.85);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* ✅ Mobile: show fewer pulse labels (prevents overlap) */
+@media (max-width: 520px){
+  .hp-chart{ padding-bottom: 14px; }
+
+  .hp-chart .kpc-axis,
+  .hp-chart .kpc-tick,
+  .hp-chart .kpc-grid-label,
+  .hp-chart .recharts-cartesian-axis-tick text{
+    font-size: 10px !important;
+    opacity: .92;
+  }
+
+  /* Hide every other tick (DOM/SVG ticks) */
+  .hp-chart .recharts-cartesian-axis-ticks > g:nth-child(odd){
+    display: none;
+  }
+  .hp-chart .kpc-tick:nth-of-type(odd){
+    display: none;
+  }
+
+  /* Always keep the LAST label visible (so “now” / latest never disappears) */
+  .hp-chart .recharts-cartesian-axis-ticks > g:last-child{
+    display: block;
+  }
+  .hp-chart .kpc-tick:last-of-type{
+    display: inline;
+  }
+}
+
+/* ✅ Tiny phones: show ~1/4 ticks + always keep last */
+@media (max-width: 380px){
+  .hp-chart{ padding-bottom: 16px; }
+
+  .hp-chart .recharts-cartesian-axis-ticks > g:not(:nth-child(4n)){
+    display: none;
+  }
+  .hp-chart .kpc-tick:not(:nth-of-type(4n)){
+    display: none;
+  }
+
+  .hp-chart .recharts-cartesian-axis-ticks > g:last-child{
+    display: block;
+  }
+  .hp-chart .kpc-tick:last-of-type{
+    display: inline;
+  }
+}
