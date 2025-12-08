@@ -51,6 +51,48 @@ type AppShellStyle = CSSProperties & {
   ["--vvh-px"]?: string;
 };
 
+function useVisualViewportSize(): { width: number; height: number } {
+  const read = useCallback((): { width: number; height: number } => {
+    const vv = window.visualViewport;
+    if (vv) {
+      return {
+        width: Math.round(vv.width),
+        height: Math.round(vv.height),
+      };
+    }
+    return { width: window.innerWidth, height: window.innerHeight };
+  }, []);
+
+  const [size, setSize] = useState<{ width: number; height: number }>(() => {
+    if (typeof window === "undefined") return { width: 0, height: 0 };
+    return read();
+  });
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+
+    const onResize = (): void => {
+      setSize(read());
+    };
+
+    window.addEventListener("resize", onResize, { passive: true });
+    if (vv) {
+      vv.addEventListener("resize", onResize, { passive: true });
+      vv.addEventListener("scroll", onResize, { passive: true });
+    }
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      if (vv) {
+        vv.removeEventListener("resize", onResize);
+        vv.removeEventListener("scroll", onResize);
+      }
+    };
+  }, [read]);
+
+  return size;
+}
+
 function ExplorerPopover(props: {
   open: boolean;
   onClose: () => void;
@@ -59,6 +101,7 @@ function ExplorerPopover(props: {
   const { open, onClose, children } = props;
 
   const isClient = typeof document !== "undefined";
+  const vvSize = useVisualViewportSize();
 
   // ESC to close + lock background scroll (only while open)
   useEffect(() => {
@@ -83,19 +126,33 @@ function ExplorerPopover(props: {
     };
   }, [open, onClose, isClient]);
 
-  const onBackdropMouseDown = (e: React.MouseEvent<HTMLDivElement>): void => {
-    if (e.target === e.currentTarget) onClose();
-  };
+  // ✅ FIX: hooks must never be conditional.
+  // Compute style every render, but return `undefined` when not mounted.
+  const overlayStyle = useMemo<CSSProperties | undefined>(() => {
+    if (!open || !isClient) return undefined;
 
+    // Use VisualViewport px to avoid iOS dynamic bars stealing scroll space.
+    // If vvSize is 0 (SSR), CSS handles fallback.
+    const h = vvSize.height;
+    const w = vvSize.width;
+
+    return {
+      height: h > 0 ? `${h}px` : undefined,
+      width: w > 0 ? `${w}px` : undefined,
+    };
+  }, [open, isClient, vvSize.height, vvSize.width]);
+
+  // Backdrop click-to-close is intentionally disabled for fullscreen (no “outside” area).
+  // Close via ✕ or Esc.
   if (!open || !isClient) return null;
 
   return createPortal(
     <div
       className="explorer-pop"
+      style={overlayStyle}
       role="dialog"
       aria-modal="true"
       aria-label="PhiStream Explorer"
-      onMouseDown={onBackdropMouseDown}
     >
       <div className="explorer-pop__panel" role="document">
         {/* ✅ NO HEADER TEXT. Only a floating close control. */}
@@ -196,48 +253,6 @@ function ExplorerRoute(): React.JSX.Element {
       </div>
     </>
   );
-}
-
-function useVisualViewportSize(): { width: number; height: number } {
-  const read = useCallback((): { width: number; height: number } => {
-    const vv = window.visualViewport;
-    if (vv) {
-      return {
-        width: Math.round(vv.width),
-        height: Math.round(vv.height),
-      };
-    }
-    return { width: window.innerWidth, height: window.innerHeight };
-  }, []);
-
-  const [size, setSize] = useState<{ width: number; height: number }>(() => {
-    if (typeof window === "undefined") return { width: 0, height: 0 };
-    return read();
-  });
-
-  useEffect(() => {
-    const vv = window.visualViewport;
-
-    const onResize = (): void => {
-      setSize(read());
-    };
-
-    window.addEventListener("resize", onResize, { passive: true });
-    if (vv) {
-      vv.addEventListener("resize", onResize, { passive: true });
-      vv.addEventListener("scroll", onResize, { passive: true });
-    }
-
-    return () => {
-      window.removeEventListener("resize", onResize);
-      if (vv) {
-        vv.removeEventListener("resize", onResize);
-        vv.removeEventListener("scroll", onResize);
-      }
-    };
-  }, [read]);
-
-  return size;
 }
 
 function AppChrome(): React.JSX.Element {

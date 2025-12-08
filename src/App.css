@@ -1312,24 +1312,23 @@ a:hover {
 
 /* ────────────────────────────────────────────────────────────────
    Explorer full-screen portal (PhiStream / ExplorerRoute)
+   ✅ FULL SCREEN WIDTH + ✅ SCROLLABLE BODY
    - NO header text (content is full-bleed)
    - Close “X” is a floating vault control (top-right)
    - Above EVERYTHING
 ──────────────────────────────────────────────────────────────── */
 
-/* Backdrop */
+/* Backdrop (FULL SCREEN; stretches, no centering card constraints) */
 .explorer-pop {
   position: fixed;
   inset: 0;
   z-index: 999999;
 
   display: grid;
-  place-items: center;
+  place-items: stretch;
 
-  padding: max(16px, env(safe-area-inset-top, 0px))
-    max(16px, env(safe-area-inset-right, 0px))
-    max(16px, env(safe-area-inset-bottom, 0px))
-    max(16px, env(safe-area-inset-left, 0px));
+  /* FULLSCREEN = no outer padding */
+  padding: 0;
 
   background: radial-gradient(
       1200px 900px at 18% 10%,
@@ -1356,14 +1355,14 @@ a:hover {
   }
 }
 
-/* Panel */
+/* Panel (FULL SCREEN WIDTH/HEIGHT) */
 .explorer-pop__panel {
   position: relative;
 
-  width: min(1100px, calc(100vw - 24px));
-  height: min(860px, calc(var(--vvh-px, 100dvh) - 24px));
+  width: 100%;
+  height: 100%;
 
-  border-radius: 22px;
+  border-radius: 0px;
   overflow: hidden;
 
   border: 1px solid rgba(51, 246, 255, 0.22);
@@ -1392,11 +1391,12 @@ a:hover {
   min-height: 0;
 }
 
+/* Optional inner rim */
 .explorer-pop__panel::before {
   content: "";
   position: absolute;
   inset: 1px;
-  border-radius: 21px;
+  border-radius: 0px;
   pointer-events: none;
   border: 1px solid rgba(255, 255, 255, 0.1);
   opacity: 0.75;
@@ -1436,16 +1436,51 @@ a:hover {
   }
 }
 
+/* ✅ SCROLLABLE BODY (this was the blocker: overflow: hidden) */
 .explorer-pop__body {
   position: relative;
   min-height: 0;
-  overflow: hidden;
+  height: 100%;
+
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+
+  /* keep content off the iOS home indicator + allow close button overlay at top */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  scroll-padding-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* optional: stable gutters */
+  scrollbar-gutter: stable both-edges;
 }
 
+/* scrollbars */
+.explorer-pop__body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(170, 241, 255, 0.18) transparent;
+}
+.explorer-pop__body::-webkit-scrollbar {
+  width: 10px;
+}
+.explorer-pop__body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.explorer-pop__body::-webkit-scrollbar-thumb {
+  background: rgba(170, 241, 255, 0.18);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+.explorer-pop__body::-webkit-scrollbar-thumb:hover {
+  background: rgba(170, 241, 255, 0.28);
+}
+
+/* Close control (safe-area aware, always visible) */
 .explorer-pop__close {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  right: calc(14px + env(safe-area-inset-right, 0px));
 
   width: 44px;
   height: 44px;
@@ -1575,22 +1610,8 @@ a:hover {
 
 @media (max-width: 520px) {
   .explorer-pop__close {
-    top: 12px;
-    right: 12px;
     width: 46px;
     height: 46px;
-  }
-}
-
-@media (max-height: 680px) {
-  .explorer-pop {
-    padding: max(10px, env(safe-area-inset-top, 0px))
-      max(10px, env(safe-area-inset-right, 0px))
-      max(10px, env(safe-area-inset-bottom, 0px))
-      max(10px, env(safe-area-inset-left, 0px));
-  }
-  .explorer-pop__panel {
-    height: min(860px, calc(var(--vvh-px, 100dvh) - 18px));
   }
 }
 
@@ -1656,6 +1677,7 @@ a:hover {
 .fullpage-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(170, 241, 255, 0.28);
 }
+
 /* ───────────────────────────────────────────────────────────────
    MOBILE VISIBILITY GUARANTEE — Sovereign Declarations trigger
    Fix: on short/mobile viewports, nav content can overflow but the page can’t scroll,
