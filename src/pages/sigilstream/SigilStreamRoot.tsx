@@ -756,7 +756,7 @@ function PayloadCard(props: {
           ) : (
             <>
               <div className="sf-seal__row">
-                <span className="sf-seal__label">Private (Sealed)</span>
+                <span className="sf-seal__label">Private</span>
 
                 <button
                   type="button"

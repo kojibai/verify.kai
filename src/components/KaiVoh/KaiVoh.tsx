@@ -426,6 +426,7 @@ async function encodeTokenWorkerFirst(payload: FeedPostPayload): Promise<EncodeW
       // If fallback succeeds, prefer it. If it also fails, return worker error.
       return fallback.ok ? fallback : res;
     }
+    
 
     return res;
   } catch {
