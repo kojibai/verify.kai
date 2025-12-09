@@ -698,7 +698,7 @@ function PayloadCard(props: {
   const modeLabelRaw =
     pickString(payload, ["mode", "source", "origin", "transport"]) ??
     pickString((payload as unknown as { meta?: unknown }).meta, ["mode", "source", "origin"]) ??
-    "Sovereign";
+    "Manual";
 
   // ✅ ONLY CHANGE: translate "manual" → "Sovereign" for display
   const modeLabel = normalizeFeedSourceLabel(modeLabelRaw);
