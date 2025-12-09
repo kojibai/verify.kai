@@ -218,13 +218,13 @@ function SigilActionUrlEmpty() {
     <div className="sf-reply-row sf-actionurl sf-actionurl--empty">
       <div className="sf-actionurl__head">
         <label className="sf-label sf-actionurl__label">
-          Proof of Breath™ <span className="sf-muted">(URL)</span>
+          Proof of Breath™ <span className="sf-muted">(Sigil-Glyph)</span>
         </label>
         <span className="sf-actionurl__pill is-warn">MISSING</span>
       </div>
 
       <div className="sf-warn sf-actionurl__warn" role="status">
-        No Proof of Breath™ URL detected; a fallback will be used.
+        No Proof of Breath™ sigil-glyph detected; a fallback will be used.
       </div>
     </div>
   );

@@ -160,9 +160,9 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
               type="button"
               onClick={onCopy}
               aria-pressed={copied}
-              data-state={copied ? "copied" : "idle"}
+              data-state={copied ? "remembered" : "idle"}
             >
-              {copied ? "Remembered" : "Remember Sigil"}
+              {copied ? "Remembered" : "Remember"}
             </button>
           </footer>
         </div>
