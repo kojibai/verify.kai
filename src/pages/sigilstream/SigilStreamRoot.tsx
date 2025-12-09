@@ -3,11 +3,11 @@
 
 /**
  * SigilStreamRoot — Memory Stream Shell
- * v7.3.3 — KOPY toast sound restored to v6.1 (gesture-synchronous)
+ * v7.5.0 — Sealed lock-screen + glyph upload gate (private posts)
  *
  * ✅ Keeps v7 features:
  *    - extractPayloadTokenFromLocation (ALL token forms)
- *    - Brotli-aware decodeFeedPayload
+ *    - Brotli-aware decodeFeedPayload (await-safe)
  *    - /p~ preferred share, hash fallback for huge tokens
  *    - per-thread verified session keyed off ANY token form
  *    - body renders: text | md (safe) | html (sanitized) | code
@@ -18,6 +18,15 @@
  * ✅ KOPY sound parity with v6.1:
  *    - NO await before toast push (preserves user-gesture audio gating)
  *    - Sync copy attempt first; async clipboard kicked off without await
+ *
+ * ✅ NEW (Private / Sealed UX):
+ *    - If payload.seal is present and not yet opened, page shows a lock-screen gate
+ *    - Gate includes SigilLogin (glyph upload) ONLY for sealed posts
+ *    - Once ΦKey is inhaled (verified session + meta present), UNSEAL becomes available
+ *    - Reply composer is hidden until sealed content is opened (prevents “reply blind”)
+ *    - Bridge supports postSeal exports:
+ *        • openSealedEnvelope/openSealedPayload/unsealEnvelope/unsealPayload (returns content)
+ *        • unsealEnvelopeV1 (returns {ok, inner})
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -53,7 +62,7 @@ import { StreamList } from "./list/StreamList";
 import SigilLogin from "../../components/KaiVoh/SigilLogin";
 import { useSigilAuth } from "../../components/KaiVoh/SigilAuthContext";
 
-/* Payload token extractor + Brotli-aware decoder */
+/* Payload token extractor + decoder */
 import {
   extractPayloadTokenFromLocation,
   TOKEN_HARD_LIMIT,
@@ -395,12 +404,20 @@ function coerceAttachmentManifest(v: unknown): AttachmentManifest | null {
 }
 
 /* ────────────────────────────────────────────────────────────────
-   Post body renderer
+   Post body renderer (HTML mode correctness)
 ──────────────────────────────────────────────────────────────── */
 
-function PostBodyView({ body, caption }: { body?: PostBody; caption?: string }): React.JSX.Element {
+function PostBodyView({
+  body,
+  caption,
+  isSealed,
+}: {
+  body?: PostBody;
+  caption?: string;
+  isSealed?: boolean;
+}): React.JSX.Element {
   const effectiveBody: PostBody | null =
-    body ?? (caption && caption.trim().length ? { kind: "text", text: caption } : null);
+    body ?? (!isSealed && caption && caption.trim().length ? { kind: "text", text: caption } : null);
 
   if (!effectiveBody) return <></>;
 
@@ -417,6 +434,16 @@ function PostBodyView({ body, caption }: { body?: PostBody; caption?: string }):
   if (effectiveBody.kind === "md") {
     const html = renderMarkdownToSafeHtml(effectiveBody.md);
     return <div className="sf-md" dangerouslySetInnerHTML={{ __html: html }} />;
+  }
+
+  // html
+  const mode = effectiveBody.mode ?? "code";
+  if (mode === "code") {
+    return (
+      <pre className="sf-code sf-code--html">
+        <code>{effectiveBody.html}</code>
+      </pre>
+    );
   }
 
   const cleaned = sanitizeHtml(effectiveBody.html);
@@ -449,7 +476,110 @@ function clamp255(n: number): number {
 }
 
 /* ────────────────────────────────────────────────────────────────
-   Payload card (uses AttachmentGallery)
+   Private (Sealed) unseal bridge (dynamic import)
+──────────────────────────────────────────────────────────────── */
+
+type UnsealedContent = {
+  body?: PostBody;
+  attachments?: unknown;
+  caption?: string;
+};
+
+type UnsealState =
+  | { status: "none" }
+  | { status: "sealed" }
+  | { status: "opening" }
+  | { status: "open"; content: UnsealedContent }
+  | { status: "error"; message: string };
+
+function isUnsealedContent(x: unknown): x is UnsealedContent {
+  if (!isRecord(x)) return false;
+  const body = x["body"];
+  const attachments = x["attachments"];
+  const caption = x["caption"];
+
+  const bodyOk = body === undefined || isRecord(body);
+  const captionOk = caption === undefined || typeof caption === "string";
+  const attOk = attachments === undefined || isRecord(attachments) || Array.isArray(attachments);
+
+  return bodyOk && captionOk && attOk;
+}
+
+function isFunction(x: unknown): x is (...args: readonly unknown[]) => unknown {
+  return typeof x === "function";
+}
+
+type UnsealOkShape = { ok: true; inner: unknown };
+
+function isUnsealOkShape(x: unknown): x is UnsealOkShape {
+  return isRecord(x) && x["ok"] === true && "inner" in x;
+}
+
+function extractSealTeaser(payload: FeedPostPayload): string | null {
+  const seal = isRecord(payload as unknown) ? (payload as unknown as Record<string, unknown>)["seal"] : undefined;
+  if (!seal) return null;
+  return pickString(seal, ["teaser", "preview", "hint", "caption"]) ?? null;
+}
+
+async function tryUnsealWithPostSealModule(args: {
+  seal: unknown;
+  meta: unknown;
+  svgText: string | null;
+}): Promise<UnsealedContent> {
+  const modUnknown = (await import("../../utils/postSeal")) as unknown;
+  const mod = isRecord(modUnknown) ? modUnknown : {};
+
+  const fnUnknown =
+    mod["openSealedEnvelope"] ??
+    mod["openSealedPayload"] ??
+    mod["unsealEnvelope"] ??
+    mod["unsealPayload"] ??
+    mod["unsealEnvelopeV1"] ??
+    null;
+
+  if (!isFunction(fnUnknown)) throw new Error("postSeal module is missing an unseal function.");
+
+  const fnName =
+    (isRecord(mod) &&
+      Object.entries(mod).find(([, v]) => v === fnUnknown)?.[0]) ??
+    "unseal";
+
+  // If module exposes unsealEnvelopeV1(env, creds), pass creds extracted from meta.
+  if (fnName === "unsealEnvelopeV1") {
+    const kaiSignature = typeof args.meta === "object" && args.meta !== null ? readStringProp(args.meta, "kaiSignature") : undefined;
+    const phiKey = typeof args.meta === "object" && args.meta !== null ? readStringProp(args.meta, "userPhiKey") : undefined;
+
+    if (!kaiSignature) throw new Error("Missing kaiSignature in meta (cannot unlock sealed envelope).");
+
+    const outUnknown = await Promise.resolve(fnUnknown(args.seal, { kaiSignature, phiKey }));
+    if (isUnsealOkShape(outUnknown)) {
+      const inner = outUnknown.inner;
+      if (!isRecord(inner)) throw new Error("Unseal returned non-object inner payload.");
+      const body = inner["body"];
+      const attachments = inner["attachments"];
+      const caption = inner["caption"];
+
+      const content: UnsealedContent = {};
+      if (body !== undefined && isRecord(body)) content.body = body as unknown as PostBody;
+      if (attachments !== undefined) content.attachments = attachments;
+      if (typeof caption === "string") content.caption = caption;
+      return content;
+    }
+
+    // Some implementations may return the content directly.
+    if (isUnsealedContent(outUnknown)) return outUnknown;
+
+    throw new Error("Unseal returned an unexpected shape.");
+  }
+
+  // Default contract: fn(seal, { meta, svgText? }) -> { body?, attachments?, caption? }
+  const outUnknown = await Promise.resolve(fnUnknown(args.seal, { meta: args.meta, svgText: args.svgText ?? undefined }));
+  if (!isUnsealedContent(outUnknown)) throw new Error("Unseal returned an unexpected shape.");
+  return outUnknown;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Payload card (uses AttachmentGallery + Private (Sealed) lock screen)
 ──────────────────────────────────────────────────────────────── */
 
 function PayloadCard(props: {
@@ -458,8 +588,40 @@ function PayloadCard(props: {
   manifest: AttachmentManifest | null;
   copied: boolean;
   onKopy: () => void;
+
+  // Private / sealed
+  isSealed: boolean;
+  unsealState: UnsealState;
+  canUnseal: boolean;
+  verifiedThisSession: boolean;
+  hasComposerMeta: boolean;
+  onVerifiedNow: () => void;
+  onResetVerified: () => void;
+  onUnseal: () => void;
+  onForgetUnsealed: () => void;
+
+  // Rendered content (may be unsealed)
+  body?: PostBody;
+  caption?: string;
 }): React.JSX.Element {
-  const { token, payload, manifest, copied, onKopy } = props;
+  const {
+    token,
+    payload,
+    manifest,
+    copied,
+    onKopy,
+    isSealed,
+    unsealState,
+    canUnseal,
+    verifiedThisSession,
+    hasComposerMeta,
+    onVerifiedNow,
+    onResetVerified,
+    onUnseal,
+    onForgetUnsealed,
+    body,
+    caption,
+  } = props;
 
   const pulse = payload.pulse;
   const { beat, step } = pulseToBeatStep(pulse);
@@ -500,10 +662,21 @@ function PayloadCard(props: {
     }
   }, [token, payload.url]);
 
+  const locked = isSealed && unsealState.status !== "open";
+  const teaser = useMemo(() => (isSealed ? extractSealTeaser(payload) : null), [isSealed, payload]);
+
+  const sealPill =
+    isSealed ? (
+      <span className="sf-pill sf-pill--sealed" title="Private (Sealed)">
+        🔒 SEALED
+      </span>
+    ) : null;
+
   return (
     <section className="sf-payload" role="region" aria-label="Loaded payload">
       <div className="sf-payload-line sf-tags">
         <span className="sf-pill sf-pill--mode">{modeLabel || "Manual"}</span>
+        {sealPill}
         {phiKey ? (
           <span className="sf-pill sf-pill--phikey" title={phiKey}>
             ΦKey <span className="sf-key">{phiKey}</span>
@@ -521,9 +694,86 @@ function PayloadCard(props: {
         <span className="sf-kai-label">{chakra}</span>
       </div>
 
-      <PostBodyView body={payload.body} caption={payload.caption} />
+      {isSealed ? (
+        <div className="sf-seal" role="group" aria-label="Private sealed content">
+          {unsealState.status === "open" ? (
+            <div className="sf-seal__row">
+              <span className="sf-seal__label">Unlocked</span>
+              <button type="button" className="sf-seal__btn" onClick={onForgetUnsealed} aria-label="Forget unsealed view">
+                FORGET
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="sf-seal__row">
+                <span className="sf-seal__label">Private (Sealed)</span>
 
-      {manifest ? <AttachmentGallery manifest={manifest} /> : null}
+                <button
+                  type="button"
+                  className="sf-seal__btn"
+                  onClick={onUnseal}
+                  disabled={!canUnseal || unsealState.status === "opening"}
+                  aria-label="Unseal private content"
+                >
+                  {unsealState.status === "opening" ? "UNSEALING…" : "UNSEAL"}
+                </button>
+              </div>
+
+              {teaser ? (
+                <div className="sf-seal__hint" role="note">
+                  {teaser}
+                </div>
+              ) : null}
+
+              {/* 🔒 LOCK SCREEN: glyph upload gate (ONLY for sealed posts) */}
+              <div className="sf-seal__gate" role="region" aria-label="Unlock gate">
+                {!verifiedThisSession ? (
+                  <>
+                    <div className="sf-seal__hint" role="note">
+                      Upload your glyph to inhale your ΦKey, then unseal.
+                    </div>
+                    <div className="sf-seal__login" aria-label="Glyph upload">
+                      <SigilLogin onVerified={onVerifiedNow} />
+                    </div>
+                  </>
+                ) : !hasComposerMeta ? (
+                  <>
+                    <div className="sf-seal__hint" role="note">
+                      Verified session detected, but no sigil metadata is present. Re-inhale your glyph.
+                    </div>
+                    <div className="sf-seal__login" aria-label="Glyph re-upload">
+                      <SigilLogin onVerified={onVerifiedNow} />
+                    </div>
+                    <div className="sf-seal__row">
+                      <button type="button" className="sf-seal__btn" onClick={onResetVerified} aria-label="Use a different key">
+                        USE DIFFERENT KEY
+                      </button>
+                    </div>
+                  </>
+                ) : !canUnseal ? (
+                  <div className="sf-seal__hint" role="note">
+                    Inhale your ΦKey to unseal.
+                  </div>
+                ) : null}
+
+                {unsealState.status === "error" ? (
+                  <div className="sf-seal__hint" role="note">
+                    {unsealState.message}
+                  </div>
+                ) : null}
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {/* If sealed and not open, do NOT render body/attachments (lock-screen view). */}
+      {!locked ? (
+        <>
+          <PostBodyView body={body} caption={caption} isSealed={false} />
+          {manifest ? <AttachmentGallery manifest={manifest} /> : null}
+        </>
+      ) : null}
 
       <div className="sf-reply-actions">
         <button
@@ -605,17 +855,25 @@ function SigilStreamInner(): React.JSX.Element {
     }
   }, []);
 
-  /** ---------- Payload (decoded from token; Brotli-aware) ---------- */
+  /** ---------- Payload (decoded from token) ---------- */
   const [activeToken, setActiveToken] = useState<string | null>(null);
   const [payload, setPayload] = useState<FeedPostPayload | null>(null);
   const [payloadError, setPayloadError] = useState<string | null>(null);
 
-  const payloadManifest = useMemo<AttachmentManifest | null>(() => {
-    const raw = payload ? (payload as unknown as { attachments?: unknown }).attachments : undefined;
-    return raw ? coerceAttachmentManifest(raw) : null;
-  }, [payload]);
-
   const autoAddGuardRef = useRef<string | null>(null);
+
+  /** ---------- Private: unseal state (in-memory only) ---------- */
+  const [unsealState, setUnsealState] = useState<UnsealState>({ status: "none" });
+
+  // reset unseal state when token changes / payload changes
+  useEffect(() => {
+    if (!payload) {
+      setUnsealState({ status: "none" });
+      return;
+    }
+    const hasSeal = isRecord(payload as unknown) && (payload as unknown as Record<string, unknown>)["seal"] !== undefined;
+    setUnsealState(hasSeal ? { status: "sealed" } : { status: "none" });
+  }, [payload]);
 
   const refreshPayloadFromLocation = useCallback(async () => {
     if (typeof window === "undefined") return;
@@ -827,6 +1085,80 @@ function SigilStreamInner(): React.JSX.Element {
     });
   };
 
+  /** ---------- Private (Sealed): unseal/forget ---------- */
+  const isSealed = useMemo(() => {
+    if (!payload) return false;
+    return isRecord(payload as unknown) && (payload as unknown as Record<string, unknown>)["seal"] !== undefined;
+  }, [payload]);
+
+  const canUnseal = useMemo(() => {
+    // Require inhaled ΦKey + meta; sealed content is keyed.
+    return Boolean(isSealed && verifiedThisSession && composerMeta);
+  }, [isSealed, verifiedThisSession, composerMeta]);
+
+  const onForgetUnsealed = useCallback(() => {
+    if (!payload) return;
+    setUnsealState(isSealed ? { status: "sealed" } : { status: "none" });
+    toasts.push("success", "Forgot unsealed view.");
+  }, [payload, isSealed, toasts]);
+
+  const onUnseal = useCallback(async () => {
+    if (!payload) return;
+
+    const seal = (payload as unknown as Record<string, unknown>)["seal"];
+    if (!seal) {
+      setUnsealState({ status: "error", message: "No seal present on this payload." });
+      return;
+    }
+
+    if (!verifiedThisSession || !composerMeta) {
+      setUnsealState({ status: "error", message: "Inhale your ΦKey to unseal." });
+      return;
+    }
+
+    setUnsealState({ status: "opening" });
+
+    try {
+      const content = await tryUnsealWithPostSealModule({
+        seal,
+        meta: composerMeta,
+        svgText: composerSvgText ?? null,
+      });
+
+      setUnsealState({ status: "open", content });
+      toasts.push("success", "Unsealed.");
+    } catch (e) {
+      report("unseal", e);
+      setUnsealState({
+        status: "error",
+        message: "Unseal failed. Wrong key, wrong seal, or missing postSeal implementation.",
+      });
+      toasts.push("warn", "Unseal failed.");
+    }
+  }, [payload, verifiedThisSession, composerMeta, composerSvgText, toasts]);
+
+  const lockedSealedView = useMemo(() => isSealed && unsealState.status !== "open", [isSealed, unsealState.status]);
+
+  /** ---------- Manifest/body/caption source (unsealed overrides) ---------- */
+  const effectiveBody = useMemo<PostBody | undefined>(() => {
+    if (unsealState.status === "open") return unsealState.content.body;
+    return payload?.body;
+  }, [payload, unsealState]);
+
+  const effectiveCaption = useMemo<string | undefined>(() => {
+    if (unsealState.status === "open") return unsealState.content.caption ?? payload?.caption;
+    return payload?.caption;
+  }, [payload, unsealState]);
+
+  const effectiveAttachmentsUnknown = useMemo<unknown>(() => {
+    if (unsealState.status === "open") return unsealState.content.attachments ?? (payload as unknown as { attachments?: unknown })?.attachments;
+    return (payload as unknown as { attachments?: unknown })?.attachments;
+  }, [payload, unsealState]);
+
+  const payloadManifest = useMemo<AttachmentManifest | null>(() => {
+    return effectiveAttachmentsUnknown ? coerceAttachmentManifest(effectiveAttachmentsUnknown) : null;
+  }, [effectiveAttachmentsUnknown]);
+
   /** ---------- KOPY (toast-driven sound + label flip; v6.1 parity) ---------- */
   const [copied, setCopied] = useState<boolean>(false);
   const copiedTimer = useRef<number | null>(null);
@@ -903,15 +1235,33 @@ function SigilStreamInner(): React.JSX.Element {
         <KaiStatus />
 
         {payload && activeToken ? (
-          <PayloadCard token={activeToken} payload={payload} manifest={payloadManifest} copied={copied} onKopy={onKopy} />
+          <PayloadCard
+            token={activeToken}
+            payload={payload}
+            manifest={payloadManifest}
+            copied={copied}
+            onKopy={onKopy}
+            isSealed={isSealed}
+            unsealState={unsealState}
+            canUnseal={canUnseal}
+            verifiedThisSession={verifiedThisSession}
+            hasComposerMeta={Boolean(composerMeta)}
+            onVerifiedNow={onVerifiedNow}
+            onResetVerified={onResetVerified}
+            onUnseal={onUnseal}
+            onForgetUnsealed={onForgetUnsealed}
+            body={effectiveBody}
+            caption={effectiveCaption}
+          />
         ) : payloadError ? (
           <div className="sf-error" role="alert">
             {payloadError}
           </div>
         ) : (
           <p className="sf-sub">
-            Open a payload link at <code>/stream/p/&lt;token&gt;</code> (or <code>/stream#t=&lt;token&gt;</code>). Replies are Kai-sealed and thread via{" "}
-            <code>?add=</code>. Short alias accepted: <code>/p~&lt;token&gt;</code> (and legacy <code>/p#t=</code>, <code>/p?t=</code>, <code>/stream?p=</code>).
+            Open a payload link at <code>/stream/p/&lt;token&gt;</code> (or <code>/stream#t=&lt;token&gt;</code>). Replies are Kai-sealed and thread
+            via <code>?add=</code>. Short alias accepted: <code>/p~&lt;token&gt;</code> (and legacy <code>/p#t=</code>, <code>/p?t=</code>,{" "}
+            <code>/stream?p=</code>).
           </p>
         )}
 
@@ -930,7 +1280,8 @@ function SigilStreamInner(): React.JSX.Element {
           </section>
         ) : null}
 
-        {payload && (
+        {/* 🔒 For sealed posts: hide Reply until unlocked (lock-screen flow). */}
+        {payload && !lockedSealedView ? (
           <section className="sf-reply" aria-labelledby="reply-title">
             <h2 id="reply-title" className="sf-reply-title">
               Reply
@@ -949,7 +1300,7 @@ function SigilStreamInner(): React.JSX.Element {
               <Composer meta={composerMeta} svgText={composerSvgText} onUseDifferentKey={onResetVerified} />
             )}
           </section>
-        )}
+        ) : null}
       </header>
 
       {/* ✅ EXACT v6.1 bottom behavior */}

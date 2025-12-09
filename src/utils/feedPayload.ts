@@ -15,6 +15,13 @@ export const ATTACHMENTS_VERSION = 1 as const;
 export const TOKEN_SOFT_BUDGET = 1800 as const; // prefer staying under this
 export const TOKEN_HARD_LIMIT = 3500 as const; // absolute cut-off for path usage
 
+/* ───────── Sealing (optional) ───────── */
+/**
+ * Optional sealed envelope (used by KaiVoh “Private (Sealed)” mode).
+ * Type-only import to avoid runtime coupling/cycles.
+ */
+import type { SealedEnvelopeV1 } from "./postSeal";
+
 /* ───────── Core Types ───────── */
 
 export type FeedSource = "x" | "manual";
@@ -91,12 +98,16 @@ export type Attachments = {
  *  - parentUrl: canonical immediate parent (sigil or stream URL)
  *  - originUrl: root origin of the thread (top-most sigil/stream)
  *  - parent:    legacy field, kept for back-compat; prefer parentUrl.
+ *
+ * Optional sealing:
+ *  - seal: encrypted envelope containing inner { body, attachments } for Private mode.
+ *          When present, outer payload SHOULD omit plaintext body/attachments.
  */
 export type FeedPostPayload = {
   v: typeof FEED_PAYLOAD_VERSION; // 2
   url: string; // sigil/action URL to render
 
-  /** Legacy/summary text. Prefer body for content. */
+  /** Legacy/summary text. Prefer body for content (or seal in Private mode). */
   caption?: string;
 
   /** v2 rich body (text/code/html/md). */
@@ -119,7 +130,10 @@ export type FeedPostPayload = {
   originUrl?: string;
 
   ts?: number; // unix ms (optional; never display)
-  attachments?: Attachments; // videos/images/files/url refs
+  attachments?: Attachments; // videos/images/files/url refs (plaintext mode)
+
+  /** Optional sealed envelope (Private mode). */
+  seal?: SealedEnvelopeV1;
 };
 
 /** Legacy payload (v1) decode-only. */
@@ -174,8 +188,7 @@ function isPostBodyCode(x: unknown): x is PostBodyCode {
 function isPostBodyHtml(x: unknown): x is PostBodyHtml {
   if (!isObject(x)) return false;
   const mode = x["mode"];
-  const okMode =
-    mode === undefined || mode === "code" || mode === "sanitized";
+  const okMode = mode === undefined || mode === "code" || mode === "sanitized";
   return x["kind"] === "html" && isString(x["html"]) && okMode;
 }
 function isPostBodyMarkdown(x: unknown): x is PostBodyMarkdown {
@@ -183,12 +196,7 @@ function isPostBodyMarkdown(x: unknown): x is PostBodyMarkdown {
   return x["kind"] === "md" && isString(x["md"]);
 }
 function isPostBody(x: unknown): x is PostBody {
-  return (
-    isPostBodyText(x) ||
-    isPostBodyCode(x) ||
-    isPostBodyHtml(x) ||
-    isPostBodyMarkdown(x)
-  );
+  return isPostBodyText(x) || isPostBodyCode(x) || isPostBodyHtml(x) || isPostBodyMarkdown(x);
 }
 function isOptionalPostBody(x: unknown): x is PostBody | undefined {
   return x === undefined || isPostBody(x);
@@ -198,11 +206,7 @@ function isOptionalPostBody(x: unknown): x is PostBody | undefined {
 
 function isAttachmentUrl(x: unknown): x is AttachmentUrl {
   if (!isObject(x)) return false;
-  return (
-    x["kind"] === "url" &&
-    isString(x["url"]) &&
-    isOptionalString(x["title"])
-  );
+  return x["kind"] === "url" && isString(x["url"]) && isOptionalString(x["title"]);
 }
 
 function isAttachmentFileRef(x: unknown): x is AttachmentFileRef {
@@ -234,9 +238,7 @@ function isAttachmentFileInline(x: unknown): x is AttachmentFileInline {
 }
 
 function isAttachmentItem(x: unknown): x is AttachmentItem {
-  return (
-    isAttachmentUrl(x) || isAttachmentFileRef(x) || isAttachmentFileInline(x)
-  );
+  return isAttachmentUrl(x) || isAttachmentFileRef(x) || isAttachmentFileInline(x);
 }
 
 function isAttachments(x: unknown): x is Attachments {
@@ -247,6 +249,12 @@ function isAttachments(x: unknown): x is Attachments {
   if (!isOptionalNumber(x["totalBytes"])) return false;
   if (!isOptionalNumber(x["inlinedBytes"])) return false;
   return true;
+}
+
+/* ───────── Seal guards (minimal; postSeal does deep validation) ───────── */
+
+function isOptionalSealEnvelope(x: unknown): x is Record<string, unknown> | undefined {
+  return x === undefined || isObject(x);
 }
 
 /* ───────── Feed payload guards ───────── */
@@ -269,7 +277,8 @@ export function isFeedPostPayload(x: unknown): x is FeedPostPayload {
     isOptionalString(x["parentUrl"]) &&
     isOptionalString(x["originUrl"]) &&
     isOptionalNumber(x["ts"]) &&
-    (x["attachments"] === undefined || isAttachments(x["attachments"]))
+    (x["attachments"] === undefined || isAttachments(x["attachments"])) &&
+    isOptionalSealEnvelope(x["seal"])
   );
 }
 
@@ -294,28 +303,83 @@ export function isFeedPostPayloadLegacy(x: unknown): x is FeedPostPayloadLegacy 
   );
 }
 
-/* ───────── Base64URL helpers (global-safe) ───────── */
+/* ───────── Base64URL helpers (byte-safe; no btoa/atob/Buffer) ───────── */
+
+const B64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const B64_TABLE: Int16Array = (() => {
+  const t = new Int16Array(256);
+  for (let i = 0; i < 256; i++) t[i] = -1;
+  for (let i = 0; i < B64_ALPHABET.length; i++) t[B64_ALPHABET.charCodeAt(i)] = i;
+  return t;
+})();
 
 function toBase64Url(bytes: Uint8Array): string {
-  let bin = "";
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  const b64 =
-    typeof globalThis.btoa === "function"
-      ? globalThis.btoa(bin)
-      : Buffer.from(bin, "binary").toString("base64");
-  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  const out: string[] = [];
+  const n = bytes.length;
+
+  let i = 0;
+  for (; i + 2 < n; i += 3) {
+    const x = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
+    out.push(
+      B64_ALPHABET[(x >>> 18) & 63] +
+        B64_ALPHABET[(x >>> 12) & 63] +
+        B64_ALPHABET[(x >>> 6) & 63] +
+        B64_ALPHABET[x & 63],
+    );
+  }
+
+  const rem = n - i;
+  if (rem === 1) {
+    const x = bytes[i] << 16;
+    out.push(B64_ALPHABET[(x >>> 18) & 63] + B64_ALPHABET[(x >>> 12) & 63] + "==");
+  } else if (rem === 2) {
+    const x = (bytes[i] << 16) | (bytes[i + 1] << 8);
+    out.push(B64_ALPHABET[(x >>> 18) & 63] + B64_ALPHABET[(x >>> 12) & 63] + B64_ALPHABET[(x >>> 6) & 63] + "=");
+  }
+
+  return out.join("").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 function fromBase64Url(token: string): Uint8Array {
-  const b64 =
-    token.replace(/-/g, "+").replace(/_/g, "/") +
-    "=".repeat((4 - (token.length % 4)) % 4);
-  const bin =
-    typeof globalThis.atob === "function"
-      ? globalThis.atob(b64)
-      : Buffer.from(b64, "base64").toString("binary");
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  const raw = (token ?? "").trim();
+  if (!raw) return new Uint8Array(0);
+
+  // base64url -> base64 (+ padding)
+  let b64 = raw.replace(/-/g, "+").replace(/_/g, "/");
+  b64 = b64.replace(/[\r\n\s]/g, "");
+  const pad = (4 - (b64.length % 4)) % 4;
+  if (pad) b64 += "=".repeat(pad);
+
+  const len = b64.length;
+  if (len % 4 !== 0) throw new Error("Invalid base64 length");
+
+  let outLen = (len / 4) * 3;
+  if (len >= 2 && b64[len - 2] === "=" && b64[len - 1] === "=") outLen -= 2;
+  else if (len >= 1 && b64[len - 1] === "=") outLen -= 1;
+
+  const out = new Uint8Array(outLen);
+
+  let o = 0;
+  for (let i = 0; i < len; i += 4) {
+    const c0 = b64.charCodeAt(i);
+    const c1 = b64.charCodeAt(i + 1);
+    const c2 = b64.charCodeAt(i + 2);
+    const c3 = b64.charCodeAt(i + 3);
+
+    const v0 = B64_TABLE[c0];
+    const v1 = B64_TABLE[c1];
+    const v2 = c2 === 61 /* '=' */ ? 64 : B64_TABLE[c2];
+    const v3 = c3 === 61 /* '=' */ ? 64 : B64_TABLE[c3];
+
+    if (v0 < 0 || v1 < 0 || v2 < 0 || v3 < 0) throw new Error("Invalid base64 character");
+
+    const triple = (v0 << 18) | (v1 << 12) | ((v2 & 63) << 6) | (v3 & 63);
+
+    out[o++] = (triple >>> 16) & 255;
+    if (v2 !== 64 && o < outLen) out[o++] = (triple >>> 8) & 255;
+    if (v3 !== 64 && o < outLen) out[o++] = triple & 255;
+  }
+
   return out;
 }
 
@@ -335,10 +399,7 @@ export function encodeFeedPayload(p: FeedPostPayload): string {
 export function normalizeLegacyPayload(p1: FeedPostPayloadLegacy): FeedPostPayload {
   const parentUrl = p1.parentUrl ?? p1.parent;
   const caption = p1.caption;
-  const body: PostBody | undefined =
-    caption && caption.trim()
-      ? { kind: "text", text: caption }
-      : undefined;
+  const body: PostBody | undefined = caption && caption.trim() ? { kind: "text", text: caption } : undefined;
 
   return {
     v: FEED_PAYLOAD_VERSION,
@@ -360,7 +421,6 @@ export function normalizeLegacyPayload(p1: FeedPostPayloadLegacy): FeedPostPaylo
 }
 
 export function decodeFeedPayload(token: string): FeedPostPayload | null {
-  
   try {
     if (!token || token.length > 1_000_000) return null; // defensive: refuse absurd inputs
     const bytes = fromBase64Url(token);
@@ -397,10 +457,7 @@ function hexOf(bytes: ArrayBufferLike): string {
 
 async function sha256Hex(bytes: ArrayBufferLike): Promise<string> {
   const ab = toArrayBuffer(bytes);
-  if (
-    typeof globalThis.crypto !== "undefined" &&
-    "subtle" in globalThis.crypto
-  ) {
+  if (typeof globalThis.crypto !== "undefined" && "subtle" in globalThis.crypto) {
     const digest = await globalThis.crypto.subtle.digest("SHA-256", ab);
     return hexOf(digest);
   }
@@ -431,9 +488,7 @@ function bytesFromBase64Url(b64url: string): Uint8Array {
 /**
  * Compute attachment size stats for a payload (or any object with attachments).
  */
-export function computeAttachmentStats(p: {
-  attachments?: Attachments;
-}): { totalBytes: number; inlinedBytes: number } {
+export function computeAttachmentStats(p: { attachments?: Attachments }): { totalBytes: number; inlinedBytes: number } {
   let total = 0;
   let inline = 0;
   const A = p.attachments?.items ?? [];
@@ -515,9 +570,7 @@ export async function materializeInlineToCache(
   const pruned = pruneThumbnails(p);
   if (!pruned.attachments || pruned.attachments.items.length === 0) return pruned;
 
-  const hasCaches =
-    typeof globalThis.caches !== "undefined" &&
-    typeof globalThis.caches.open === "function";
+  const hasCaches = typeof globalThis.caches !== "undefined" && typeof globalThis.caches.open === "function";
 
   // ✅ Never silently drop attachments
   if (!hasCaches) return pruned;
@@ -577,7 +630,6 @@ export async function materializeInlineToCache(
   };
 }
 
-
 /* ───────── Token helpers & URL builders ───────── */
 
 /**
@@ -585,9 +637,7 @@ export async function materializeInlineToCache(
  * - We always prune thumbnails first.
  * - If still too large for path usage, caller should prefer hash/#t=.
  */
-export function encodeTokenWithBudgets(
-  p: FeedPostPayload,
-): { token: string; withinSoft: boolean; withinHard: boolean } {
+export function encodeTokenWithBudgets(p: FeedPostPayload): { token: string; withinSoft: boolean; withinHard: boolean } {
   const pruned = pruneThumbnails(p);
   const token = encodeFeedPayload(pruned);
   return {
@@ -604,7 +654,11 @@ export function normalizePayloadToken(raw: string): string {
 
   // decode %xx if present
   if (/%[0-9A-Fa-f]{2}/.test(t)) {
-    try { t = decodeURIComponent(t); } catch { /* keep raw */ }
+    try {
+      t = decodeURIComponent(t);
+    } catch {
+      /* keep raw */
+    }
   }
 
   // '+' sometimes arrives as space in legacy query transport
@@ -623,12 +677,10 @@ export function extractPayloadTokenFromLocation(loc: Location = window.location)
     const hashParams = new URLSearchParams(loc.hash.startsWith("#") ? loc.hash.slice(1) : loc.hash);
     const searchParams = new URLSearchParams(loc.search);
 
-    const fromHash =
-      hashParams.get("t") ?? hashParams.get("p") ?? hashParams.get("token");
+    const fromHash = hashParams.get("t") ?? hashParams.get("p") ?? hashParams.get("token");
     if (fromHash) return normalizePayloadToken(fromHash);
 
-    const fromSearch =
-      searchParams.get("t") ?? searchParams.get("p") ?? searchParams.get("token");
+    const fromSearch = searchParams.get("t") ?? searchParams.get("p") ?? searchParams.get("token");
     if (fromSearch) return normalizePayloadToken(fromSearch);
 
     // /stream/p/<token> or /feed/p/<token>
@@ -692,14 +744,11 @@ export async function preparePayloadForLink(
   if (first.withinHard) return pruned;
 
   // 3) If there are no inline files, nothing to materialize; caller will use hash mode
-  const hasInline =
-    pruned.attachments?.items?.some((it) => it.kind === "file-inline") ?? false;
+  const hasInline = pruned.attachments?.items?.some((it) => it.kind === "file-inline") ?? false;
   if (!hasInline) return pruned;
 
   // 4) Try converting inline → cache-backed refs to shrink token
-  const hasCaches =
-    typeof globalThis.caches !== "undefined" &&
-    typeof globalThis.caches.open === "function";
+  const hasCaches = typeof globalThis.caches !== "undefined" && typeof globalThis.caches.open === "function";
 
   if (!hasCaches) {
     // ✅ Don’t silently drop: fail loudly so UI can tell the truth
@@ -713,8 +762,7 @@ export async function preparePayloadForLink(
 
   // If we still exceed hard budget AND inline remains (cache failed), fail loudly.
   const second = encodeTokenWithBudgets(withRefs);
-  const inlineStillPresent =
-    withRefs.attachments?.items?.some((it) => it.kind === "file-inline") ?? false;
+  const inlineStillPresent = withRefs.attachments?.items?.some((it) => it.kind === "file-inline") ?? false;
 
   if (!second.withinHard && inlineStillPresent) {
     throw new Error(
@@ -725,7 +773,6 @@ export async function preparePayloadForLink(
 
   return pruneThumbnails(withRefs);
 }
-
 
 export async function buildPreparedHashUrl(
   origin: string,
@@ -787,6 +834,9 @@ export function makeBasePayload(args: {
 
   ts?: number;
   attachments?: Attachments;
+
+  /** Optional sealed envelope (Private mode). */
+  seal?: SealedEnvelopeV1;
 }): FeedPostPayload {
   const parentUrl = args.parentUrl ?? args.parent;
 
@@ -794,9 +844,7 @@ export function makeBasePayload(args: {
   // (kept deterministic; no heuristics besides truncation).
   const derivedCaption =
     args.caption ??
-    (args.body?.kind === "text"
-      ? (args.body.text.length > 0 ? args.body.text : undefined)
-      : undefined);
+    (args.body?.kind === "text" ? (args.body.text.length > 0 ? args.body.text : undefined) : undefined);
 
   const p: FeedPostPayload = {
     v: FEED_PAYLOAD_VERSION,
@@ -814,6 +862,7 @@ export function makeBasePayload(args: {
     originUrl: args.originUrl,
     ts: args.ts,
     attachments: args.attachments,
+    seal: args.seal,
   };
   return p;
 }
@@ -845,13 +894,7 @@ export function makeInlineAttachment(params: {
   };
 }
 
-export function makeFileRefAttachment(params: {
-  sha256: string;
-  name?: string;
-  type?: string;
-  size?: number;
-  url?: string;
-}): AttachmentFileRef {
+export function makeFileRefAttachment(params: { sha256: string; name?: string; type?: string; size?: number; url?: string }): AttachmentFileRef {
   if (!/^[0-9a-f]{64}$/.test(params.sha256)) {
     throw new Error("sha256 must be 64 hex chars");
   }

@@ -3,10 +3,14 @@
 
 /**
  * KaiVoh — Stream Exhale Composer
- * v4.7 — FIX: real module-worker file (no Blob + no dynamic import inside worker)
- *        - iOS/Safari-safe: avoids blob-worker + import() CORS/CSP failures
- *        - Worker-first encode with deterministic main-thread fallback
+ * v5.0 — PRIVATE SEALING (real encryption, not “pulse lock”)
+ *        - 🔒 Optional “Private (Sealed)” mode: encrypts inner content BEFORE token encode
+ *        - Two access paths (choose one):
+ *           A) DERIVED GLYPH ACCESS: any derivative glyph exported from the issuer’s verifier unlocks
+ *           B) SPECIFIC GLYPH ACCESS: only uploaded/allowed glyph(s) can unlock (pulse-agnostic)
+ *        - Hard guard: private posts may NOT contain cache-only file-ref attachments (must be inline or URL)
  *        - Keeps SAME token format (encodeTokenWithBudgets from feedPayload)
+ *        - Worker-first encode with deterministic main-thread fallback (iOS/Safari-safe)
  *
  * Primary role:
  * - Exhale a /stream/p/<token> URL bound to the current verified Sigil.
@@ -43,6 +47,11 @@ import { useSigilAuth } from "./SigilAuthContext";
 import StoryRecorder, { type CapturedStory } from "./StoryRecorder";
 import { registerSigilUrl } from "../../utils/sigilRegistry";
 import { getOriginUrl } from "../../utils/sigilUrl";
+
+/* 🔒 Sealing utilities (new) */
+import { sealEnvelopeV1, makeSealSaltB64Url, type GlyphCredential, type SealedEnvelopeV1 } from "../../utils/postSeal";
+import { extractSigilAuthFromSvg } from "../../utils/sigilAuthExtract";
+import { deriveKaiSignatureB64Url } from "../../utils/derivedGlyph";
 
 /* ───────────────────────── Props ───────────────────────── */
 
@@ -286,6 +295,12 @@ type BodyKind = "text" | "code" | "md" | "html";
 type HtmlMode = "code" | "sanitized";
 type UrlItem = Extract<AttachmentItem, { kind: "url" }>;
 
+type SealMode = "derived" | "glyph";
+
+type AllowedGlyph = GlyphCredential & {
+  label: string; // file name or user label
+};
+
 /* ───────────────────────── Non-hanging encode (REAL Module Worker file) ───────────────────────── */
 
 type EncodeWorkerRequest = { id: string; payload: FeedPostPayload };
@@ -404,7 +419,6 @@ async function encodeTokenWorkerFirst(payload: FeedPostPayload): Promise<EncodeW
   }
 }
 
-
 /* ───────────────────────── Component ───────────────────────── */
 
 export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExhale }: KaiVohProps): ReactElement {
@@ -446,6 +460,14 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
   const [generatedUrl, setGeneratedUrl] = useState<string>("");
   const [tokenLength, setTokenLength] = useState<number>(0);
   const [urlMode, setUrlMode] = useState<"path" | "hash">("path");
+
+  /* 🔒 private seal states */
+  const [privateOn, setPrivateOn] = useState<boolean>(false);
+  const [sealMode, setSealMode] = useState<SealMode>("derived");
+  const [sealTeaser, setSealTeaser] = useState<string>(""); // optional public teaser
+  const [sealSalt, setSealSalt] = useState<string>(() => makeSealSaltB64Url(18)); // derived mode salt
+  const [allowedGlyphs, setAllowedGlyphs] = useState<AllowedGlyph[]>([]);
+  const [sealAdvanced, setSealAdvanced] = useState<boolean>(false);
 
   const dropRef = useRef<HTMLDivElement | null>(null);
   const hasVerifiedSigil = Boolean(sigilMeta);
@@ -492,6 +514,12 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
     setKaiSignature(readStringProp(sigilMeta, "kaiSignature") ?? "");
   }, [sigilMeta]);
 
+  /* If private mode turns on, ensure salt exists */
+  useEffect(() => {
+    if (!privateOn) return;
+    if (!sealSalt.trim()) setSealSalt(makeSealSaltB64Url(18));
+  }, [privateOn, sealSalt]);
+
   /* ───────────── Extra URL management ───────────── */
 
   const addExtraUrl = (): void => {
@@ -530,8 +558,17 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
     const baseItems = attachmentsRef.current.items.slice();
     const items = baseItems;
 
+    const skippedLarge: string[] = [];
+
     for (const f of fileList) {
       const displayName = fileNameWithPath(f);
+
+      // 🔒 Private hard-guard: no cache-only file-ref allowed.
+      // Instead of creating file-ref, we SKIP large files and instruct URL upload.
+      if (privateOn && f.size > MAX_INLINE_BYTES) {
+        skippedLarge.push(displayName);
+        continue;
+      }
 
       if (f.size <= MAX_INLINE_BYTES) {
         const buf = await f.arrayBuffer();
@@ -556,6 +593,15 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
           }),
         );
       }
+    }
+
+    if (skippedLarge.length > 0) {
+      const head = skippedLarge.slice(0, 3).join(", ");
+      const tail = skippedLarge.length > 3 ? ` (+${skippedLarge.length - 3} more)` : "";
+      setWarn(
+        `Private (Sealed) mode cannot include cache-backed large files. Skipped: ${head}${tail}. ` +
+          `Attach as a URL instead (Drive/S3/IPFS/etc), or keep files ≤ ${prettyBytes(MAX_INLINE_BYTES)}.`,
+      );
     }
 
     return makeAttachments(items);
@@ -598,6 +644,13 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
   }
 
   async function handleStoryCaptured(s: CapturedStory): Promise<void> {
+    // 🔒 Private hard-guard: StoryRecorder produces cache-backed video (file-ref).
+    if (privateOn) {
+      setWarn("Private (Sealed) mode cannot include recorded stories (cache-backed video refs). Upload as a URL instead.");
+      setStoryOpen(false);
+      return;
+    }
+
     const videoUrl = await cachePutAndUrl(s.sha256, s.file, { cacheName: "sigil-attachments-v1", pathPrefix: "/att/" });
 
     const videoRef = makeFileRefAttachment({
@@ -659,6 +712,106 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
     return trunc(one, 220);
   }, [effectiveBodyText, bodyKind, codeLang]);
 
+  /* ───────────── Private seal helpers ───────────── */
+
+  const hasFileRef = useMemo(() => attachmentsRef.current.items.some((it) => it.kind === "file-ref"), [attachments]);
+
+  const publicCaptionForPost = useMemo(() => {
+    if (!privateOn) return derivedCaption;
+    const t = sealTeaser.trim();
+    return t ? trunc(t, 220) : "Sealed Memory";
+  }, [privateOn, derivedCaption, sealTeaser]);
+
+  const canSealDerived = privateOn && sealMode === "derived" && hasVerifiedSigil && Boolean(kaiSignature.trim());
+  const canSealGlyph = privateOn && sealMode === "glyph" && allowedGlyphs.length > 0;
+
+  const privateSealStatus = useMemo(() => {
+    if (!privateOn) return null;
+
+    if (!hasVerifiedSigil) {
+      return <div className="composer-hint warn">Private (Sealed) requires a verified glyph session.</div>;
+    }
+
+    if (sealMode === "derived") {
+      if (!kaiSignature.trim()) {
+        return <div className="composer-hint warn">Derived access requires ΣSig (kaiSignature) present in your verified glyph.</div>;
+      }
+      if (!sealSalt.trim()) return <div className="composer-hint warn">Derivation salt missing — rotate to generate.</div>;
+      return (
+        <div className="composer-hint">
+          Mode: <strong>Derived Glyph Access</strong> • Any derivative glyph exported from this issuer glyph can unlock • Salt length{" "}
+          <strong>{sealSalt.trim().length}</strong>
+        </div>
+      );
+    }
+
+    if (allowedGlyphs.length === 0) {
+      return <div className="composer-hint warn">Mode: Specific Glyph Access requires at least one allowed glyph SVG uploaded.</div>;
+    }
+
+    return (
+      <div className="composer-hint">
+        Mode: <strong>Specific Glyph Access</strong> • Allowed glyphs <strong>{allowedGlyphs.length}</strong>
+      </div>
+    );
+  }, [privateOn, hasVerifiedSigil, sealMode, kaiSignature, sealSalt, allowedGlyphs.length]);
+
+  const addAllowedGlyphSvgs = async (picked: File[]): Promise<void> => {
+    if (picked.length === 0) return;
+
+    const added: AllowedGlyph[] = [];
+    const rejected: string[] = [];
+
+    for (const f of picked) {
+      try {
+        const txt = await f.text();
+        const mat = extractSigilAuthFromSvg(txt);
+        const gPhi = (mat.userPhiKey ?? "").trim();
+        const gSig = (mat.kaiSignature ?? "").trim();
+
+        if (!gPhi || !gSig) {
+          rejected.push(f.name);
+          continue;
+        }
+
+        added.push({
+          label: f.name,
+          phiKey: gPhi,
+          kaiSignature: gSig,
+          sigilId: (mat.sigilId ?? "").trim() ? (mat.sigilId ?? "").trim() : undefined,
+        });
+      } catch {
+        rejected.push(f.name);
+      }
+    }
+
+    if (added.length > 0) {
+      setAllowedGlyphs((prev) => {
+        const next = prev.slice();
+        const seen = new Set<string>(prev.map((x) => `${x.phiKey}:${x.kaiSignature}`));
+        for (const g of added) {
+          const k = `${g.phiKey}:${g.kaiSignature}`;
+          if (!seen.has(k)) {
+            seen.add(k);
+            next.push(g);
+          }
+        }
+        return next;
+      });
+      setWarn(null);
+    }
+
+    if (rejected.length > 0) {
+      const head = rejected.slice(0, 3).join(", ");
+      const tail = rejected.length > 3 ? ` (+${rejected.length - 3} more)` : "";
+      setWarn(`Some glyph SVGs were missing ΦKey/ΣSig metadata and were not added: ${head}${tail}.`);
+    }
+  };
+
+  const removeAllowedGlyph = (idx: number): void => {
+    setAllowedGlyphs((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   /* ───────────── Generate payload/link (with lineage + registry) ───────────── */
 
   const onGenerate = async (): Promise<void> => {
@@ -677,6 +830,28 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
 
     if (!looksSigil) {
       setWarn("Sigil verifikation URL not detected; using fallback. Link generation will still work.");
+    }
+
+    // 🔒 Private guard: do not allow cache-only file-ref attachments
+    if (privateOn) {
+      const mergedItemsPre: AttachmentItem[] = [...attachmentsRef.current.items, ...extraUrls];
+      if (mergedItemsPre.some((it) => it.kind === "file-ref")) {
+        setErr(
+          `Private (Sealed) mode cannot include cache-backed file refs. ` +
+            `Keep files ≤ ${prettyBytes(MAX_INLINE_BYTES)} (inline) or attach public URLs.`,
+        );
+        return;
+      }
+
+      if (sealMode === "derived" && !canSealDerived) {
+        setErr("Private (Sealed) → Derived mode requires a verified glyph with ΣSig (kaiSignature) present.");
+        return;
+      }
+
+      if (sealMode === "glyph" && !canSealGlyph) {
+        setErr("Private (Sealed) → Specific Glyph mode requires at least one allowed glyph SVG uploaded.");
+        return;
+      }
     }
 
     let pulse: number;
@@ -712,7 +887,7 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
       const basePayload: FeedPostPayload = makeBasePayload({
         url: rawUrl,
         pulse,
-        caption: derivedCaption,
+        caption: publicCaptionForPost,
         body: postBody,
         author: author.trim() ? author.trim() : undefined,
         source: "manual",
@@ -728,7 +903,8 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
       setStage("prepare");
       const tPrep0 = nowMs();
 
-      const prepared = await withTimeout(
+      // Prepare attachments for link (inline/url only for private; normal path otherwise)
+      const preparedFull = await withTimeout(
         preparePayloadForLink(basePayload, { cacheName: "sigil-attachments-v1", pathPrefix: "/att/" }),
         20_000,
         "preparePayloadForLink",
@@ -736,11 +912,60 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
 
       const prepareMs = nowMs() - tPrep0;
 
+      // 🔒 If private: seal inner content (body + attachments) and remove plaintext from outer payload
+      let payloadToEncode: FeedPostPayload = preparedFull;
+
+      if (privateOn) {
+        const inner = {
+          body: preparedFull.body ?? null,
+          attachments: preparedFull.attachments ?? null,
+        };
+
+        let envelope: SealedEnvelopeV1;
+
+        if (sealMode === "derived") {
+          const salt = sealSalt.trim() ? sealSalt.trim() : makeSealSaltB64Url(18);
+          if (salt !== sealSalt) setSealSalt(salt);
+
+          envelope = await sealEnvelopeV1({
+            inner,
+            teaser: publicCaptionForPost ?? undefined,
+            derived: {
+              issuerKaiSignature: kaiSignature,
+              issuerPhiKey: phiKey || undefined,
+              salt_b64url: salt,
+            },
+          });
+        } else {
+          const allowGlyphs: GlyphCredential[] = allowedGlyphs.map((g) => ({
+            phiKey: g.phiKey,
+            kaiSignature: g.kaiSignature,
+            sigilId: g.sigilId,
+          }));
+
+          envelope = await sealEnvelopeV1({
+            inner,
+            teaser: publicCaptionForPost ?? undefined,
+            allowGlyphs,
+          });
+        }
+
+        const sealedOuter = {
+          ...preparedFull,
+          body: undefined,
+          attachments: undefined,
+          // Attach the sealed envelope. This extends runtime payload shape.
+          seal: envelope,
+        } as unknown as FeedPostPayload;
+
+        payloadToEncode = sealedOuter;
+      }
+
       setStage("encode(worker)");
       const tEnc0 = nowMs();
 
       // ✅ Worker-first encode (real module worker), deterministic fallback if needed
-      const enc = await withTimeout(encodeTokenWorkerFirst(prepared), 30_000, "encodeTokenWithBudgets(worker)");
+      const enc = await withTimeout(encodeTokenWorkerFirst(payloadToEncode), 30_000, "encodeTokenWithBudgets(worker)");
 
       const encodeMs = nowMs() - tEnc0;
 
@@ -805,7 +1030,7 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
         totalBytes: mergedAttachments?.totalBytes,
       });
 
-      if (onExhale) onExhale({ shareUrl, token, payload: prepared });
+      if (onExhale) onExhale({ shareUrl, token, payload: payloadToEncode });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "Failed to generate link.";
       setErr(msg);
@@ -837,6 +1062,11 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
     setUrlMode("path");
     setStage("");
     setDiag(null);
+
+    // 🔒 Keep user’s sealing choices but reset content-adjacent fields
+    setSealTeaser("");
+    setSealAdvanced(false);
+
     if (storyPreview) {
       URL.revokeObjectURL(storyPreview.url);
       setStoryPreview(null);
@@ -899,6 +1129,207 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
     );
   }, [sigilActionUrl, copied]);
 
+  /* ───────────── Sealing UI panel ───────────── */
+
+  const sealingPanel = (
+    <div className="composer">
+      <label className="composer-label">Privacy Seal</label>
+
+      <div className="story-actions" style={{ alignItems: "center", gap: 10 }}>
+        <button
+          type="button"
+          className={`pill ${privateOn ? "prim" : "subtle"}`}
+          onClick={() => {
+            setPrivateOn((v) => !v);
+            setErr(null);
+            setWarn(null);
+          }}
+          title="Toggle Private (Sealed)"
+        >
+          {privateOn ? "Private: ON" : "Private: OFF"}
+        </button>
+
+        {privateOn && (
+          <>
+            <button
+              type="button"
+              className={`pill ${sealMode === "derived" ? "prim" : "subtle"}`}
+              onClick={() => setSealMode("derived")}
+              title="Derived glyph access"
+            >
+              Derived
+            </button>
+
+            <button
+              type="button"
+              className={`pill ${sealMode === "glyph" ? "prim" : "subtle"}`}
+              onClick={() => setSealMode("glyph")}
+              title="Specific glyph allowlist"
+            >
+              Specific Glyph
+            </button>
+
+            <button
+              type="button"
+              className={`pill ${sealAdvanced ? "prim" : "subtle"}`}
+              onClick={() => setSealAdvanced((v) => !v)}
+              title="Show advanced sealing details"
+            >
+              Advanced
+            </button>
+          </>
+        )}
+      </div>
+
+      {privateOn && (
+        <>
+          <div className="composer-hint">
+            Private (Sealed) encrypts <span className="mono">body + attachments</span> inside the token. The outer post remains verifiable (ΦKey/ΣSig)
+            but does not contain plaintext content.
+          </div>
+
+          <div className="composer" style={{ padding: 0, marginTop: 10 }}>
+            <label className="composer-label">Public teaser (optional)</label>
+            <input
+              className="composer-input"
+              type="text"
+              value={sealTeaser}
+              onChange={bind(setSealTeaser)}
+              placeholder="What should be visible without unlocking?"
+              maxLength={240}
+            />
+            <div className="composer-hint">
+              If empty, the public caption becomes <span className="mono">Sealed Memory</span>.
+            </div>
+          </div>
+
+          {sealMode === "derived" && (
+            <div className="composer" style={{ padding: 0, marginTop: 10 }}>
+              <label className="composer-label">Derivation salt (for verifier export)</label>
+              <div className="composer-input-row">
+                <input className="composer-input mono" type="text" readOnly value={sealSalt} />
+                <button
+                  type="button"
+                  className="composer-aux"
+                  onClick={() => setSealSalt(makeSealSaltB64Url(18))}
+                  title="Rotate derivation salt"
+                >
+                  Rotate
+                </button>
+                <button
+                  type="button"
+                  className="composer-aux"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(sealSalt);
+                      setCopied(true);
+                      window.setTimeout(() => setCopied(false), 900);
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
+                  title="Copy salt"
+                >
+                  Copy
+                </button>
+              </div>
+
+              {sealAdvanced && (
+                <div className="composer-hint mono" style={{ marginTop: 8 }}>
+                  {hasVerifiedSigil && kaiSignature.trim() ? (
+                    <>
+                      {`Derived ΣSig (b64url, post-scoped): `}
+                      <button
+                        type="button"
+                        className="pill subtle"
+                        onClick={async () => {
+                          try {
+                            const derived = await deriveKaiSignatureB64Url({ baseKaiSignature: kaiSignature, salt_b64url: sealSalt });
+                            await navigator.clipboard.writeText(derived);
+                            setCopied(true);
+                            window.setTimeout(() => setCopied(false), 900);
+                          } catch {
+                            /* ignore */
+                          }
+                        }}
+                        title="Copy derived signature"
+                      >
+                        Copy derived ΣSig
+                      </button>
+                      <span className="dim" style={{ marginLeft: 8 }}>
+                        (secret-equivalent; only for issuer export workflows)
+                      </span>
+                    </>
+                  ) : (
+                    "Derived preview unavailable (missing verified ΣSig)."
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {sealMode === "glyph" && (
+            <div className="composer" style={{ padding: 0, marginTop: 10 }}>
+              <label className="composer-label">Allowed glyphs (upload SVG)</label>
+
+              <div className="story-actions" style={{ alignItems: "center" }}>
+                <label className="pill">
+                  <input
+                    type="file"
+                    accept=".svg,image/svg+xml"
+                    multiple
+                    className="visually-hidden"
+                    onChange={async (e: ChangeEvent<HTMLInputElement>) => {
+                      const list = e.target.files ? Array.from(e.target.files) : [];
+                      e.currentTarget.value = "";
+                      if (list.length === 0) return;
+                      await addAllowedGlyphSvgs(list);
+                    }}
+                  />
+                  Add allowed glyphs…
+                </label>
+
+                {allowedGlyphs.length > 0 && (
+                  <button type="button" className="pill subtle" onClick={() => setAllowedGlyphs([])} title="Clear allowlist">
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {allowedGlyphs.length > 0 && (
+                <ul className="url-list" style={{ marginTop: 10 }}>
+                  {allowedGlyphs.map((g, i) => (
+                    <li key={`${g.phiKey}:${g.kaiSignature}:${i}`} className="url-item" style={{ alignItems: "center" }}>
+                      <span className="badge">glyph</span>
+                      <span className="mono">{trunc(g.label, 36)}</span>
+                      <span className="dim" style={{ marginLeft: 10 }}>
+                        ΦKey {short(g.phiKey, 10, 8)}
+                      </span>
+                      <button type="button" className="pill danger" onClick={() => removeAllowedGlyph(i)} title="Remove glyph">
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div className="composer-hint" style={{ marginTop: 8 }}>
+                This is <strong>not</strong> pulse-locked — if a user possesses an allowed glyph (its ΣSig), they can unlock sealed posts across pulses.
+              </div>
+            </div>
+          )}
+
+          <div className="composer-hint warn" style={{ marginTop: 10 }}>
+            Private (Sealed) hard-guard: no cache-backed <span className="mono">file-ref</span> attachments. Use URLs or keep files ≤{" "}
+            <strong>{prettyBytes(MAX_INLINE_BYTES)}</strong>.
+          </div>
+
+          {privateSealStatus}
+        </>
+      )}
+    </div>
+  );
+
   /* ───────────── Attachments panel ───────────── */
 
   const attachmentsPanel = (
@@ -910,10 +1341,17 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
         <div className="story-actions">
           <button
             type="button"
-            className="pill prim icon-only"
+            className={`pill prim icon-only${privateOn ? " disabled" : ""}`}
             aria-label="Open Memory Recorder"
-            title="Record story"
-            onClick={() => setStoryOpen(true)}
+            title={privateOn ? "Private mode: story capture is disabled (cache-backed)" : "Record story"}
+            onClick={() => {
+              if (privateOn) {
+                setWarn("Private (Sealed) mode disables story recording (cache-backed file refs). Add as URL instead.");
+                return;
+              }
+              setStoryOpen(true);
+            }}
+            disabled={privateOn}
           >
             <IconCamRecord />
           </button>
@@ -974,7 +1412,15 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
       <div ref={dropRef} className="dropzone" onDragOver={onDragOver} onDrop={onDrop} aria-label="Drop files or folders here">
         <div className="dropzone-inner">
           <div className="dz-title">Seal documents or folders</div>
-          <div className="dz-sub">Tiny files get inlined; large files become cache-backed refs.</div>
+          <div className="dz-sub">
+            Tiny files get inlined; large files become cache-backed refs.
+            {privateOn ? (
+              <>
+                {" "}
+                <strong>(Private mode skips large files.)</strong>
+              </>
+            ) : null}
+          </div>
           <div className="dz-actions">
             <label className="pill">
               <input type="file" multiple onChange={onPickFiles} className="visually-hidden" />
@@ -1042,8 +1488,9 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
           </ul>
 
           {attachments.items.some((i) => i.kind === "file-ref") && (
-            <div className="composer-hint warn">
-              Large files are cached and referenced by SHA-256. You can also host publicly (Drive/S3/IPFS) and attach the public URL above.
+            <div className={`composer-hint ${privateOn ? "warn" : ""}`}>
+              Large files are cached and referenced by SHA-256.
+              {privateOn ? " Private (Sealed) will refuse these — attach public URLs instead." : " You can also host publicly and attach the public URL above."}
             </div>
           )}
         </div>
@@ -1063,6 +1510,12 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
           ? "Write HTML… (default renders as escaped code unless sanitized by the stream UI)"
           : "What Resonants About This Moment…";
 
+  const disableGenerate =
+    busy ||
+    (privateOn && sealMode === "derived" && !canSealDerived) ||
+    (privateOn && sealMode === "glyph" && !canSealGlyph) ||
+    (privateOn && hasFileRef);
+
   return (
     <div className="social-connector-container">
       <h2 className="social-connector-title">KaiVoh</h2>
@@ -1072,6 +1525,8 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
 
       {identityBanner}
       {urlPreview}
+
+      {sealingPanel}
 
       <div className="composer">
         <label className="composer-label">Body Format</label>
@@ -1117,6 +1572,7 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
 
         <div className="composer-hint">
           v2 posts include <span className="mono">body.kind</span> so the stream can render code as code (escaped) instead of treating everything as plain text.
+          {privateOn ? <> In Private mode, the body is sealed and not visible until unlocked.</> : null}
         </div>
       </div>
 
@@ -1178,8 +1634,14 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
       )}
 
       <div className="composer-actions">
-        <button type="button" onClick={onGenerate} className="composer-submit" disabled={busy} title="Exhale Stream URL">
-          {busy ? `Exhaling…${stage ? ` (${stage})` : ""}` : "Exhale Stream URL"}
+        <button
+          type="button"
+          onClick={onGenerate}
+          className="composer-submit"
+          disabled={disableGenerate}
+          title={disableGenerate ? "Fix sealing requirements / attachments to proceed" : "Exhale Stream URL"}
+        >
+          {busy ? `Exhaling…${stage ? ` (${stage})` : ""}` : privateOn ? "Exhale Sealed Stream URL" : "Exhale Stream URL"}
         </button>
         <button type="button" className="composer-reset" onClick={onReset}>
           Reset
@@ -1215,6 +1677,12 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
             Token length: <strong>{tokenLength.toLocaleString()}</strong> chars • URL mode:{" "}
             <strong>{urlMode === "path" ? "path" : "hash"}</strong> • soft {TOKEN_SOFT_BUDGET.toLocaleString()} • hard{" "}
             {TOKEN_HARD_LIMIT.toLocaleString()}
+            {privateOn ? (
+              <>
+                {" "}
+                • <strong>sealed</strong>
+              </>
+            ) : null}
           </p>
         </div>
       )}
