@@ -18,11 +18,6 @@
  *    - toast push triggers same toast system + sound
  *    - copies ONE canonical share link (short alias when safe)
  *    - no inline styling (className only)
- *
- * ✅ NEW: Rich URL cards (favicons + embeds + OG previews)
- *    - Any URL that can embed will embed (provider-aware)
- *    - Always shows favicon + domain + title/desc (best-effort)
- *    - Lazy loads previews (IntersectionObserver) + caches metadata
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -48,10 +43,11 @@ import { coerceAuth, readStringProp, report } from "./core/utils";
 import { IdentityBar } from "./identity/IdentityBar";
 import { SigilActionUrl } from "./identity/SigilActionUrl";
 
-/* Inhaler / Composer / Status */
+/* Inhaler / Composer / Status / List */
 import { InhaleSection } from "./inhaler/InhaleSection";
 import { Composer } from "./composer/Composer";
 import { KaiStatus } from "./status/KaiStatus";
+import { StreamList } from "./list/StreamList";
 
 /* External app hooks (existing app) */
 import SigilLogin from "../../components/KaiVoh/SigilLogin";
@@ -178,16 +174,18 @@ function shortAliasUrl(token: string): string {
 function preferredShareUrl(token: string): string {
   return token.length <= TOKEN_HARD_LIMIT ? shortAliasUrl(token) : canonicalizeCurrentStreamUrl(token);
 }
-
 function normalizeIncomingToken(raw: string): string {
   let t = raw.trim();
 
   // If someone passed a whole URL instead of just a token, extract from it.
   try {
     const u = new URL(t);
+    // Prefer explicit t= / p= in hash/search
     const h = new URLSearchParams(u.hash.startsWith("#") ? u.hash.slice(1) : u.hash);
     const s = new URLSearchParams(u.search);
-    const got = h.get("t") ?? h.get("p") ?? h.get("token") ?? s.get("t") ?? s.get("p") ?? s.get("token");
+    const got =
+      h.get("t") ?? h.get("p") ?? h.get("token") ??
+      s.get("t") ?? s.get("p") ?? s.get("token");
     if (got) t = got;
     else if (/\/p~/.test(u.pathname)) t = u.pathname.split("/p~")[1] ?? t;
     else if (/\/stream\/p\//.test(u.pathname)) t = u.pathname.split("/stream/p/")[1] ?? t;
@@ -197,11 +195,7 @@ function normalizeIncomingToken(raw: string): string {
 
   // Decode %xx if present
   if (/%[0-9A-Fa-f]{2}/.test(t)) {
-    try {
-      t = decodeURIComponent(t);
-    } catch {
-      /* keep raw */
-    }
+    try { t = decodeURIComponent(t); } catch { /* keep raw */ }
   }
 
   // Query/base64 legacy: '+' may come through as space; restore it.
@@ -213,41 +207,6 @@ function normalizeIncomingToken(raw: string): string {
   }
 
   return t;
-}
-
-function safeHttpUrl(u: string): string | null {
-  try {
-    const url = new URL(u);
-    if (url.protocol === "http:" || url.protocol === "https:") return url.toString();
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function urlHost(u: string): string {
-  try {
-    return new URL(u).host;
-  } catch {
-    return "";
-  }
-}
-
-function urlHostPretty(u: string): string {
-  const h = urlHost(u);
-  return h.replace(/^www\./, "");
-}
-
-function faviconFor(url: string): string | null {
-  try {
-    const u = new URL(url);
-    const host = u.hostname;
-    if (!host) return null;
-    // DuckDuckGo tends to be solid; Google fallback in CSS if needed.
-    return `https://icons.duckduckgo.com/ip3/${host}.ico`;
-  } catch {
-    return null;
-  }
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -299,6 +258,16 @@ function escapeHtml(s: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function safeHttpUrl(u: string): string | null {
+  try {
+    const url = new URL(u);
+    if (url.protocol === "http:" || url.protocol === "https:") return url.toString();
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -379,472 +348,7 @@ function renderMarkdownToSafeHtml(md: string): string {
 }
 
 /* ────────────────────────────────────────────────────────────────
-   Rich link previews (favicons + embeds + OG meta)
-──────────────────────────────────────────────────────────────── */
-
-type LinkMeta = {
-  title?: string;
-  description?: string;
-  siteName?: string;
-  image?: string;
-};
-
-const META_CACHE = new Map<string, LinkMeta>();
-
-function absUrl(base: string, maybeRel: string): string {
-  try {
-    return new URL(maybeRel, base).toString();
-  } catch {
-    return maybeRel;
-  }
-}
-
-function pickMeta(doc: Document, selector: string): string | undefined {
-  const el = doc.querySelector(selector);
-  const v = el?.getAttribute("content") ?? el?.getAttribute("href") ?? undefined;
-  return v && v.trim().length ? v.trim() : undefined;
-}
-
-// Best-effort, CORS-safe fetch via jina proxy.
-// If you later add your own endpoint (recommended), swap this function.
-async function fetchLinkMeta(url: string, signal?: AbortSignal): Promise<LinkMeta | null> {
-  const safe = safeHttpUrl(url);
-  if (!safe) return null;
-
-  const cached = META_CACHE.get(safe);
-  if (cached) return cached;
-
-  const proxy = `https://r.jina.ai/${safe}`;
-
-  try {
-    const res = await fetch(proxy, {
-      method: "GET",
-      mode: "cors",
-      signal,
-      headers: {
-        "Accept": "text/html, text/plain;q=0.9,*/*;q=0.1",
-      },
-    });
-
-    if (!res.ok) return null;
-
-    const text = await res.text();
-    if (!text || text.length < 20) return null;
-
-    // Parse as HTML (safe: we never inject it)
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(text, "text/html");
-
-    const ogTitle = pickMeta(doc, 'meta[property="og:title"]');
-    const ogDesc = pickMeta(doc, 'meta[property="og:description"]');
-    const ogSite = pickMeta(doc, 'meta[property="og:site_name"]');
-    const ogImage = pickMeta(doc, 'meta[property="og:image"]');
-
-    const twTitle = pickMeta(doc, 'meta[name="twitter:title"]');
-    const twDesc = pickMeta(doc, 'meta[name="twitter:description"]');
-    const twImage = pickMeta(doc, 'meta[name="twitter:image"]');
-
-    const titleTag = doc.querySelector("title")?.textContent?.trim() || undefined;
-    const descTag = pickMeta(doc, 'meta[name="description"]');
-
-    const meta: LinkMeta = {
-      title: ogTitle ?? twTitle ?? titleTag,
-      description: ogDesc ?? twDesc ?? descTag,
-      siteName: ogSite,
-      image: ogImage ?? twImage,
-    };
-
-    // Normalize image to absolute
-    if (meta.image) meta.image = absUrl(safe, meta.image);
-
-    META_CACHE.set(safe, meta);
-    return meta;
-  } catch {
-    return null;
-  }
-}
-function useInView<T extends Element>(): { ref: React.RefCallback<T>; inView: boolean } {
-  const ioSupported = typeof window !== "undefined" && typeof IntersectionObserver !== "undefined";
-
-  // If there is no IntersectionObserver, treat everything as "in view" by default.
-  const [inView, setInView] = useState<boolean>(() => !ioSupported);
-
-  const ioRef = useRef<IntersectionObserver | null>(null);
-
-  const ref = useCallback(
-    (node: T | null) => {
-      // Reset any prior observer
-      if (ioRef.current) {
-        ioRef.current.disconnect();
-        ioRef.current = null;
-      }
-
-      if (!ioSupported) return; // inView already true via initial state
-      if (!node) return;
-
-      const io = new IntersectionObserver(
-        (entries) => {
-          for (const e of entries) {
-            if (e.target === node && e.isIntersecting) {
-              setInView(true);
-              io.disconnect();
-              break;
-            }
-          }
-        },
-        { root: null, rootMargin: "250px 0px", threshold: 0.01 },
-      );
-
-      ioRef.current = io;
-      io.observe(node);
-    },
-    [ioSupported],
-  );
-
-  useEffect(() => {
-    return () => {
-      if (ioRef.current) {
-        ioRef.current.disconnect();
-        ioRef.current = null;
-      }
-    };
-  }, []);
-
-  return { ref, inView };
-}
-
-function useLinkMeta(url: string, enabled: boolean): LinkMeta | null {
-  const safe = safeHttpUrl(url) ?? "";
-
-  // Read cache during render (no state update needed).
-  const cached: LinkMeta | null = safe ? (META_CACHE.get(safe) ?? null) : null;
-
-  type FetchedMeta = { safe: string; meta: LinkMeta };
-  const [fetched, setFetched] = useState<FetchedMeta | null>(null);
-
-  const fetchedForThisUrl = fetched && fetched.safe === safe ? fetched.meta : null;
-
-  useEffect(() => {
-    if (!enabled) return;
-    if (!safe) return;
-
-    // If cache already has it, do nothing (render will pick it up via `cached`).
-    if (META_CACHE.has(safe)) return;
-
-    const ac = new AbortController();
-
-    (async () => {
-      const m = await fetchLinkMeta(safe, ac.signal);
-      if (m) setFetched({ safe, meta: m }); // async update only
-    })().catch(() => void 0);
-
-    return () => ac.abort();
-  }, [safe, enabled]);
-
-  return cached ?? fetchedForThisUrl;
-}
-
-
-
-/* Provider-aware embed mapping (safe list) */
-type EmbedSpec =
-  | { kind: "image"; src: string; alt: string }
-  | { kind: "audio"; src: string }
-  | { kind: "video"; src: string }
-  | { kind: "iframe"; src: string; title: string; aspect?: "16:9" | "1:1" | "9:16" }
-  | { kind: "none" };
-
-function youtubeId(u: URL): string | null {
-  const host = u.hostname.replace(/^www\./, "");
-  if (host === "youtu.be") {
-    const id = u.pathname.replace(/^\/+/, "").split("/")[0];
-    return id || null;
-  }
-  if (host === "youtube.com" || host === "m.youtube.com") {
-    const v = u.searchParams.get("v");
-    if (v) return v;
-    // /shorts/<id>
-    const m = u.pathname.match(/\/shorts\/([^/]+)/);
-    if (m?.[1]) return m[1];
-    // /embed/<id>
-    const e = u.pathname.match(/\/embed\/([^/]+)/);
-    if (e?.[1]) return e[1];
-  }
-  return null;
-}
-
-function vimeoId(u: URL): string | null {
-  const host = u.hostname.replace(/^www\./, "");
-  if (host !== "vimeo.com" && host !== "player.vimeo.com") return null;
-  const m = u.pathname.match(/\/(\d+)/);
-  return m?.[1] ?? null;
-}
-
-function isDirectImage(u: URL): boolean {
-  return /\.(png|jpg|jpeg|gif|webp|avif|svg)$/i.test(u.pathname);
-}
-
-function isDirectAudio(u: URL): boolean {
-  return /\.(mp3|wav|m4a|aac|ogg)$/i.test(u.pathname);
-}
-
-function isDirectVideo(u: URL): boolean {
-  return /\.(mp4|webm|mov|m4v)$/i.test(u.pathname);
-}
-
-function spotifyEmbed(u: URL): string | null {
-  const host = u.hostname.replace(/^www\./, "");
-  if (host !== "open.spotify.com") return null;
-  // /track/<id>, /album/<id>, /playlist/<id>, /episode/<id>, /show/<id>
-  const parts = u.pathname.split("/").filter(Boolean);
-  if (parts.length >= 2) {
-    const type = parts[0];
-    const id = parts[1];
-    if (type && id) return `https://open.spotify.com/embed/${type}/${id}`;
-  }
-  return null;
-}
-
-function soundcloudEmbed(u: URL): string | null {
-  const host = u.hostname.replace(/^www\./, "");
-  if (host !== "soundcloud.com" && host !== "m.soundcloud.com") return null;
-  return `https://w.soundcloud.com/player/?url=${encodeURIComponent(u.toString())}`;
-}
-
-function figmaEmbed(u: URL): string | null {
-  const host = u.hostname.replace(/^www\./, "");
-  if (host !== "figma.com") return null;
-  return `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(u.toString())}`;
-}
-
-// X/Twitter embed (best-effort) via twitframe
-function twitframeEmbed(u: URL): string | null {
-  const host = u.hostname.replace(/^www\./, "");
-  if (host !== "twitter.com" && host !== "x.com") return null;
-  // twitframe expects full tweet URL
-  return `https://twitframe.com/show?url=${encodeURIComponent(u.toString())}`;
-}
-
-function getEmbedSpec(url: string): EmbedSpec {
-  const safe = safeHttpUrl(url);
-  if (!safe) return { kind: "none" };
-
-  try {
-    const u = new URL(safe);
-
-    // direct media
-    if (isDirectImage(u)) return { kind: "image", src: safe, alt: urlHostPretty(safe) || "image" };
-    if (isDirectAudio(u)) return { kind: "audio", src: safe };
-    if (isDirectVideo(u)) return { kind: "video", src: safe };
-
-    // providers
-    const yid = youtubeId(u);
-    if (yid) {
-      return {
-        kind: "iframe",
-        src: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(yid)}`,
-        title: "YouTube",
-        aspect: "16:9",
-      };
-    }
-
-    const vid = vimeoId(u);
-    if (vid) {
-      return { kind: "iframe", src: `https://player.vimeo.com/video/${encodeURIComponent(vid)}`, title: "Vimeo", aspect: "16:9" };
-    }
-
-    const sp = spotifyEmbed(u);
-    if (sp) return { kind: "iframe", src: sp, title: "Spotify", aspect: "1:1" };
-
-    const sc = soundcloudEmbed(u);
-    if (sc) return { kind: "iframe", src: sc, title: "SoundCloud", aspect: "16:9" };
-
-    const fg = figmaEmbed(u);
-    if (fg) return { kind: "iframe", src: fg, title: "Figma", aspect: "16:9" };
-
-    const tf = twitframeEmbed(u);
-    if (tf) return { kind: "iframe", src: tf, title: "X", aspect: "16:9" };
-
-    return { kind: "none" };
-  } catch {
-    return { kind: "none" };
-  }
-}
-
-function SmartEmbed({ url }: { url: string }): React.JSX.Element | null {
-  const spec = getEmbedSpec(url);
-  if (spec.kind === "none") return null;
-
-  if (spec.kind === "image") {
-    return (
-      <div className="sf-embed sf-embed--image">
-        <img className="sf-embed__img" src={spec.src} alt={spec.alt} loading="lazy" referrerPolicy="no-referrer" />
-      </div>
-    );
-  }
-
-  if (spec.kind === "audio") {
-    return (
-      <div className="sf-embed sf-embed--audio">
-        <audio className="sf-embed__media" controls preload="none" src={spec.src} />
-      </div>
-    );
-  }
-
-  if (spec.kind === "video") {
-    return (
-      <div className="sf-embed sf-embed--video">
-        <video className="sf-embed__media" controls preload="metadata" src={spec.src} />
-      </div>
-    );
-  }
-
-  const aspectClass =
-    spec.aspect === "9:16" ? "sf-embed--9x16" : spec.aspect === "1:1" ? "sf-embed--1x1" : "sf-embed--16x9";
-
-  return (
-    <div className={`sf-embed ${aspectClass}`}>
-      <iframe
-        className="sf-embed__frame"
-        src={spec.src}
-        title={spec.title}
-        loading="lazy"
-        referrerPolicy="no-referrer"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowFullScreen
-      />
-    </div>
-  );
-}
-
-function RichLinkCard(props: {
-  url: string;
-  onInhale?: (u: string) => void;
-  toast?: (kind: "success" | "warn" | "info", msg: string) => void;
-}): React.JSX.Element {
-  const { url, onInhale, toast } = props;
-  const safe = safeHttpUrl(url);
-  const host = safe ? urlHostPretty(safe) : "Invalid URL";
-  const fav = safe ? faviconFor(safe) : null;
-
-const { ref, inView } = useInView<HTMLElement>();
-
-  const meta = useLinkMeta(safe ?? "", inView);
-
-  const title = meta?.title?.trim() || host;
-  const desc = meta?.description?.trim() || "";
-  const site = meta?.siteName?.trim() || "";
-
-  const ogImgSafe = meta?.image ? safeHttpUrl(meta.image) : null;
-
-  const [copied, setCopied] = useState(false);
-  const tRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (tRef.current !== null) window.clearTimeout(tRef.current);
-    };
-  }, []);
-
-  const onCopyUrl = useCallback(async () => {
-    if (!safe) return;
-    try {
-      await writeClipboardText(safe);
-      setCopied(true);
-      if (tRef.current !== null) window.clearTimeout(tRef.current);
-      tRef.current = window.setTimeout(() => setCopied(false), 900);
-      toast?.("success", "Link kopied.");
-    } catch {
-      toast?.("warn", "Copy failed. Select the address bar.");
-    }
-  }, [safe, toast]);
-
-  const onInhaleClick = useCallback(() => {
-    if (!safe) return;
-    onInhale?.(safe);
-    toast?.("success", "Inhaled into your stream.");
-  }, [safe, onInhale, toast]);
-
-  return (
-    <article ref={ref} className="sf-linkcard" role="article" aria-label="Link preview">
-      <header className="sf-linkcard__head">
-        <div className="sf-linkcard__brand">
-          {fav ? (
-            <img className="sf-favicon" src={fav} alt="" aria-hidden="true" loading="lazy" referrerPolicy="no-referrer" />
-          ) : (
-            <span className="sf-favicon sf-favicon--blank" aria-hidden="true" />
-          )}
-
-          <div className="sf-linkcard__brandText">
-            <div className="sf-linkcard__title" title={title}>
-              {title}
-            </div>
-            <div className="sf-linkcard__sub">
-              <span className="sf-linkcard__host">{site || host}</span>
-              {safe ? <span className="sf-muted"> · </span> : null}
-              <span className="sf-linkcard__url" title={url}>
-                {safe ?? url}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="sf-linkcard__actions">
-          {safe ? (
-            <a className="sf-btn sf-btn--ghost" href={safe} target="_blank" rel="noreferrer noopener">
-              Open
-            </a>
-          ) : null}
-
-          <button type="button" className="sf-btn sf-btn--ghost" onClick={onCopyUrl} disabled={!safe || copied}>
-            {copied ? "Kopied" : "Kopy"}
-          </button>
-
-          {onInhale ? (
-            <button type="button" className="sf-btn" onClick={onInhaleClick} disabled={!safe}>
-              Inhale
-            </button>
-          ) : null}
-        </div>
-      </header>
-
-      {desc ? <div className="sf-linkcard__desc">{desc}</div> : null}
-
-      {ogImgSafe ? (
-        <div className="sf-linkcard__thumb">
-          <img className="sf-linkcard__thumbImg" src={ogImgSafe} alt="" loading="lazy" referrerPolicy="no-referrer" />
-        </div>
-      ) : null}
-
-      {safe ? (
-        <div className="sf-linkcard__embed">
-          <SmartEmbed url={safe} />
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
-function RichStreamList(props: {
-  urls: string[];
-  onInhale?: (u: string) => void;
-  toast?: (kind: "success" | "warn" | "info", msg: string) => void;
-}): React.JSX.Element {
-  const { urls, onInhale, toast } = props;
-
-  return (
-    <div className="sf-rlist" role="list" aria-label="Stream links">
-      {urls.map((u) => (
-        <div key={u} role="listitem" className="sf-rlist__item">
-          <RichLinkCard url={u} onInhale={onInhale} toast={toast} />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ────────────────────────────────────────────────────────────────
-   UI pieces (payload + attachments)
+   UI pieces
 ──────────────────────────────────────────────────────────────── */
 
 function AttachmentList({ attachments }: { attachments: Attachments }): React.JSX.Element {
@@ -856,35 +360,18 @@ function AttachmentList({ attachments }: { attachments: Attachments }): React.JS
         {attachments.items.map((it: AttachmentItem, i: number) => {
           if (it.kind === "url") {
             const href = safeHttpUrl(it.url);
-            const fav = href ? faviconFor(href) : null;
-
             return (
               <div key={`${it.kind}:${i}`} className="sf-att-item">
                 <div className="sf-att-kind">Link</div>
-
-                <div className="sf-att-linkRow">
-                  {fav ? (
-                    <img className="sf-favicon sf-favicon--att" src={fav} alt="" aria-hidden="true" loading="lazy" referrerPolicy="no-referrer" />
-                  ) : (
-                    <span className="sf-favicon sf-favicon--blank sf-favicon--att" aria-hidden="true" />
-                  )}
-
-                  {href ? (
-                    <a className="sf-link" href={href} target="_blank" rel="noreferrer noopener">
-                      {it.title ? it.title : href}
-                    </a>
-                  ) : (
-                    <div className="sf-error" role="note">
-                      Invalid URL: {it.url}
-                    </div>
-                  )}
-                </div>
-
                 {href ? (
-                  <div className="sf-att-embed">
-                    <SmartEmbed url={href} />
+                  <a className="sf-link" href={href} target="_blank" rel="noreferrer noopener">
+                    {it.title ? it.title : href}
+                  </a>
+                ) : (
+                  <div className="sf-error" role="note">
+                    Invalid URL: {it.url}
                   </div>
-                ) : null}
+                )}
               </div>
             );
           }
@@ -1068,7 +555,6 @@ export function SigilStreamRoot(): React.JSX.Element {
 
 function SigilStreamInner(): React.JSX.Element {
   const toasts = useToasts();
-  const loc = useLocation();
 
   /** ---------- Sources list (seed + storage + ?add ingestion) ---------- */
   const [sources, setSources] = useState<Source[]>([]);
@@ -1125,68 +611,77 @@ function SigilStreamInner(): React.JSX.Element {
 
   const payloadAttachments = useMemo(() => payload?.attachments ?? null, [payload]);
 
-  const refreshPayloadFromLocation = useCallback(async () => {
-    if (typeof window === "undefined") return;
+const refreshPayloadFromLocation = useCallback(async () => {
+  if (typeof window === "undefined") return;
 
-    const raw = extractPayloadTokenFromLocation();
-    const token = raw ? normalizeIncomingToken(raw) : null;
+  const raw = extractPayloadTokenFromLocation();
+  const token = raw ? normalizeIncomingToken(raw) : null;
 
-    setActiveToken(token);
+  setActiveToken(token);
 
-    if (!token) {
+  if (!token) {
+    setPayload(null);
+    setPayloadError(null);
+    return;
+  }
+
+  try {
+    registerSigilUrl(canonicalizeCurrentStreamUrl(token));
+  } catch (e) {
+    report("register current stream url (pre-decode)", e);
+  }
+
+  try {
+    // Try normalized first, then raw as a fallback (covers weird edge legacy)
+    const decoded =
+      (await decodeFeedPayload(token)) ||
+      (raw && raw !== token ? await decodeFeedPayload(raw) : null);
+
+    if (!decoded) {
       setPayload(null);
-      setPayloadError(null);
+      setPayloadError("Invalid or unreadable payload token.");
       return;
     }
 
-    try {
-      registerSigilUrl(canonicalizeCurrentStreamUrl(token));
-    } catch (e) {
-      report("register current stream url (pre-decode)", e);
+    setPayload(decoded);
+    setPayloadError(null);
+
+    if (decoded.url && typeof decoded.url === "string") {
+      registerSigilUrl(decoded.url);
+      prependUniqueToStorage([decoded.url]);
+
+      setSources((prev) => {
+        const seen = new Set(prev.map((s) => s.url));
+        if (seen.has(decoded.url)) return prev;
+        return [{ url: decoded.url }, ...prev];
+      });
     }
 
     try {
-      const decoded = (await decodeFeedPayload(token)) || (raw && raw !== token ? await decodeFeedPayload(raw) : null);
-
-      if (!decoded) {
-        setPayload(null);
-        setPayloadError("Invalid or unreadable payload token.");
-        return;
-      }
-
-      setPayload(decoded);
-      setPayloadError(null);
-
-      if (decoded.url && typeof decoded.url === "string") {
-        registerSigilUrl(decoded.url);
-        prependUniqueToStorage([decoded.url]);
-
-        setSources((prev) => {
-          const seen = new Set(prev.map((s) => s.url));
-          if (seen.has(decoded.url)) return prev;
-          return [{ url: decoded.url }, ...prev];
-        });
-      }
-
-      try {
-        registerSigilUrl(shortAliasUrl(token));
-      } catch (e) {
-        report("register short alias url", e);
-      }
+      registerSigilUrl(shortAliasUrl(token));
     } catch (e) {
-      report("payload decode", e);
-      setPayload(null);
-      setPayloadError("Payload decode failed.");
+      report("register short alias url", e);
     }
-  }, []);
+  } catch (e) {
+    report("payload decode", e);
+    setPayload(null);
+    setPayloadError("Payload decode failed.");
+  }
+}, []);
 
-  useEffect(() => {
-    void refreshPayloadFromLocation();
-  }, [refreshPayloadFromLocation, loc.pathname, loc.search, loc.hash]);
+
+const loc = useLocation();
+
+useEffect(() => {
+  void refreshPayloadFromLocation();
+  // React Router navigation (pushState) now triggers this via loc changes.
+}, [refreshPayloadFromLocation, loc.pathname, loc.search, loc.hash]);
+
 
   /** ---------- Verified session flag (per-thread) ---------- */
   const sessionKey = useMemo(() => {
-    const token = activeToken ?? (typeof window !== "undefined" ? extractPayloadTokenFromLocation() : null) ?? "root";
+    const token =
+      activeToken ?? (typeof window !== "undefined" ? extractPayloadTokenFromLocation() : null) ?? "root";
     return `sf.verifiedSession:${sessionTokenKey(token)}`;
   }, [activeToken]);
 
@@ -1236,10 +731,19 @@ function SigilStreamInner(): React.JSX.Element {
   const authLike = useMemo(() => coerceAuth(rawSigilAuth), [rawSigilAuth]);
 
   const composerMeta = useMemo(() => (verifiedThisSession ? authLike.meta : null), [verifiedThisSession, authLike.meta]);
-  const composerSvgText = useMemo(() => (verifiedThisSession ? authLike.svgText : null), [verifiedThisSession, authLike.svgText]);
+  const composerSvgText = useMemo(
+    () => (verifiedThisSession ? authLike.svgText : null),
+    [verifiedThisSession, authLike.svgText],
+  );
 
-  const composerPhiKey = useMemo(() => (composerMeta ? readStringProp(composerMeta, "userPhiKey") : undefined), [composerMeta]);
-  const composerKaiSig = useMemo(() => (composerMeta ? readStringProp(composerMeta, "kaiSignature") : undefined), [composerMeta]);
+  const composerPhiKey = useMemo(
+    () => (composerMeta ? readStringProp(composerMeta, "userPhiKey") : undefined),
+    [composerMeta],
+  );
+  const composerKaiSig = useMemo(
+    () => (composerMeta ? readStringProp(composerMeta, "kaiSignature") : undefined),
+    [composerMeta],
+  );
 
   /** ---------- Inhaler: add a link to list ---------- */
   const onAddInhaled = (u: string) => {
@@ -1254,7 +758,7 @@ function SigilStreamInner(): React.JSX.Element {
     });
   };
 
-  /** ---------- KOPY (toast-driven sound + label flip) ---------- */
+  /** ---------- KOPY (earlier/toast-driven sound + label flip) ---------- */
   const [copied, setCopied] = useState<boolean>(false);
   const copiedTimer = useRef<number | null>(null);
 
@@ -1265,8 +769,7 @@ function SigilStreamInner(): React.JSX.Element {
   }, []);
 
   const onKopy = useCallback(async () => {
-    const tokenRaw = activeToken ?? (typeof window !== "undefined" ? extractPayloadTokenFromLocation() : null);
-    const token = tokenRaw ? normalizeIncomingToken(tokenRaw) : null;
+    const token = activeToken ?? (typeof window !== "undefined" ? extractPayloadTokenFromLocation() : null);
     if (!token) return;
 
     const share = preferredShareUrl(token);
@@ -1278,6 +781,7 @@ function SigilStreamInner(): React.JSX.Element {
       if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
       copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
 
+      // ✅ This is what triggers the SAME toast system (and its sound) like the older version.
       toasts.push("success", "Link kopied.");
     } catch (e) {
       report("kopy", e);
@@ -1288,13 +792,9 @@ function SigilStreamInner(): React.JSX.Element {
 
   /** ---------- Derived list: show payload first if present ---------- */
   const urls: string[] = useMemo(() => {
-    const base = sources.map((s) => s.url);
-
-    const payloadUrl = payload && typeof payload.url === "string" && payload.url.length ? payload.url : null;
-    if (!payloadUrl) return base;
-
-    const rest = base.filter((u) => u !== payloadUrl);
-    return [payloadUrl, ...rest];
+    if (!payload) return sources.map((s) => s.url);
+    const rest = sources.filter((s) => s.url !== payload.url).map((s) => s.url);
+    return [payload.url, ...rest];
   }, [sources, payload]);
 
   /** ---------- Render ---------- */
@@ -1311,15 +811,22 @@ function SigilStreamInner(): React.JSX.Element {
         <KaiStatus />
 
         {payload && activeToken ? (
-          <PayloadCard token={activeToken} payload={payload} attachments={payloadAttachments} copied={copied} onKopy={onKopy} />
+          <PayloadCard
+            token={activeToken}
+            payload={payload}
+            attachments={payloadAttachments}
+            copied={copied}
+            onKopy={onKopy}
+          />
         ) : payloadError ? (
           <div className="sf-error" role="alert">
             {payloadError}
           </div>
         ) : (
           <p className="sf-sub">
-            Open a payload link at <code>/stream/p/&lt;token&gt;</code> (or <code>/stream#t=&lt;token&gt;</code>). Replies are Kai-sealed and thread via{" "}
-            <code>?add=</code>. Short alias accepted: <code>/p~&lt;token&gt;</code> (and legacy <code>/p#t=</code>, <code>/p?t=</code>, <code>/stream?p=</code>).
+            Open a payload link at <code>/stream/p/&lt;token&gt;</code> (or <code>/stream#t=&lt;token&gt;</code>).
+            Replies are Kai-sealed and thread via <code>?add=</code>. Short alias accepted: <code>/p~&lt;token&gt;</code>{" "}
+            (and legacy <code>/p#t=</code>, <code>/p?t=</code>, <code>/stream?p=</code>).
           </p>
         )}
 
@@ -1358,14 +865,11 @@ function SigilStreamInner(): React.JSX.Element {
       <section className="sf-list">
         {urls.length === 0 ? (
           <div className="sf-empty">
-            No items yet. Paste a link above or open a <code>/stream/p/&lt;payload&gt;</code> link and reply to start a thread.
+            No items yet. Paste a link above or open a <code>/stream/p/&lt;payload&gt;</code> link and reply to start a
+            thread.
           </div>
         ) : (
-          <RichStreamList
-            urls={urls}
-            onInhale={onAddInhaled}
-            toast={(kind, msg) => toasts.push(kind, msg)}
-          />
+          <StreamList urls={urls} />
         )}
       </section>
     </main>
