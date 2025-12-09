@@ -447,7 +447,7 @@ export default function SigilPage() {
   const [verified, setVerified] = useState<VerifyUIState>("checking");
   const [glyphAuth, setGlyphAuth] = useState<"checking" | "authentic" | "forged">("checking");
   const [ownershipVerified, setOwnershipVerified] = useState<boolean>(false);
-  const [ownershipMsg, setOwnershipMsg] = useState<string>("Upload Φkey to verify Stewardship");
+  const [ownershipMsg, setOwnershipMsg] = useState<string>("Inhale Φkey to verify Stewardship");
   const [toast, setToast] = useState<string>("");
 
   const [sigilSize, setSigilSize] = useState<number>(320);
