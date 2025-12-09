@@ -36,7 +36,7 @@ export default function SovereignDeclarations(): React.JSX.Element {
   const openVault = useCallback(() => setOpen(true), []);
 
   const triggerSummary = useMemo(
-    () => "Φ Kairos Notes — Legal Tender",
+    () => "Kairos Notes — Legal Tender",
     []
   );
 
@@ -121,9 +121,15 @@ export default function SovereignDeclarations(): React.JSX.Element {
           aria-expanded={open}
           aria-controls={panelId}
         >
-          <span className="nav-foot__badge" aria-hidden="true">
-            <span className="mono">Φ</span>
-          </span>
+         <span className="nav-foot__badge" aria-hidden="true">
+  <img
+    className="nav-foot__phiLogo"
+    src="/phi.svg"
+    alt=""
+    draggable={false}
+  />
+</span>
+
 
           <span className="nav-foot__main">
             <span className="nav-foot__kicker">SOVEREIGN WRIT</span>
@@ -171,10 +177,15 @@ export default function SovereignDeclarations(): React.JSX.Element {
               <div className="nav-footSheet__head">
                 <div className="nav-footSheet__titleWrap">
                   <div className="nav-footSheet__title" id={titleId}>
-                    <span className="mono" aria-hidden="true">
-                      Φ
-                    </span>{" "}
-                    Sovereign Writ
+                    <img
+  className="nav-footSheet__phiLogo"
+  src="/phi.svg"
+  alt=""
+  aria-hidden="true"
+  draggable={false}
+/>{" "}
+Sovereign Writ
+
                   </div>
 
                   <div className="nav-footSheet__sub">

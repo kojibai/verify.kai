@@ -909,3 +909,16 @@
     font-size: 9.75px;
   }
 }
+/* Public phi.svg logo sizing */
+.nav-foot__phiLogo{
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.nav-footSheet__phiLogo{
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+  vertical-align: -3px;
+}
