@@ -29,7 +29,7 @@ import { momentFromUTC } from "./utils/kai_pulse";
 import HomePriceChartCard from "./components/HomePriceChartCard";
 import SovereignDeclarations from "./components/SovereignDeclarations";
 
-// ✅ IMPORTANT: use the ACTUAL explorer file you showed (it lives in /pages)
+// ✅ IMPORTANT: use the ACTUAL explorer file (it lives in /pages)
 import SigilExplorer from "./components/SigilExplorer";
 
 import SigilFeedPage from "./pages/SigilFeedPage";
@@ -49,6 +49,14 @@ type NavItem = {
 type AppShellStyle = CSSProperties & {
   ["--breath-s"]?: string;
   ["--vvh-px"]?: string;
+};
+
+// Popover needs its own SX vars (portal may be outside .sigil-explorer scope)
+type ExplorerPopoverStyle = CSSProperties & {
+  ["--sx-breath"]?: string;
+  ["--sx-border"]?: string;
+  ["--sx-border-strong"]?: string;
+  ["--sx-ring"]?: string;
 };
 
 function useVisualViewportSize(): { width: number; height: number } {
@@ -103,6 +111,13 @@ function ExplorerPopover(props: {
   const isClient = typeof document !== "undefined";
   const vvSize = useVisualViewportSize();
 
+  // Prefer portal host inside app-shell so it inherits app styling.
+  const portalHost = useMemo<HTMLElement | null>(() => {
+    if (!isClient) return null;
+    const el = document.querySelector(".app-shell");
+    return el instanceof HTMLElement ? el : document.body;
+  }, [isClient]);
+
   // ESC to close + lock background scroll (only while open)
   useEffect(() => {
     if (!open || !isClient) return;
@@ -127,19 +142,26 @@ function ExplorerPopover(props: {
   }, [open, onClose, isClient]);
 
   // ✅ hooks never conditional; compute every render, noop when closed
-  const overlayStyle = useMemo<CSSProperties | undefined>(() => {
+  const overlayStyle = useMemo<ExplorerPopoverStyle | undefined>(() => {
     if (!open || !isClient) return undefined;
 
     const h = vvSize.height;
     const w = vvSize.width;
 
+    // Provide SX vars so the kx-x button renders/animates correctly
     return {
       height: h > 0 ? `${h}px` : undefined,
       width: w > 0 ? `${w}px` : undefined,
+
+      ["--sx-breath"]: "5.236s",
+      ["--sx-border"]: "rgba(60, 220, 205, 0.35)",
+      ["--sx-border-strong"]: "rgba(55, 255, 228, 0.55)",
+      ["--sx-ring"]:
+        "0 0 0 2px rgba(55, 255, 228, 0.25), 0 0 0 6px rgba(55, 255, 228, 0.12)",
     };
   }, [open, isClient, vvSize.height, vvSize.width]);
 
-  if (!open || !isClient) return null;
+  if (!open || !isClient || !portalHost) return null;
 
   return createPortal(
     <div
@@ -150,14 +172,15 @@ function ExplorerPopover(props: {
       aria-label="PhiStream Explorer"
     >
       <div className="explorer-pop__panel" role="document">
+        {/* ✅ Fixed “best X ever”: use your kx-x (font-metric proof, centered) */}
         <button
           type="button"
-          className="explorer-pop__close"
+          className="explorer-pop__close kx-x"
           onClick={onClose}
           aria-label="Close PhiStream Explorer"
           title="Close (Esc)"
         >
-          <span aria-hidden="true">✕</span>
+          ×
         </button>
 
         <div className="explorer-pop__body">{children}</div>
@@ -167,7 +190,7 @@ function ExplorerPopover(props: {
         </div>
       </div>
     </div>,
-    document.body,
+    portalHost,
   );
 }
 
@@ -210,9 +233,7 @@ function SigilMintRoute(): React.JSX.Element {
 
   return (
     <>
-      {open ? (
-        <SigilModal initialPulse={initialPulse} onClose={handleClose} />
-      ) : null}
+      {open ? <SigilModal initialPulse={initialPulse} onClose={handleClose} /> : null}
       <div className="sr-only" aria-live="polite">
         Sigil mint portal open
       </div>
@@ -493,9 +514,7 @@ function AppChrome(): React.JSX.Element {
           )} seconds. Open KaiKlok.com.`}
           title={`LIVE • NOW PULSE ${pulseNowStr} • Breath ${BREATH_S.toFixed(
             6,
-          )}s (${Math.round(
-            BREATH_MS,
-          )}ms) • View full Kairos Time at KaiKlok.com`}
+          )}s (${Math.round(BREATH_MS)}ms) • View full Kairos Time at KaiKlok.com`}
         >
           <span className="live-orb" aria-hidden="true" />
           <div className="live-text">
@@ -605,8 +624,7 @@ function AppChrome(): React.JSX.Element {
                     <span className="mono">ΦNet</span> • Sovereign Gate
                   </div>
                   <div className="panel-foot__right">
-                    <span className="mono">V</span>{" "}
-                    <span className="mono">25.0</span>
+                    <span className="mono">V</span> <span className="mono">25.0</span>
                   </div>
                 </footer>
               </section>

@@ -283,30 +283,41 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
-   INCREDIBLE “X” BUTTON (perfectly centered)
-   Apply this class to your X button:
-     <button className="kx-x" aria-label="Close">×</button>
-   Or combine:
-     className="kx-export kx-x"
-   No markup required beyond adding the class.
+   KX CLOSE BUTTON — “best X ever” (pixel-perfect centered)
+   Usage:
+     <button className="kx-x" aria-label="Close" type="button">×</button>
+   (If you already have text "×" inside, it's safely hidden.)
    ───────────────────────────────────────────────────────────── */
 .kx-x{
-  /* size + centering */
-  width: 36px;
-  height: 36px;
+  /* tuning */
+  --kx-x-size: 36px;
+  --kx-x-radius: 14px;
+  --kx-x-line: 2.6px;      /* thickness */
+  --kx-x-len: 18px;        /* line length */
+
+  width: var(--kx-x-size);
+  height: var(--kx-x-size);
   padding: 0;
+  border-radius: var(--kx-x-radius);
+
   display: inline-grid;
   place-items: center;
   position: relative;
+  flex: 0 0 auto;
 
-  /* don’t let glyph shift the centering */
+  /* hide any glyph/text inside (prevents font-metric drift) */
   font-size: 0;
   line-height: 0;
   color: transparent;
   text-shadow: none;
 
-  border-radius: 14px;
-  border: 1px solid color-mix(in oklab, var(--sx-border-strong) 65%, rgba(255,255,255,0.14));
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+
+  /* fallback border if color-mix unsupported */
+  border: 1px solid rgba(55, 255, 228, 0.42);
+
   background:
     radial-gradient(16px 16px at 28% 26%, rgba(255,255,255,0.18), rgba(255,255,255,0.00) 62%),
     radial-gradient(22px 22px at 70% 78%, rgba(55,255,228,0.14), rgba(0,0,0,0.00) 64%),
@@ -320,7 +331,7 @@
       rgba(55,255,228,0.00)
     ),
     linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.18));
-  background-size: auto, auto, auto, auto, auto;
+
   box-shadow:
     0 10px 28px rgba(0,0,0,0.55),
     0 0 0 1px rgba(55,255,228,0.10),
@@ -328,39 +339,48 @@
     inset 0 0 0 1px rgba(255,255,255,0.04);
 
   transform: translateZ(0);
+  will-change: transform, filter, box-shadow;
   transition: transform .14s ease, box-shadow .18s ease, border-color .18s ease, filter .18s ease;
   animation: kx-x-breathe var(--sx-breath) ease-in-out infinite;
 }
 
+@supports (border: 1px solid color-mix(in oklab, white, black)) {
+  .kx-x{
+    border-color: color-mix(in oklab, var(--sx-border-strong) 65%, rgba(255,255,255,0.14));
+  }
+}
+
+/* The X is drawn with pseudo-elements (no font metrics = no off-center). */
 .kx-x::before,
 .kx-x::after{
   content:"";
   position:absolute;
-  left: 50%;
-  top: 50%;
-  width: 18px;
-  height: 2.6px;
+  inset: 0;            /* ✅ perfect centering box */
+  margin: auto;        /* ✅ centers the bar */
+  width: var(--kx-x-len);
+  height: var(--kx-x-line);
   border-radius: 999px;
   transform-origin: center;
-  transform: translate(-50%, -50%) rotate(45deg);
+  pointer-events: none;
 
   background: linear-gradient(
     90deg,
-    rgba(255,255,255,0.12),
-    rgba(55,255,228,0.95),
-    rgba(167,139,250,0.84),
-    rgba(255,255,255,0.12)
+    rgba(255,255,255,0.14),
+    rgba(55,255,228,0.98),
+    rgba(167,139,250,0.86),
+    rgba(255,255,255,0.14)
   );
+
   opacity: .96;
   filter:
     drop-shadow(0 0 10px rgba(55,255,228,0.18))
     drop-shadow(0 0 18px rgba(167,139,250,0.14));
+
   animation: kx-x-lines var(--sx-breath) ease-in-out infinite;
 }
 
-.kx-x::after{
-  transform: translate(-50%, -50%) rotate(-45deg);
-}
+.kx-x::before{ transform: rotate(45deg); }
+.kx-x::after { transform: rotate(-45deg); }
 
 .kx-x:hover{
   transform: translateY(-1px) rotate(0.35deg);

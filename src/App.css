@@ -653,7 +653,6 @@ a:hover {
   .brand__title{ animation: none; }
 }
 
-
 .brand__subtitle{
   /* clean, sovereign smallcaps vibe */
   font-size: clamp(0.74rem, 0.66rem + 0.35vw, 0.92rem);
@@ -698,7 +697,6 @@ a:hover {
 @media (prefers-reduced-motion: reduce){
   .brand__subtitle{ animation: none; }
 }
-
 
 /* LIVE indicator (top right) */
 .topbar-live {
@@ -1654,14 +1652,32 @@ a:hover {
   background: rgba(170, 241, 255, 0.28);
 }
 
-/* Close control (safe-area aware, always visible) */
-.explorer-pop__close {
-  position: absolute;
-  top: calc(14px + env(safe-area-inset-top, 0px));
-  right: calc(14px + env(safe-area-inset-right, 0px));
+/* ────────────────────────────────────────────────────────────────
+   ✅ OMG WOW CLOSE “X” — Prismatic Vault Control (PhiExplorer)
+   - Pixel-perfect centered glyph (no font weirdness)
+   - Breath-synced halo + orbit
+   - iOS-safe, huge tap target, always visible
+   - Works whether button contains "×" directly OR a <span>
+──────────────────────────────────────────────────────────────── */
 
-  width: 44px;
-  height: 44px;
+.explorer-pop__close {
+  /* sizing */
+  --x-size: 44px;
+  --x-pad: 14px;
+  --x-top: calc(var(--x-pad) + env(safe-area-inset-top, 0px));
+  --x-right: calc(var(--x-pad) + env(safe-area-inset-right, 0px));
+
+  /* aura */
+  --x-border: rgba(170, 241, 255, 0.26);
+  --x-border-hot: rgba(51, 246, 255, 0.42);
+  --x-ink: rgba(245, 247, 255, 0.92);
+
+  position: absolute;
+  top: var(--x-top);
+  right: var(--x-right);
+
+  width: var(--x-size);
+  height: var(--x-size);
   border-radius: 999px;
 
   display: grid;
@@ -1669,68 +1685,98 @@ a:hover {
 
   cursor: pointer;
   user-select: none;
+  -webkit-tap-highlight-color: rgba(51, 246, 255, 0.18);
+  touch-action: manipulation;
 
-  border: 1px solid rgba(170, 241, 255, 0.22);
-  background: radial-gradient(
-      18px 18px at 30% 25%,
-      rgba(255, 255, 255, 0.16),
-      transparent 60%
-    ),
-    radial-gradient(
-      26px 26px at 80% 80%,
-      rgba(51, 246, 255, 0.12),
-      transparent 62%
-    ),
-    linear-gradient(180deg, rgba(10, 20, 48, 0.78), rgba(3, 6, 16, 0.82));
+  border: 1px solid var(--x-border);
 
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55),
+  /* “glass core” */
+  background:
+    radial-gradient(18px 18px at 28% 22%, rgba(255, 255, 255, 0.18), transparent 62%),
+    radial-gradient(28px 26px at 78% 84%, rgba(51, 246, 255, 0.14), transparent 64%),
+    linear-gradient(180deg, rgba(10, 20, 48, 0.78), rgba(3, 6, 16, 0.84));
+
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.62),
     0 0 0 1px rgba(255, 255, 255, 0.06) inset,
-    0 0 26px rgba(51, 246, 255, 0.1);
+    0 0 28px rgba(51, 246, 255, 0.12);
 
   backdrop-filter: blur(14px) saturate(160%);
   -webkit-backdrop-filter: blur(14px) saturate(160%);
 
   z-index: 20;
+  isolation: isolate;
 
-  transition: transform var(--transition-fast),
-    border-color var(--transition-fast), box-shadow var(--transition-fast),
-    background var(--transition-fast), filter var(--transition-fast);
+  /* glyph */
+  color: var(--x-ink);
+  font-weight: 950;
+  font-size: 19px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+
+  text-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.68),
+    0 0 18px rgba(51, 246, 255, 0.22),
+    0 0 36px rgba(155, 91, 255, 0.12);
+
+  will-change: transform, filter, box-shadow, border-color;
+  transform: translateZ(0);
+
+  transition:
+    transform var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background var(--transition-fast),
+    filter var(--transition-fast);
+
+  /* breath gives it “alive” authority (subtle, not gimmicky) */
+  animation: xBreath var(--breath, 5.236s) ease-in-out infinite;
 }
 
-.explorer-pop__close span {
+/* If old markup used <span>, keep it perfect too */
+.explorer-pop__close > span {
   display: block;
   line-height: 1;
-  font-weight: 900;
-  font-size: 18px;
-  letter-spacing: 0.02em;
-
-  color: rgba(245, 247, 255, 0.9);
-  text-shadow: 0 10px 24px rgba(0, 0, 0, 0.65);
-
+  font-weight: inherit;
+  font-size: inherit;
+  color: inherit;
   transform: translateY(-0.5px);
 }
 
+/* If new markup uses raw “×” text, nudge via font metrics (button itself) */
+.explorer-pop__close:not(:has(span)) {
+  padding-bottom: 1px; /* tiny baseline correction for × on some fonts */
+}
+
+/* Prismatic orbit halo (outside the button) */
 .explorer-pop__close::before {
   content: "";
   position: absolute;
-  inset: -6px;
+  inset: -8px;
   border-radius: 999px;
   pointer-events: none;
 
-  background: conic-gradient(
-    from 220deg,
-    rgba(38, 255, 196, 0.26),
-    rgba(51, 246, 255, 0),
-    rgba(155, 91, 255, 0.28),
-    rgba(255, 217, 121, 0.14),
-    rgba(38, 255, 196, 0.26)
-  );
+  background:
+    conic-gradient(
+      from 220deg,
+      rgba(38, 255, 196, 0.30),
+      rgba(51, 246, 255, 0.02),
+      rgba(155, 91, 255, 0.32),
+      rgba(255, 217, 121, 0.18),
+      rgba(38, 255, 196, 0.30)
+    );
 
   filter: blur(10px);
-  opacity: 0.55;
-  transition: opacity var(--transition-fast), filter var(--transition-fast);
+  opacity: 0.62;
+  mix-blend-mode: screen;
+
+  animation: xOrbit calc(var(--breath, 5.236s) * 6) linear infinite;
+  transform-origin: 50% 50%;
 }
 
+/* Inner sheen sweep (inside the glass) */
 .explorer-pop__close::after {
   content: "";
   position: absolute;
@@ -1738,40 +1784,89 @@ a:hover {
   border-radius: 999px;
   pointer-events: none;
 
-  background: linear-gradient(
-    120deg,
-    rgba(255, 255, 255, 0.18),
-    transparent 36%,
-    transparent 68%,
-    rgba(51, 246, 255, 0.14)
-  );
-  opacity: 0.35;
+  background:
+    linear-gradient(
+      120deg,
+      rgba(255, 255, 255, 0.22),
+      transparent 38%,
+      transparent 66%,
+      rgba(51, 246, 255, 0.14)
+    );
+
+  opacity: 0.42;
   mix-blend-mode: soft-light;
+
+  /* micro-motion sheen (classy) */
+  animation: xSheen calc(var(--breath, 5.236s) * 2) ease-in-out infinite;
+}
+
+@keyframes xBreath {
+  0%,
+  100% {
+    transform: translateZ(0) scale(1);
+    filter: brightness(1.02) saturate(1.12);
+    box-shadow:
+      0 18px 44px rgba(0, 0, 0, 0.62),
+      0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+      0 0 28px rgba(51, 246, 255, 0.12);
+  }
+  50% {
+    transform: translateZ(0) scale(1.03);
+    filter: brightness(1.10) saturate(1.24);
+    box-shadow:
+      0 22px 54px rgba(0, 0, 0, 0.68),
+      0 0 0 1px rgba(51, 246, 255, 0.10) inset,
+      0 0 46px rgba(51, 246, 255, 0.18),
+      0 0 54px rgba(155, 91, 255, 0.10);
+  }
+}
+
+@keyframes xOrbit {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes xSheen {
+  0%   { opacity: 0.30; filter: blur(0px); }
+  38%  { opacity: 0.48; filter: blur(0.2px); }
+  62%  { opacity: 0.52; filter: blur(0.2px); }
+  100% { opacity: 0.30; filter: blur(0px); }
 }
 
 .explorer-pop__close:hover {
-  transform: translateY(-1px);
-  border-color: rgba(51, 246, 255, 0.34);
-  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.62),
-    0 0 0 1px rgba(51, 246, 255, 0.1) inset,
-    0 0 40px rgba(51, 246, 255, 0.16);
-  filter: brightness(1.08);
+  transform: translateZ(0) translateY(-1px);
+  border-color: var(--x-border-hot);
+  filter: brightness(1.12);
+
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.70),
+    0 0 0 1px rgba(51, 246, 255, 0.12) inset,
+    0 0 52px rgba(51, 246, 255, 0.18);
 }
 
 .explorer-pop__close:hover::before {
-  opacity: 0.78;
+  opacity: 0.82;
   filter: blur(9px);
 }
 
 .explorer-pop__close:active {
-  transform: translateY(0px) scale(0.98);
-  filter: brightness(1.02);
+  transform: translateZ(0) scale(0.98);
+  filter: brightness(1.04);
 }
 
 .explorer-pop__close:focus-visible {
   outline: none;
-  box-shadow: var(--ring), 0 18px 44px rgba(0, 0, 0, 0.62),
-    0 0 40px rgba(51, 246, 255, 0.16);
+  box-shadow:
+    var(--ring),
+    0 24px 60px rgba(0, 0, 0, 0.70),
+    0 0 52px rgba(51, 246, 255, 0.18);
+}
+
+/* touch devices: don’t “jump” on hover emulation */
+@media (hover: none) and (pointer: coarse) {
+  .explorer-pop__close:hover {
+    transform: translateZ(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1779,17 +1874,20 @@ a:hover {
     animation: none !important;
   }
   .explorer-pop__close {
+    animation: none !important;
     transition: none !important;
   }
-  .explorer-pop__close::before {
-    transition: none !important;
+  .explorer-pop__close::before,
+  .explorer-pop__close::after {
+    animation: none !important;
   }
 }
 
 @media (max-width: 520px) {
   .explorer-pop__close {
-    width: 46px;
-    height: 46px;
+    --x-size: 46px;
+    --x-pad: 12px;
+    font-size: 20px;
   }
 }
 
@@ -1855,6 +1953,7 @@ a:hover {
 .fullpage-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(170, 241, 255, 0.28);
 }
+
 /* ───────────────────────────────────────────────────────────────
    MOBILE VISIBILITY GUARANTEE — Sovereign Declarations trigger
    GOAL (this version):
