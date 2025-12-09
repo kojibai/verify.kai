@@ -870,7 +870,7 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
     if (!sigilActionUrl) return null;
     return (
       <div className="composer">
-        <label className="composer-label">Sigil Verifikation URL</label>
+        <label className="composer-label">Proof Of Breath™ URL</label>
         <div className="composer-input-row">
           <input className="composer-input locked" type="url" value={sigilActionUrl} readOnly />
           <button
@@ -885,9 +885,9 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
                 /* ignore */
               }
             }}
-            title="Kopy sigil verifikation URL"
+            title="Remember Proof Of Breath™ URL"
           >
-            {copied ? "Kopied ✓" : "Kopy"}
+            {copied ? "Remembered ✓" : "Remember"}
           </button>
         </div>
         {!isLikelySigilUrl(sigilActionUrl) && (
@@ -1205,7 +1205,7 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
                 }
               }}
             >
-              {copied ? "Kopied ✓" : "Kopy"}
+              {copied ? "Remembered ✓" : "Remember"}
             </button>
             <a className="composer-open" href={generatedUrl} target="_blank" rel="noopener noreferrer">
               Open in new tab →

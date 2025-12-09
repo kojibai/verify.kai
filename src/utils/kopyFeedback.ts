@@ -416,7 +416,7 @@ function isKopyButtonFrom(target: EventTarget | null): boolean {
   const btn = target.closest("button.sf-btn, a.sf-btn");
   if (!btn) return false;
   const label = (btn.textContent ?? "").trim().toLowerCase();
-  return label === "kopy";
+  return label === "remember";
 }
 
 function installUnlockOnce(): void {

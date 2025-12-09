@@ -2,7 +2,7 @@
 
 // src/components/verifier/VerifierStamper.tsx
 // VerifierStamper.tsx · Divine Sovereign Transfer Gate (mobile-first)
-// v24.6 — value strip positioned under Pulse/Beat/Step/Day (above Presence/Stewardship/Memory tabs),
+// v25.0 — value strip positioned under Pulse/Beat/Step/Day (above Presence/Stewardship/Memory tabs),
 //         breath-synced trend pills (▲ green / ▼ red / none on flat),
 //         + click-to-open LiveChart popover (Φ/$ pills), μΦ-locked exhale parity + ChakraGate surfacing,
 //         child-lock + valuation parity

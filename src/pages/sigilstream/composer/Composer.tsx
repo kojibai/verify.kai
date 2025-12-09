@@ -435,7 +435,7 @@ export function Composer({
               onClick={async () => {
                 try {
                   await navigator.clipboard.writeText(expandShortAliasToCanonical(replyUrl));
-                  toasts.push("success", "Link kopied.");
+                  toasts.push("success", "Link remembered.");
                   setCopiedReply(true);
                   window.setTimeout(() => setCopiedReply(false), 1200);
                 } catch {
@@ -443,7 +443,7 @@ export function Composer({
                 }
               }}
             >
-              {copiedReply ? "Kopied" : "Kopy"}
+              {copiedReply ? "Remembered" : "Remember"}
             </button>
           </div>
         </div>

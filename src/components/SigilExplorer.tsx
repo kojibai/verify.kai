@@ -631,7 +631,7 @@ function OriginPanel({ root }: { root: SigilNode }) {
             title="Copy origin URL"
             type="button"
           >
-            Kopy Origin
+            Remember Origin
           </button>
         </div>
       </header>

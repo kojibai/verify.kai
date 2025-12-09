@@ -3207,13 +3207,13 @@ useEffect(() => {
           
                   <div className="sp-breathproof__actions" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                     <button className="btn-ghost" onClick={() => copy(breathProof.sigmaString, "Σ string copied")}>
-                      Kopy Σ string
+                      Remember Σ string
                     </button>
                     <button className="btn-ghost" onClick={() => copy(breathProof.sigmaHash, "sha256(Σ) copied")}>
-                      Kopy sha256(Σ)
+                      Remember sha256(Σ)
                     </button>
                     <button className="btn-ghost" onClick={() => copy(breathProof.derivedPhiKey, "Derived Φ copied")}>
-                      Kopy Φ
+                      Remember Φ
                     </button>
                     <button
                       className="btn-ghost"
@@ -3241,7 +3241,7 @@ useEffect(() => {
                         )
                       }
                     >
-                      Kopy JSON
+                      Remember JSON
                     </button>
                   </div>
                 </aside>

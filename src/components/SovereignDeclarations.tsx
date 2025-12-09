@@ -223,7 +223,6 @@ Sovereign Writ
 
               <div className="nav-footSheet__body" id={descId}>
                 <p className="nav-foot__line">
-                  <span className="mono">Φ</span>{" "}
                   <strong>Kairos Notes</strong> are legal tender — sealed by <strong>Proof of Breath™</strong>, pulsed by{" "}
                   <strong>Kai-Signature™</strong>, verifiable offline (Σ → SHA-256(Σ) → Φ).
                 </p>

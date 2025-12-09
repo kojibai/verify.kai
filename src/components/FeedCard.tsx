@@ -162,7 +162,7 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
               aria-pressed={copied}
               data-state={copied ? "copied" : "idle"}
             >
-              {copied ? "Kopied" : "Kopy URL"}
+              {copied ? "Remembered" : "Remember URL"}
             </button>
           </footer>
         </div>
@@ -444,7 +444,7 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
               aria-pressed={copied}
               data-state={copied ? "kopied" : "idle"}
             >
-              {copied ? "Kopied" : "Kopy URL"}
+              {copied ? "Remembered" : "Remember URL"}
             </button>
 
             <span className="fc-live" aria-live="polite">

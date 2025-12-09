@@ -342,7 +342,7 @@ const SealMomentModal: FC<Props> = (props) => {
             <div className="cta-row">
               <button className="secondary cta" onClick={share} type="button">
                 <ShareGlyph />
-                <span>{canShare ? "Share" : "Kopy Link"}</span>
+                <span>{canShare ? "Share" : "Remember Link"}</span>
               </button>
             </div>
 

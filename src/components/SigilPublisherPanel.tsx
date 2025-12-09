@@ -617,13 +617,13 @@ import { useSigilSession } from "./session/useSigilSession";
                       } catch (e: unknown) {
                         // eslint-disable-next-line no-console
                         console.warn(
-                          "Kopy failed:",
+                          "Remember failed:",
                           e instanceof Error ? e.message : String(e)
                         );
                       }
                     }}
                   >
-                    Kopy URL
+                    Remember URL
                   </button>
                 </>
               )}

@@ -114,13 +114,13 @@ export function PayloadBanner({
               await navigator.clipboard.writeText(canonical);
               setCopied(true);
               window.setTimeout(() => setCopied(false), 1200);
-              toasts.push("success", "Link kopied.");
+              toasts.push("success", "Link remembered.");
             } catch {
               toasts.push("warn", "Copy failed. Select the address bar.");
             }
           }}
         >
-          {copied ? "Kopied" : "Kopy"}
+          {copied ? "Remembered" : "Remember"}
         </button>
       </div>
 

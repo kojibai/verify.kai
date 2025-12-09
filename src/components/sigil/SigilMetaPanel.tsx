@@ -152,7 +152,7 @@ export default function SigilMetaPanel({
 
         <div className="sp-actions">
           <button className="btn-ghost" {...copyLinkPress} aria-label="Copy link">
-            Kopy
+            Remember
           </button>
           <button className="btn-ghost" {...sharePress} aria-label="Share">
             Share

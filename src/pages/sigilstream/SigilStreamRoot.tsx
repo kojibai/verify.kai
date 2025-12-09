@@ -532,9 +532,9 @@ function PayloadCard(props: {
           onClick={onKopy}
           disabled={copied}
           data-state={copied ? "copied" : "idle"}
-          aria-label="Kopy share link"
+          aria-label="Remember share link"
         >
-          {copied ? "KOPIED" : "KOPY"}
+          {copied ? "REMEMBERED" : "REMEMBER"}
         </button>
       </div>
     </section>

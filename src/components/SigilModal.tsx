@@ -1379,14 +1379,14 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
               <strong>Kairos:</strong>&nbsp;
               {beatStepDisp}
               <button className="copy-btn" onClick={() => copy(beatStepDisp)}>
-                Kopy
+                Remember
               </button>
             </p>
             <p>
               <strong>Kairos/Date:</strong>&nbsp;
               {kairosDisp}
               <button className="copy-btn" onClick={() => copy(kairosDisp)}>
-                Kopy
+                Remember
               </button>
             </p>
 
@@ -1396,7 +1396,7 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
                   <strong>Seal:</strong>&nbsp;
                   {kairos.eternalSeal}
                   <button className="copy-btn" onClick={() => copy(kairos.eternalSeal)}>
-                    Kopy
+                    Remember
                   </button>
                 </p>
                 <p><strong>Day:</strong> {kairos.harmonicDay}</p>
@@ -1407,7 +1407,7 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
                   <strong>Kai-Turah:</strong>&nbsp;
                   {kairos.kaiTurahPhrase}
                   <button className="copy-btn" onClick={() => copy(kairos.kaiTurahPhrase)}>
-                    Kopy
+                    Remember
                   </button>
                 </p>
               </>
@@ -1444,7 +1444,7 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
               </div>
 
               <div className="rich-actions">
-                <button onClick={() => copyJSON(kairos)}>Kopy JSON</button>
+                <button onClick={() => copyJSON(kairos)}>Remember JSON</button>
               </div>
             </details>
           )}
