@@ -3,7 +3,7 @@
 
 /**
  * SigilStreamRoot — Memory Stream Shell
- * v7.3.2 — Bottom list restored to EXACT v6.1 behavior (StreamList only)
+ * v7.3.3 — KOPY toast sound restored to v6.1 (gesture-synchronous)
  *
  * ✅ Keeps v7 features:
  *    - extractPayloadTokenFromLocation (ALL token forms)
@@ -15,11 +15,9 @@
  * ✅ Restores EXACT bottom behavior:
  *    - <StreamList urls={urls} /> ONLY (no RichList, no mirror)
  *
- * ✅ Keeps v7.3.x look + parity:
- *    - Sigil stage wrapped in .sf-sigilWrap (SVG sizing/centering)
- *    - .sf root receives data-weekday + data-chakra
- *    - KOPY button uses .sf-kopyBtn (toast-driven sound stays external)
- *    - PhiStream auto-add (guarded)
+ * ✅ KOPY sound parity with v6.1:
+ *    - NO await before toast push (preserves user-gesture audio gating)
+ *    - Sync copy attempt first; async clipboard kicked off without await
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -203,9 +201,39 @@ function normalizeIncomingToken(raw: string): string {
   return t;
 }
 
-async function writeClipboardText(text: string): Promise<void> {
-  if (typeof window === "undefined") throw new Error("Clipboard unavailable (SSR).");
+/* ────────────────────────────────────────────────────────────────
+   Clipboard helpers (KOPY sound parity with v6.1)
+   Key rule: DO NOT await before pushing the toast.
+──────────────────────────────────────────────────────────────── */
 
+function tryCopyExecCommand(text: string): boolean {
+  if (typeof document === "undefined") return false;
+
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "true");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    ta.style.top = "0";
+    document.body.appendChild(ta);
+
+    const prevFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    ta.focus();
+    ta.select();
+
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    if (prevFocus) prevFocus.focus();
+
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+function clipboardWriteTextPromise(text: string): Promise<void> | null {
+  if (typeof window === "undefined") return null;
   const nav = window.navigator;
   const canClipboard =
     typeof nav !== "undefined" &&
@@ -213,28 +241,8 @@ async function writeClipboardText(text: string): Promise<void> {
     typeof nav.clipboard.writeText === "function" &&
     window.isSecureContext;
 
-  if (canClipboard) {
-    await nav.clipboard.writeText(text);
-    return;
-  }
-
-  const ta = document.createElement("textarea");
-  ta.value = text;
-  ta.setAttribute("readonly", "true");
-  ta.style.position = "fixed";
-  ta.style.left = "-9999px";
-  ta.style.top = "0";
-  document.body.appendChild(ta);
-
-  const prevFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  ta.focus();
-  ta.select();
-
-  const ok = document.execCommand("copy");
-  document.body.removeChild(ta);
-  if (prevFocus) prevFocus.focus();
-
-  if (!ok) throw new Error("Copy failed.");
+  if (!canClipboard) return null;
+  return nav.clipboard.writeText(text);
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -242,7 +250,12 @@ async function writeClipboardText(text: string): Promise<void> {
 ──────────────────────────────────────────────────────────────── */
 
 function escapeHtml(s: string): string {
-  return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+  return s
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 /**
@@ -372,7 +385,8 @@ function coerceAttachmentManifest(v: unknown): AttachmentManifest | null {
   const items: AttachmentItem[] = itemsRaw.filter(isAttachmentItem);
   const totals = sumBytes(items);
 
-  const totalBytes = typeof v["totalBytes"] === "number" && Number.isFinite(v["totalBytes"]) ? v["totalBytes"] : totals.total;
+  const totalBytes =
+    typeof v["totalBytes"] === "number" && Number.isFinite(v["totalBytes"]) ? v["totalBytes"] : totals.total;
 
   const inlinedBytes =
     typeof v["inlinedBytes"] === "number" && Number.isFinite(v["inlinedBytes"]) ? v["inlinedBytes"] : totals.inlined;
@@ -385,7 +399,8 @@ function coerceAttachmentManifest(v: unknown): AttachmentManifest | null {
 ──────────────────────────────────────────────────────────────── */
 
 function PostBodyView({ body, caption }: { body?: PostBody; caption?: string }): React.JSX.Element {
-  const effectiveBody: PostBody | null = body ?? (caption && caption.trim().length ? { kind: "text", text: caption } : null);
+  const effectiveBody: PostBody | null =
+    body ?? (caption && caption.trim().length ? { kind: "text", text: caption } : null);
 
   if (!effectiveBody) return <></>;
 
@@ -702,7 +717,8 @@ function SigilStreamInner(): React.JSX.Element {
       pickString((payload as unknown as { kai?: unknown }).kai, ["weekday", "day", "weekdayName", "dayName"]);
 
     const payloadChakraRaw =
-      pickString(payload, ["chakra", "chakraName"]) ?? pickString((payload as unknown as { kai?: unknown }).kai, ["chakra", "chakraName"]);
+      pickString(payload, ["chakra", "chakraName"]) ??
+      pickString((payload as unknown as { kai?: unknown }).kai, ["chakra", "chakraName"]);
 
     const weekday = normalizeWeekdayLabel(payloadWeekdayRaw ?? pulseToWeekday(pulse));
     const chakra = normalizeChakraLabel(payloadChakraRaw ?? stepToChakra(step));
@@ -811,7 +827,7 @@ function SigilStreamInner(): React.JSX.Element {
     });
   };
 
-  /** ---------- KOPY (toast-driven sound + label flip) ---------- */
+  /** ---------- KOPY (toast-driven sound + label flip; v6.1 parity) ---------- */
   const [copied, setCopied] = useState<boolean>(false);
   const copiedTimer = useRef<number | null>(null);
 
@@ -821,26 +837,45 @@ function SigilStreamInner(): React.JSX.Element {
     };
   }, []);
 
-  const onKopy = useCallback(async () => {
+  const onKopy = useCallback(() => {
     const tokenRaw = activeToken ?? (typeof window !== "undefined" ? extractPayloadTokenFromLocation() : null);
     const token = tokenRaw ? normalizeIncomingToken(tokenRaw) : null;
     if (!token) return;
 
     const share = preferredShareUrl(token);
 
-    try {
-      await writeClipboardText(share);
-
+    // 1) Prefer sync copy: keeps toast-sound inside the click gesture (v6.1 behavior)
+    const okSync = tryCopyExecCommand(share);
+    if (okSync) {
       setCopied(true);
       if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
       copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
 
-      toasts.push("success", "Link kopied.");
-    } catch (e) {
-      report("kopy", e);
-      setCopied(false);
-      toasts.push("warn", "Copy failed. Select the address bar.");
+      toasts.push("success", "Kopied.");
+      return;
     }
+
+    // 2) Clipboard API: start write INSIDE gesture (no await), toast immediately for sound parity,
+    // then warn if it actually fails.
+    const p = clipboardWriteTextPromise(share);
+    if (p) {
+      setCopied(true);
+      if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+      copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
+
+      toasts.push("success", "Kopied.");
+
+      p.catch((e: unknown) => {
+        report("kopy clipboard.writeText", e);
+        setCopied(false);
+        toasts.push("warn", "Copy failed. Select the address bar.");
+      });
+
+      return;
+    }
+
+    // 3) Total failure
+    toasts.push("warn", "Copy failed. Select the address bar.");
   }, [activeToken, toasts]);
 
   /** ---------- Derived list: show payload first if present ---------- */
@@ -917,7 +952,7 @@ function SigilStreamInner(): React.JSX.Element {
         )}
       </header>
 
-      {/* ✅ THIS is the v6.1 bottom behavior you want. */}
+      {/* ✅ EXACT v6.1 bottom behavior */}
       <section className="sf-list">
         {urls.length === 0 ? (
           <div className="sf-empty">

@@ -488,20 +488,121 @@ body{
   margin: 12px 0;
   background: linear-gradient(90deg, transparent, rgba(255,255,255,.14), transparent);
 }
+/* ========== 12) CANONICAL EMBED / MEDIA PRIMITIVES (ATLANTEAN GLASS) =====
+   Drop-in replacement for section 12 ONLY.
+   - Same classnames (.sf-embed, .sf-media, modifiers) ✅
+   - Breath-synced living glass using --pulse-dur / --pulse-offset ✅
+   - Safe: no layout shifts, no overflow bleed, iOS-friendly ✅
+============================================================================ */
 
-/* ========== 12) CANONICAL EMBED / MEDIA PRIMITIVES ============= */
-/* Canonical iframe embed behavior (global) */
+/* ---------- Canonical iframe embed behavior (global) ---------- */
 .sf-embed{
   position: relative;
   width: 100%;
   aspect-ratio: 16/9;
-  background: rgba(255,255,255,.03);
-  border-radius: 14px;
-  border: 1px solid rgba(255,255,255,.10);
-  box-shadow: 0 14px 44px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.05);
-  overflow: hidden;
   min-width: 0;
+  overflow: hidden;
+  isolation: isolate;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.12);
+
+  /* Atlantean glass: depth + aura + day hue */
+  background:
+    radial-gradient(900px 320px at 14% 6%,
+      rgba(var(--accent-r), var(--accent-g), var(--accent-b), .16),
+      transparent 60%),
+    radial-gradient(720px 280px at 88% 10%,
+      hsla(var(--day-hue,195), 92%, 62%, .10),
+      transparent 62%),
+    linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)),
+    rgba(0,0,0,.22);
+
+  box-shadow:
+    0 18px 60px rgba(0,0,0,.34),
+    inset 0 1px 0 rgba(255,255,255,.08),
+    inset 0 0 0 1px rgba(255,255,255,.04);
 }
+
+/* Crystal rim ring */
+.sf-embed::before{
+  content:"";
+  position:absolute;
+  inset:-1px;
+  border-radius: 18px;
+  pointer-events:none;
+
+  background:
+    conic-gradient(from 180deg,
+      rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.00),
+      rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.20),
+      rgba(255,215,128,.16),
+      rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.18),
+      rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.00));
+
+  opacity: .55;
+
+  /* ring cutout */
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  padding: 1px;
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+
+  animation: sf-embed-spin calc(var(--pulse-dur) * 6) linear infinite;
+  animation-delay: var(--pulse-offset);
+}
+@keyframes sf-embed-spin{ to{ transform: rotate(360deg); } }
+
+/* Living sheen + subtle scanlines */
+.sf-embed::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+
+  background:
+    linear-gradient(120deg,
+      transparent 0%,
+      rgba(255,255,255,.10) 20%,
+      rgba(255,255,255,.06) 48%,
+      transparent 78%),
+    radial-gradient(520px 140px at 30% 10%,
+      rgba(var(--accent-r), var(--accent-g), var(--accent-b), .22),
+      transparent 70%),
+    repeating-linear-gradient(
+      180deg,
+      rgba(255,255,255,.024) 0px,
+      rgba(255,255,255,.024) 1px,
+      transparent 1px,
+      transparent 7px
+    );
+
+  mix-blend-mode: screen;
+  opacity: .42;
+  filter: blur(8px);
+  transform: translateX(-38%);
+
+  animation: sf-embed-shimmer var(--pulse-dur) ease-in-out infinite;
+  animation-delay: var(--pulse-offset);
+}
+@keyframes sf-embed-shimmer{
+  0%   { transform: translateX(-38%); opacity:.28; }
+  45%  { opacity:.50; }
+  50%  { transform: translateX(38%);  opacity:.66; }
+  100% { transform: translateX(-38%); opacity:.28; }
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))){
+  .sf-embed{
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+}
+
+/* Frame fits perfectly, stays crisp */
 .sf-embed iframe,
 .sf-embed__frame{
   position: absolute;
@@ -511,17 +612,123 @@ body{
   border: 0;
   display: block;
   background: transparent;
+  transform: translateZ(0);
 }
+
+/* Aspect variants */
 .sf-embed--doc{ aspect-ratio: 4/3; }
 .sf-embed--tall{ aspect-ratio: 10/16; }
 
-/* Canonical media behavior (global) */
-.sf-media{ position:relative; width:100%; background: rgba(255,255,255,.02); min-width:0; }
-.sf-media--image{ display:grid; place-items:center; }
-.sf-media--image img{ width:100%; height:auto; display:block; border-radius: 12px; }
-.sf-media--video video{ width:100%; height:auto; display:block; border-radius:12px; background:#000; }
-.sf-media--audio{ padding:10px; }
-.sf-media--audio audio{ width:100%; }
+/* ---------- Canonical media behavior (global) ---------- */
+.sf-media{
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  isolation: isolate;
+  transform: translateZ(0);
+
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.12);
+
+  background:
+    radial-gradient(900px 320px at 14% 6%,
+      rgba(var(--accent-r), var(--accent-g), var(--accent-b), .14),
+      transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02)),
+    rgba(0,0,0,.26);
+
+  box-shadow:
+    0 18px 60px rgba(0,0,0,.34),
+    inset 0 1px 0 rgba(255,255,255,.07);
+}
+
+/* Rim + sheen for media too (lighter) */
+.sf-media::before{
+  content:"";
+  position:absolute;
+  inset:-1px;
+  border-radius: 18px;
+  pointer-events:none;
+  background:
+    radial-gradient(520px 140px at 25% 0%,
+      rgba(var(--accent-r), var(--accent-g), var(--accent-b), .22),
+      transparent 70%);
+  opacity:.38;
+  filter: blur(10px);
+}
+.sf-media::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:
+    linear-gradient(120deg,
+      transparent 0%,
+      rgba(255,255,255,.09) 22%,
+      rgba(255,255,255,.05) 50%,
+      transparent 78%);
+  mix-blend-mode: screen;
+  opacity: .34;
+  filter: blur(10px);
+  transform: translateX(-34%);
+  animation: sf-media-sheen calc(var(--pulse-dur) * 1.5) ease-in-out infinite;
+  animation-delay: var(--pulse-offset);
+}
+@keyframes sf-media-sheen{
+  0%   { transform: translateX(-34%); opacity:.22; }
+  50%  { transform: translateX(34%);  opacity:.44; }
+  100% { transform: translateX(-34%); opacity:.22; }
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))){
+  .sf-media{
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+}
+
+/* Image */
+.sf-media--image{
+  display:grid;
+  place-items:center;
+}
+.sf-media--image img{
+  width:100%;
+  height:auto;
+  display:block;
+  border-radius: 14px;
+  box-shadow: 0 18px 52px rgba(0,0,0,.32);
+  -webkit-user-drag: none;
+}
+
+/* Video */
+.sf-media--video video{
+  width:100%;
+  height:auto;
+  display:block;
+  border-radius: 14px;
+  background:#000;
+  box-shadow: 0 18px 52px rgba(0,0,0,.32);
+}
+
+/* Audio */
+.sf-media--audio{
+  padding: 12px;
+}
+.sf-media--audio audio{
+  width:100%;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce){
+  .sf-embed::before,
+  .sf-embed::after,
+  .sf-media::after{
+    animation: none !important;
+  }
+}
+
 
 /* ========== 13) FAVICON (shared) =============================== */
 .sf-favicon{
@@ -888,52 +1095,141 @@ body{
   opacity: .9;
   background: rgba(255,255,255,.02);
 }
+/* ========== 20) SIGIL STAGE (ATLANTEAN STAGE — SUPER ADVANCED) ============
+   Drop-in replacement for section 20 ONLY.
+   - Same selectors (.sf-sigilWrap, ::before, __inner, svg guards) ✅
+   - Breath-synced “living crystal” w/ rim, shimmer, depth, scanlines ✅
+   - Does NOT break icon SVG sizing ✅
+============================================================================ */
 
-/* ========== 20) SIGIL STAGE (restored) ========================= */
 .sf-sigilWrap{
   margin-top: 14px;
-  border-radius: var(--r-card);
-  border: 1px solid rgba(var(--glass), .12);
-  background:
-    radial-gradient(820px 420px at 18% 0%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), .14), transparent 62%),
-    radial-gradient(720px 420px at 88% 10%, hsla(var(--day-hue), 90%, 62%, .10), transparent 64%),
-    linear-gradient(180deg, rgba(12,16,24,.72), rgba(10,14,22,.58));
-  box-shadow: var(--shadow-2), var(--inset-2);
-  overflow: hidden;
-  position: relative;
   min-width: 0;
+  position: relative;
+  overflow: hidden;
   isolation: isolate;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+
+  border-radius: var(--r-card);
+  border: 1px solid rgba(var(--glass), .14);
+
+  /* Crystal slab: accent + weekday hue + deep void */
+  background:
+    radial-gradient(980px 520px at 18% 0%,
+      rgba(var(--accent-r), var(--accent-g), var(--accent-b), .18),
+      transparent 62%),
+    radial-gradient(780px 520px at 88% 8%,
+      hsla(var(--day-hue,195), 92%, 64%, .12),
+      transparent 64%),
+    radial-gradient(1100px 760px at 52% 120%,
+      rgba(255,255,255,.05),
+      transparent 62%),
+    linear-gradient(180deg, rgba(12,16,24,.74), rgba(8,10,16,.62));
+
+  box-shadow:
+    0 22px 70px rgba(0,0,0,.40),
+    inset 0 1px 0 rgba(255,255,255,.08),
+    inset 0 0 0 1px rgba(255,255,255,.04);
 }
+
+/* Outer rim ring (cut-out) + slow spin */
 .sf-sigilWrap::before{
   content:"";
-  position:absolute; inset:-1px;
+  position:absolute;
+  inset:-1px;
   border-radius: calc(var(--r-card) + 1px);
   pointer-events:none;
+
   background:
     conic-gradient(from 180deg,
-      rgba(var(--accent-r), var(--accent-g), var(--accent-b), .0),
-      rgba(var(--accent-r), var(--accent-g), var(--accent-b), .26),
-      rgba(255,215,128,.18),
-      rgba(var(--accent-r), var(--accent-g), var(--accent-b), .22),
-      rgba(var(--accent-r), var(--accent-g), var(--accent-b), .0)
-    );
-  opacity: .65;
+      rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.00),
+      rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.22),
+      rgba(255,215,128, .18),
+      rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.20),
+      rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.00));
+
+  opacity: .70;
+
+  /* ring-only */
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   padding: 1px;
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  animation: atl-spin calc(var(--pulse-dur) * 6) linear infinite;
+
+  animation: sf-sigil-rim-spin calc(var(--pulse-dur) * 6) linear infinite;
+  animation-delay: var(--pulse-offset);
+
+  filter: saturate(1.05);
+}
+@keyframes sf-sigil-rim-spin{ to{ transform: rotate(360deg); } }
+
+/* Inner “living glass” veil: shimmer + scanlines + star dust */
+.sf-sigilWrap::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+
+  background:
+    /* moving sheen */
+    linear-gradient(120deg,
+      transparent 0%,
+      rgba(255,255,255,.12) 22%,
+      rgba(255,255,255,.07) 50%,
+      transparent 78%),
+    /* breath aura bloom */
+    radial-gradient(720px 260px at 30% 10%,
+      rgba(var(--accent-r), var(--accent-g), var(--accent-b), .24),
+      transparent 70%),
+    radial-gradient(680px 240px at 85% 18%,
+      hsla(var(--day-hue,195), 92%, 64%, .16),
+      transparent 72%),
+    /* micro scanlines */
+    repeating-linear-gradient(
+      180deg,
+      rgba(255,255,255,.020) 0px,
+      rgba(255,255,255,.020) 1px,
+      transparent 1px,
+      transparent 7px
+    ),
+    /* star dust */
+    radial-gradient(1px 1px at 12% 22%, rgba(255,255,255,.10), transparent 60%),
+    radial-gradient(1px 1px at 28% 78%, rgba(255,255,255,.08), transparent 60%),
+    radial-gradient(1px 1px at 66% 34%, rgba(255,255,255,.07), transparent 60%),
+    radial-gradient(1px 1px at 84% 64%, rgba(255,255,255,.06), transparent 60%);
+
+  mix-blend-mode: screen;
+  opacity: .46;
+  filter: blur(10px);
+  transform: translateX(-38%);
+
+  animation: sf-sigil-veil var(--pulse-dur) ease-in-out infinite;
   animation-delay: var(--pulse-offset);
 }
-@keyframes atl-spin{ to{ transform: rotate(360deg); } }
+@keyframes sf-sigil-veil{
+  0%   { transform: translateX(-38%); opacity:.30; }
+  45%  { opacity:.48; }
+  50%  { transform: translateX(38%);  opacity:.66; }
+  100% { transform: translateX(-38%); opacity:.30; }
+}
 
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))){
+  .sf-sigilWrap{
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+}
+
+/* Inner content layout */
 .sf-sigilWrap__inner{
   position: relative;
-  padding: 12px;
+  padding: 14px;
   display: grid;
   gap: 12px;
   min-width: 0;
+  z-index: 1; /* above veils */
 }
 
 /* Main sigil SVG big + centered, but don't blow up button icons */
@@ -942,14 +1238,30 @@ body{
   width: min(520px, 100%);
   height:auto;
   margin: 0 auto;
-  filter: drop-shadow(0 16px 40px rgba(0,0,0,.35));
+
+  /* depth + “sigil lift” */
+  filter:
+    drop-shadow(0 24px 70px rgba(0,0,0,.55))
+    drop-shadow(0 8px 22px rgba(var(--accent-r), var(--accent-g), var(--accent-b), .14));
+  transform: translateZ(0);
 }
+
+/* keep control icons normal */
 .sf-sigilWrap :where(button svg, a svg){
   width: 1em;
   height: 1em;
   margin: 0;
   filter: none;
 }
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce){
+  .sf-sigilWrap::before,
+  .sf-sigilWrap::after{
+    animation: none !important;
+  }
+}
+
 
 /* ========== 21) URL TRUNCATION GUARD =========================== */
 .sf a.sf-link{

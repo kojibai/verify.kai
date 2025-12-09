@@ -1,12 +1,10 @@
 // src/components/FeedCard.tsx
+"use client";
+
 import React, { useCallback, useMemo, useState } from "react";
 import KaiSigil from "../components/KaiSigil";
 import { decodeSigilUrl } from "../utils/sigilDecode";
-import {
-  STEPS_BEAT,
-  momentFromPulse,
-  type ChakraDay,
-} from "../utils/kai_pulse";
+import { STEPS_BEAT, momentFromPulse, type ChakraDay } from "../utils/kai_pulse";
 import type {
   Capsule,
   PostPayload,
@@ -86,10 +84,11 @@ function buildKaiMetaLineZero(
   beatZ: number,
   stepZ: number,
   chakraDay: ChakraDay
-): string {
+): { arc: string; label: string; line: string } {
   const arc = arcFromBeat(beatZ);
   const label = `${pad2(beatZ)}:${pad2(stepZ)}`; // zero-based, two-digit BB:SS
-  return `Kai:${pulse} • ${label} • ${chakraDay} • ${arc}`;
+  const line = `Kai:${pulse} • ${label} • ${chakraDay} • ${arc}`;
+  return { arc, label, line };
 }
 
 /** Compute stepPct for KaiSigil from a *zero-based* step index */
@@ -97,6 +96,26 @@ function stepPctFromIndex(stepZ: number): number {
   const s = Math.max(0, Math.min(STEPS_BEAT - 1, Math.floor(stepZ)));
   const pct = s / STEPS_BEAT;
   return pct >= 1 ? 1 - 1e-12 : pct;
+}
+
+/** Chakra → accent RGB (for CSS vars / “Atlantean glass” theming). */
+const CHAKRA_RGB: Record<ChakraDay, readonly [number, number, number]> = {
+  Root: [255, 88, 88],
+  Sacral: [255, 146, 88],
+  "Solar Plexus": [255, 215, 128],
+  Heart: [88, 255, 174],
+  Throat: [42, 197, 255],
+  "Third Eye": [164, 126, 255],
+  Crown: [238, 241, 251],
+} as const;
+
+/** Legacy-safe “source” read without any-casts. */
+function legacySourceFromData(data: unknown): string | undefined {
+  if (data && typeof data === "object" && "source" in data) {
+    const v = (data as { source?: unknown }).source;
+    return typeof v === "string" ? v : undefined;
+  }
+  return undefined;
 }
 
 export const FeedCard: React.FC<Props> = ({ url }) => {
@@ -118,17 +137,34 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
   // Hard error state (invalid capsule)
   if (!decoded.ok) {
     return (
-      <article className="fc err" role="group" aria-label="Invalid Sigil URL">
-        <div className="fc-url mono" title={url}>
-          {url}
-        </div>
-        <div className="fc-err" role="alert">
-          {decoded.error}
-        </div>
-        <div className="fc-actions">
-          <button className="btn" type="button" onClick={onCopy} aria-pressed={copied}>
-            {copied ? "Kopied" : "Kopy URL"}
-          </button>
+      <article className="fc fc--error" role="group" aria-label="Invalid Sigil URL">
+        <div className="fc-crystal" aria-hidden="true" />
+        <div className="fc-shell">
+          <header className="fc-head">
+            <div className="fc-titleRow">
+              <span className="fc-chip fc-chip--danger">INVALID</span>
+              <span className="fc-muted">Sigil capsule could not be decoded</span>
+            </div>
+            <div className="fc-url mono" title={url}>
+              {url}
+            </div>
+          </header>
+
+          <div className="fc-error" role="alert">
+            {decoded.error}
+          </div>
+
+          <footer className="fc-actions" role="group" aria-label="Actions">
+            <button
+              className="fc-btn"
+              type="button"
+              onClick={onCopy}
+              aria-pressed={copied}
+              data-state={copied ? "copied" : "idle"}
+            >
+              {copied ? "Kopied" : "Kopy URL"}
+            </button>
+          </footer>
         </div>
       </article>
     );
@@ -153,7 +189,6 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
 
   if (!Number.isFinite(beatRaw) || !Number.isFinite(stepRaw) || !data.chakraDay) {
     const m = momentFromPulse(pulse);
-    // Assume momentFromPulse already returns zero-based; if not, floor & clamp will still neutralize.
     if (!Number.isFinite(beatRaw)) beatRaw = m.beat;
     if (!Number.isFinite(stepRaw)) stepRaw = m.stepIndex;
     if (!data.chakraDay) chakraDay = m.chakraDay;
@@ -175,182 +210,248 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
   const signaturePresent = isNonEmpty(capsule.kaiSignature);
   const verifiedTitle = signaturePresent ? "Signature present (Kai Signature)" : "Unsigned capsule";
 
-  // ✅ author only exists on capsule
+  // author exists on capsule
   const authorBadge = isNonEmpty(capsule.author) ? capsule.author : undefined;
 
   // Source may exist on capsule or (legacy) data
-  const sourceBadge =
-    (isNonEmpty(capsule.source) ? capsule.source : undefined) ||
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (typeof (data as any).source === "string" ? ((data as any).source as string) : undefined);
+  const sourceBadge = (isNonEmpty(capsule.source) ? capsule.source : undefined) ?? legacySourceFromData(data);
 
-  // Build Kai meta with ZERO-BASED, TWO-DIGIT label
-  const kaiMeta = buildKaiMetaLineZero(pulse, beatZ, stepZ, chakraDay);
+  // Kai meta (split + full line)
+  const kai = buildKaiMetaLineZero(pulse, beatZ, stepZ, chakraDay);
   const stepPct = stepPctFromIndex(stepZ);
 
+  // Accent vars for “alive frosted crystal” CSS
+  const [ar, ag, ab] = CHAKRA_RGB[chakraDay] ?? CHAKRA_RGB.Crown;
+  const phase = pulse % 13; // deterministic phase for subtle per-card breath offsets
+  const styleVars: React.CSSProperties = {
+    // Accent
+    ["--fc-accent-r" as never]: String(ar),
+    ["--fc-accent-g" as never]: String(ag),
+    ["--fc-accent-b" as never]: String(ab),
+    // Breath
+    ["--fc-pulse-dur" as never]: "5236ms",
+    ["--fc-pulse-offset" as never]: `${-(phase * 120)}ms`,
+  };
+
   return (
-    <article className="fc" role="article" aria-label={`${kind} glyph`}>
-      {/* Left: living sigil */}
-      <div className="fc-left" aria-hidden="true">
-        <div className="fc-sigil">
-          <KaiSigil pulse={pulse} beat={beatZ} stepPct={stepPct} chakraDay={chakraDay} />
-        </div>
-      </div>
+    <article
+      className={`fc fc--crystal ${signaturePresent ? "fc--signed" : "fc--unsigned"}`}
+      role="article"
+      aria-label={`${kind} glyph`}
+      data-kind={kind}
+      data-chakra={chakraDay}
+      data-signed={signaturePresent ? "true" : "false"}
+      data-beat={pad2(beatZ)}
+      data-step={pad2(stepZ)}
+      style={styleVars}
+    >
+      {/* Purely visual Atlantean layers (CSS-driven) */}
+      <div className="fc-crystal" aria-hidden="true" />
+      <div className="fc-rim" aria-hidden="true" />
+      <div className="fc-veil" aria-hidden="true" />
 
-      {/* Right: content */}
-      <div className="fc-right">
-        {/* Meta row — ALL Kai, no Chronos */}
-        <div className="fc-meta" aria-label="Glyph metadata">
-          <span className="pill kind" title={`Kind: ${kind}`}>
-            {kind.toUpperCase()}
-          </span>
-
-          {appBadge && <span className="pill">{appBadge}</span>}
-          {userBadge && <span className="pill">{userBadge}</span>}
-
-          {sigilId && (
-            <span className="pill sigil" title={`Sigil: ${sigilId}`}>
-              SIGIL {short(sigilId, 6, 4)}
-            </span>
-          )}
-
-          {phiKey && (
-            <span className="pill phikey" title={`ΦKey: ${phiKey}`}>
-              ΦKEY {short(phiKey, 6, 4)}
-            </span>
-          )}
-
-          {authorBadge && (
-            <span className="pill author" title="Author handle / origin">
-              {authorBadge}
-            </span>
-          )}
-
-          {sourceBadge && (
-            <span className="pill source" title="Source">
-              {String(sourceBadge).toUpperCase()}
-            </span>
-          )}
-
-          <span className="pill chakra" title="Chakra day">
-            {chakraDay}
-          </span>
-
-          <span className="muted kai" title="Kai meta">
-            • {kaiMeta}
-          </span>
-
-          <span
-            className={`sig ${signaturePresent ? "ok" : "warn"}`}
-            title={verifiedTitle}
-            aria-label={verifiedTitle}
-          >
-            {signaturePresent ? "SIGNED" : "UNSIGNED"}
-          </span>
-        </div>
-
-        {/* Body by kind */}
-        {post && (
-          <section className="fc-bodywrap">
-            {isNonEmpty(post.title) && <h3 className="fc-title">{post.title}</h3>}
-            {isNonEmpty(post.text) && <p className="fc-body">{post.text}</p>}
-
-            {Array.isArray(post.tags) && post.tags.length > 0 && (
-              <div className="fc-tags" aria-label="Tags">
-                {post.tags.map((t) => (
-                  <span key={t} className="tag">
-                    #{t}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {Array.isArray(post.media) && post.media.length > 0 && (
-              <div className="fc-media" aria-label="Attached media">
-                {post.media.map((m) => {
-                  const key = `${m.kind}:${m.url}`;
-                  const label = hostOf(m.url) ?? m.kind;
-                  return (
-                    <a
-                      key={key}
-                      className="btn ghost"
-                      href={m.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      title={m.url}
-                    >
-                      {label}
-                    </a>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        )}
-
-        {message && (
-          <section className="fc-bodywrap">
-            <h3 className="fc-title">
-              Message → {short(String(message.toUserId ?? "recipient"), 10, 4)}
-            </h3>
-            {isNonEmpty(message.text) && <p className="fc-body">{message.text}</p>}
-          </section>
-        )}
-
-        {share && (
-          <section className="fc-bodywrap">
-            <h3 className="fc-title">Share</h3>
-            <a
-              className="fc-link"
-              href={share.refUrl}
-              target="_blank"
-              rel="noreferrer"
-              title={share.refUrl}
-            >
-              {hostOf(share.refUrl) ?? share.refUrl}
-            </a>
-            {isNonEmpty(share.note) && <p className="fc-body">{share.note}</p>}
-          </section>
-        )}
-
-        {reaction && (
-          <section className="fc-bodywrap">
-            <h3 className="fc-title">Reaction</h3>
-            <div className="fc-body">
-              {isNonEmpty(reaction.emoji) ? reaction.emoji : "❤️"}
-              {typeof reaction.value === "number" ? ` × ${reaction.value}` : null}
+      <div className="fc-shell">
+        {/* Left: living sigil stage */}
+        <aside className="fc-left" aria-label="Sigil">
+          <div className="fc-sigilStage">
+            <div className="fc-sigilGlass" aria-hidden="true" />
+            <div className="fc-sigil">
+              <KaiSigil pulse={pulse} beat={beatZ} stepPct={stepPct} chakraDay={chakraDay} />
             </div>
+
+            {/* Kai stamp (CSS can float/ghost this) */}
+            <div className="fc-stamp mono" aria-label="Kai stamp">
+              <span className="fc-stamp__pulse" title="Pulse">
+                {pulse}
+              </span>
+              <span className="fc-stamp__sep">•</span>
+              <span className="fc-stamp__bbss" title="Beat:Step (zero-based)">
+                {kai.label}
+              </span>
+            </div>
+          </div>
+        </aside>
+
+        {/* Right: content stage */}
+        <section className="fc-right">
+          {/* Meta header */}
+          <header className="fc-head" aria-label="Glyph metadata">
+            <div className="fc-metaRow">
+              <span className="fc-chip fc-chip--kind" title={`Kind: ${kind}`}>
+                {kind.toUpperCase()}
+              </span>
+
+              {appBadge && <span className="fc-chip">{appBadge}</span>}
+              {userBadge && <span className="fc-chip">{userBadge}</span>}
+
+              {sigilId && (
+                <span className="fc-chip fc-chip--sigil" title={`Sigil: ${sigilId}`}>
+                  SIGIL {short(sigilId, 6, 4)}
+                </span>
+              )}
+
+              {phiKey && (
+                <span className="fc-chip fc-chip--phikey" title={`ΦKey: ${phiKey}`}>
+                  ΦKEY {short(phiKey, 6, 4)}
+                </span>
+              )}
+
+              {authorBadge && (
+                <span className="fc-chip fc-chip--author" title="Author handle / origin">
+                  {authorBadge}
+                </span>
+              )}
+
+              {sourceBadge && (
+                <span className="fc-chip fc-chip--source" title="Source">
+                  {String(sourceBadge).toUpperCase()}
+                </span>
+              )}
+
+              <span className="fc-chip fc-chip--chakra" title="Chakra day">
+                {chakraDay}
+              </span>
+
+              <span
+                className={`fc-sig ${signaturePresent ? "fc-sig--ok" : "fc-sig--warn"}`}
+                title={verifiedTitle}
+                aria-label={verifiedTitle}
+              >
+                {signaturePresent ? "SIGNED" : "UNSIGNED"}
+              </span>
+            </div>
+
+            {/* Kai-only line (split into stylable segments) */}
+            <div className="fc-kaiRow" aria-label="Kai meta">
+              <span className="fc-kai mono" title="Kai meta line">
+                {kai.line}
+              </span>
+              <span className="fc-arc" title="Ark">
+                {kai.arc}
+              </span>
+            </div>
+          </header>
+
+          {/* Body by kind */}
+          {post && (
+            <section className="fc-bodywrap" aria-label="Post body">
+              {isNonEmpty(post.title) && <h3 className="fc-title">{post.title}</h3>}
+              {isNonEmpty(post.text) && <p className="fc-body">{post.text}</p>}
+
+              {Array.isArray(post.tags) && post.tags.length > 0 && (
+                <div className="fc-tags" aria-label="Tags">
+                  {post.tags.map((t) => (
+                    <span key={t} className="fc-tag">
+                      #{t}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {Array.isArray(post.media) && post.media.length > 0 && (
+                <div className="fc-media" aria-label="Attached media">
+                  {post.media.map((m) => {
+                    const key = `${m.kind}:${m.url}`;
+                    const label = hostOf(m.url) ?? m.kind;
+                    return (
+                      <a
+                        key={key}
+                        className="fc-btn fc-btn--ghost"
+                        href={m.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={m.url}
+                      >
+                        {label}
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+
+          {message && (
+            <section className="fc-bodywrap" aria-label="Message body">
+              <h3 className="fc-title">
+                Message → {short(String(message.toUserId ?? "recipient"), 10, 4)}
+              </h3>
+              {isNonEmpty(message.text) && <p className="fc-body">{message.text}</p>}
+            </section>
+          )}
+
+          {share && (
+            <section className="fc-bodywrap" aria-label="Share body">
+              <h3 className="fc-title">Share</h3>
+              <a
+                className="fc-link"
+                href={share.refUrl}
+                target="_blank"
+                rel="noreferrer"
+                title={share.refUrl}
+              >
+                {hostOf(share.refUrl) ?? share.refUrl}
+              </a>
+              {isNonEmpty(share.note) && <p className="fc-body">{share.note}</p>}
+            </section>
+          )}
+
+          {reaction && (
+            <section className="fc-bodywrap" aria-label="Reaction body">
+              <h3 className="fc-title">Reaction</h3>
+              <div className="fc-body">
+                {isNonEmpty(reaction.emoji) ? reaction.emoji : "❤️"}
+                {typeof reaction.value === "number" ? ` × ${reaction.value}` : null}
+              </div>
+              <a
+                className="fc-link"
+                href={reaction.refUrl}
+                target="_blank"
+                rel="noreferrer"
+                title={reaction.refUrl}
+              >
+                {hostOf(reaction.refUrl) ?? reaction.refUrl}
+              </a>
+            </section>
+          )}
+
+          {/* Fallback body if no typed content is present */}
+          {!post && !message && !share && !reaction && (
+            <section className="fc-bodywrap" aria-label="Sigil body">
+              <h3 className="fc-title">Sigil Verifikation</h3>
+              <a className="fc-link" href={url} target="_blank" rel="noreferrer" title={url}>
+                {hostOf(url) ?? url}
+              </a>
+            </section>
+          )}
+
+          {/* Actions */}
+          <footer className="fc-actions" role="group" aria-label="Actions">
             <a
-              className="fc-link"
-              href={reaction.refUrl}
+              className="fc-btn"
+              href={url}
               target="_blank"
               rel="noreferrer"
-              title={reaction.refUrl}
+              title="Open original sigil URL"
             >
-              {hostOf(reaction.refUrl) ?? reaction.refUrl}
+              Open Sigil
             </a>
-          </section>
-        )}
 
-        {/* Fallback body if no typed content is present */}
-        {!post && !message && !share && !reaction && (
-          <section className="fc-bodywrap">
-            <h3 className="fc-title">Sigil Verifikation</h3>
-            <a className="fc-link" href={url} target="_blank" rel="noreferrer" title={url}>
-              {hostOf(url) ?? url}
-            </a>
-          </section>
-        )}
+            <button
+              className="fc-btn"
+              type="button"
+              onClick={onCopy}
+              aria-pressed={copied}
+              data-state={copied ? "copied" : "idle"}
+            >
+              {copied ? "Kopied" : "Kopy URL"}
+            </button>
 
-        {/* Actions */}
-        <div className="fc-actions" role="group" aria-label="Actions">
-          <a className="btn" href={url} target="_blank" rel="noreferrer" title="Open original sigil URL">
-            Open Sigil
-          </a>
-          <button className="btn" type="button" onClick={onCopy} aria-pressed={copied}>
-            {copied ? "Kopied" : "Kopy URL"}
-          </button>
-        </div>
+            <span className="fc-live" aria-live="polite">
+              {copied ? "Copied to clipboard." : ""}
+            </span>
+          </footer>
+        </section>
       </div>
     </article>
   );
