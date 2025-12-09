@@ -22,6 +22,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./styles/sigilstream.css";
+import { useLocation } from "react-router-dom";
 
 /* Toasts */
 import ToastsProvider from "./data/toast/Toasts";
@@ -172,6 +173,40 @@ function shortAliasUrl(token: string): string {
 
 function preferredShareUrl(token: string): string {
   return token.length <= TOKEN_HARD_LIMIT ? shortAliasUrl(token) : canonicalizeCurrentStreamUrl(token);
+}
+function normalizeIncomingToken(raw: string): string {
+  let t = raw.trim();
+
+  // If someone passed a whole URL instead of just a token, extract from it.
+  try {
+    const u = new URL(t);
+    // Prefer explicit t= / p= in hash/search
+    const h = new URLSearchParams(u.hash.startsWith("#") ? u.hash.slice(1) : u.hash);
+    const s = new URLSearchParams(u.search);
+    const got =
+      h.get("t") ?? h.get("p") ?? h.get("token") ??
+      s.get("t") ?? s.get("p") ?? s.get("token");
+    if (got) t = got;
+    else if (/\/p~/.test(u.pathname)) t = u.pathname.split("/p~")[1] ?? t;
+    else if (/\/stream\/p\//.test(u.pathname)) t = u.pathname.split("/stream/p/")[1] ?? t;
+  } catch {
+    // not a URL, ignore
+  }
+
+  // Decode %xx if present
+  if (/%[0-9A-Fa-f]{2}/.test(t)) {
+    try { t = decodeURIComponent(t); } catch { /* keep raw */ }
+  }
+
+  // Query/base64 legacy: '+' may come through as space; restore it.
+  if (t.includes(" ")) t = t.replaceAll(" ", "+");
+
+  // If it looks like standard base64, normalize to base64url (what your decoder expects)
+  if (/[+/=]/.test(t)) {
+    t = t.replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
+  }
+
+  return t;
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -576,72 +611,72 @@ function SigilStreamInner(): React.JSX.Element {
 
   const payloadAttachments = useMemo(() => payload?.attachments ?? null, [payload]);
 
-  const refreshPayloadFromLocation = useCallback(async () => {
-    if (typeof window === "undefined") return;
+const refreshPayloadFromLocation = useCallback(async () => {
+  if (typeof window === "undefined") return;
 
-    const token = extractPayloadTokenFromLocation();
-    setActiveToken(token || null);
+  const raw = extractPayloadTokenFromLocation();
+  const token = raw ? normalizeIncomingToken(raw) : null;
 
-    if (!token) {
+  setActiveToken(token);
+
+  if (!token) {
+    setPayload(null);
+    setPayloadError(null);
+    return;
+  }
+
+  try {
+    registerSigilUrl(canonicalizeCurrentStreamUrl(token));
+  } catch (e) {
+    report("register current stream url (pre-decode)", e);
+  }
+
+  try {
+    // Try normalized first, then raw as a fallback (covers weird edge legacy)
+    const decoded =
+      (await decodeFeedPayload(token)) ||
+      (raw && raw !== token ? await decodeFeedPayload(raw) : null);
+
+    if (!decoded) {
       setPayload(null);
-      setPayloadError(null);
+      setPayloadError("Invalid or unreadable payload token.");
       return;
     }
 
-    try {
-      registerSigilUrl(canonicalizeCurrentStreamUrl(token));
-    } catch (e) {
-      report("register current stream url (pre-decode)", e);
+    setPayload(decoded);
+    setPayloadError(null);
+
+    if (decoded.url && typeof decoded.url === "string") {
+      registerSigilUrl(decoded.url);
+      prependUniqueToStorage([decoded.url]);
+
+      setSources((prev) => {
+        const seen = new Set(prev.map((s) => s.url));
+        if (seen.has(decoded.url)) return prev;
+        return [{ url: decoded.url }, ...prev];
+      });
     }
 
     try {
-      const decoded = await decodeFeedPayload(token);
-      if (!decoded) {
-        setPayload(null);
-        setPayloadError("Invalid or unreadable payload token.");
-        return;
-      }
-
-      setPayload(decoded);
-      setPayloadError(null);
-
-      if (decoded.url && typeof decoded.url === "string") {
-        registerSigilUrl(decoded.url);
-        prependUniqueToStorage([decoded.url]);
-
-        setSources((prev) => {
-          const seen = new Set(prev.map((s) => s.url));
-          if (seen.has(decoded.url)) return prev;
-          return [{ url: decoded.url }, ...prev];
-        });
-      }
-
-      try {
-        registerSigilUrl(shortAliasUrl(token));
-      } catch (e) {
-        report("register short alias url", e);
-      }
+      registerSigilUrl(shortAliasUrl(token));
     } catch (e) {
-      report("payload decode", e);
-      setPayload(null);
-      setPayloadError("Payload decode failed.");
+      report("register short alias url", e);
     }
-  }, []);
+  } catch (e) {
+    report("payload decode", e);
+    setPayload(null);
+    setPayloadError("Payload decode failed.");
+  }
+}, []);
 
-  useEffect(() => {
-    void refreshPayloadFromLocation();
 
-    const onPop = () => void refreshPayloadFromLocation();
-    const onHash = () => void refreshPayloadFromLocation();
+const loc = useLocation();
 
-    window.addEventListener("popstate", onPop);
-    window.addEventListener("hashchange", onHash);
+useEffect(() => {
+  void refreshPayloadFromLocation();
+  // React Router navigation (pushState) now triggers this via loc changes.
+}, [refreshPayloadFromLocation, loc.pathname, loc.search, loc.hash]);
 
-    return () => {
-      window.removeEventListener("popstate", onPop);
-      window.removeEventListener("hashchange", onHash);
-    };
-  }, [refreshPayloadFromLocation]);
 
   /** ---------- Verified session flag (per-thread) ---------- */
   const sessionKey = useMemo(() => {

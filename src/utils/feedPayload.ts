@@ -597,31 +597,46 @@ export function encodeTokenWithBudgets(
 }
 
 /** Extract token from current location (hash → tilde path → query → path), with budget awareness. */
-export function extractPayloadTokenFromLocation(): string | null {
+export function normalizePayloadToken(raw: string): string {
+  let t = (raw ?? "").trim();
+  if (!t) return "";
+
+  // decode %xx if present
+  if (/%[0-9A-Fa-f]{2}/.test(t)) {
+    try { t = decodeURIComponent(t); } catch { /* keep raw */ }
+  }
+
+  // '+' sometimes arrives as space in legacy query transport
+  if (t.includes(" ")) t = t.replaceAll(" ", "+");
+
+  // normalize standard base64 -> base64url
+  if (/[+/=]/.test(t)) {
+    t = t.replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
+  }
+
+  return t;
+}
+
+export function extractPayloadTokenFromLocation(loc: Location = window.location): string | null {
   try {
-    const loc = globalThis.location;
+    const hashParams = new URLSearchParams(loc.hash.startsWith("#") ? loc.hash.slice(1) : loc.hash);
+    const searchParams = new URLSearchParams(loc.search);
 
-    // 1) #t=<token>
-    const hash = new URLSearchParams((loc?.hash ?? "").replace(/^#/, "")).get(
-      "t",
-    );
-    if (hash) return hash;
+    const fromHash =
+      hashParams.get("t") ?? hashParams.get("p") ?? hashParams.get("token");
+    if (fromHash) return normalizePayloadToken(fromHash);
 
-    // 2) /p~<token> (SMS-safe alias)
-    const mTilde = loc?.pathname.match(/\/p~([^/?#]+)/);
-    if (mTilde) return decodeURIComponent(mTilde[1]);
+    const fromSearch =
+      searchParams.get("t") ?? searchParams.get("p") ?? searchParams.get("token");
+    if (fromSearch) return normalizePayloadToken(fromSearch);
 
-    // 3) ?p=<token>
-    const qp = new URLSearchParams(loc?.search ?? "").get("p");
-    if (qp) return qp;
+    // /stream/p/<token> or /feed/p/<token>
+    const m1 = loc.pathname.match(/\/(?:stream|feed)\/p\/([^/]+)$/);
+    if (m1?.[1]) return normalizePayloadToken(m1[1]);
 
-    // 4) /stream/p/<token> (new) or /feed/p/<token> (legacy)
-    const m = loc?.pathname.match(/^\/(?:stream|feed)\/p\/([^/]+)$/);
-    if (m) {
-      const t = decodeURIComponent(m[1]);
-      if (t.length <= TOKEN_HARD_LIMIT) return t;
-      return null;
-    }
+    // /p~<token>
+    const m2 = loc.pathname.match(/\/p~(.+)$/);
+    if (m2?.[1]) return normalizePayloadToken(m2[1]);
 
     return null;
   } catch {
