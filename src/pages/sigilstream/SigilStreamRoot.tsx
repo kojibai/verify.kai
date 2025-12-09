@@ -12,12 +12,16 @@
  *    - per-thread verified session keyed off ANY token form
  *    - body renders: text | md (safe) | html (sanitized) | code
  *
- * ✅ KOPY updated to match earlier behavior:
- *    - NO custom AudioContext chirp here (sound stays toast-driven, like v6.1)
- *    - label flips Kopy → Kopied → Kopy
- *    - toast push triggers same toast system + sound
- *    - copies ONE canonical share link (short alias when safe)
- *    - no inline styling (className only)
+ * ✅ KOPY stays toast-driven (sound is toast system behavior)
+ *
+ * ✅ Rich URL cards:
+ *    - OG meta (best-effort via jina proxy)
+ *    - favicon + host + title/desc
+ *    - embeds via ./attachments/embeds.tsx (NO duplicate embed mapping here)
+ *
+ * ✅ Payload attachments:
+ *    - Rendered via ./attachments/gallery.tsx
+ *    - Validated/coerced into AttachmentManifest via ./attachments/types.ts
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -37,17 +41,16 @@ import { LS_KEY, parseStringArray, prependUniqueToStorage } from "./data/storage
 
 /* Core: alias + utils */
 import { normalizeAddParam } from "./core/alias";
-import { coerceAuth, readStringProp, report } from "./core/utils";
+import { coerceAuth, readStringProp, report, isRecord } from "./core/utils";
 
 /* Identity */
 import { IdentityBar } from "./identity/IdentityBar";
 import { SigilActionUrl } from "./identity/SigilActionUrl";
 
-/* Inhaler / Composer / Status / List */
+/* Inhaler / Composer / Status */
 import { InhaleSection } from "./inhaler/InhaleSection";
 import { Composer } from "./composer/Composer";
 import { KaiStatus } from "./status/KaiStatus";
-import { StreamList } from "./list/StreamList";
 
 /* External app hooks (existing app) */
 import SigilLogin from "../../components/KaiVoh/SigilLogin";
@@ -60,12 +63,22 @@ import {
   decodeFeedPayload,
   type FeedPostPayload,
   type PostBody,
-  type AttachmentItem,
-  type Attachments,
 } from "../../utils/feedPayload";
-import { UrlEmbed } from "./attachments/embeds";
+
 /* Explorer bridge: register any stream/sigil URL */
 import { registerSigilUrl } from "../../utils/sigilRegistry";
+
+/* Attachments (single source of truth) */
+import { AttachmentGallery } from "./attachments/gallery";
+import {
+  isAttachmentManifest,
+  isAttachmentItem,
+  type AttachmentManifest,
+  type AttachmentItem,
+} from "./attachments/types";
+
+/* Embeds (single source of truth) */
+import { UrlEmbed } from "./attachments/embeds";
 
 /** Simple source shape */
 type Source = { url: string };
@@ -174,18 +187,22 @@ function shortAliasUrl(token: string): string {
 function preferredShareUrl(token: string): string {
   return token.length <= TOKEN_HARD_LIMIT ? shortAliasUrl(token) : canonicalizeCurrentStreamUrl(token);
 }
+
 function normalizeIncomingToken(raw: string): string {
   let t = raw.trim();
 
   // If someone passed a whole URL instead of just a token, extract from it.
   try {
     const u = new URL(t);
-    // Prefer explicit t= / p= in hash/search
     const h = new URLSearchParams(u.hash.startsWith("#") ? u.hash.slice(1) : u.hash);
     const s = new URLSearchParams(u.search);
     const got =
-      h.get("t") ?? h.get("p") ?? h.get("token") ??
-      s.get("t") ?? s.get("p") ?? s.get("token");
+      h.get("t") ??
+      h.get("p") ??
+      h.get("token") ??
+      s.get("t") ??
+      s.get("p") ??
+      s.get("token");
     if (got) t = got;
     else if (/\/p~/.test(u.pathname)) t = u.pathname.split("/p~")[1] ?? t;
     else if (/\/stream\/p\//.test(u.pathname)) t = u.pathname.split("/stream/p/")[1] ?? t;
@@ -195,18 +212,56 @@ function normalizeIncomingToken(raw: string): string {
 
   // Decode %xx if present
   if (/%[0-9A-Fa-f]{2}/.test(t)) {
-    try { t = decodeURIComponent(t); } catch { /* keep raw */ }
+    try {
+      t = decodeURIComponent(t);
+    } catch {
+      /* keep raw */
+    }
   }
 
   // Query/base64 legacy: '+' may come through as space; restore it.
   if (t.includes(" ")) t = t.replaceAll(" ", "+");
 
-  // If it looks like standard base64, normalize to base64url (what your decoder expects)
+  // If it looks like standard base64, normalize to base64url (decoder expects base64url)
   if (/[+/=]/.test(t)) {
     t = t.replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
   }
 
   return t;
+}
+
+function safeHttpUrl(u: string): string | null {
+  try {
+    const url = new URL(u);
+    if (url.protocol === "http:" || url.protocol === "https:") return url.toString();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function urlHost(u: string): string {
+  try {
+    return new URL(u).host;
+  } catch {
+    return "";
+  }
+}
+
+function urlHostPretty(u: string): string {
+  const h = urlHost(u);
+  return h.replace(/^www\./, "");
+}
+
+function faviconFor(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const host = u.hostname;
+    if (!host) return null;
+    return `https://icons.duckduckgo.com/ip3/${host}.ico`;
+  } catch {
+    return null;
+  }
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -258,16 +313,6 @@ function escapeHtml(s: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
-}
-
-function safeHttpUrl(u: string): string | null {
-  try {
-    const url = new URL(u);
-    if (url.protocol === "http:" || url.protocol === "https:") return url.toString();
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -348,68 +393,356 @@ function renderMarkdownToSafeHtml(md: string): string {
 }
 
 /* ────────────────────────────────────────────────────────────────
-   UI pieces
+   Rich link previews (favicons + embeds + OG meta)
 ──────────────────────────────────────────────────────────────── */
-function AttachmentList({ attachments }: { attachments: Attachments }): React.JSX.Element {
+
+type LinkMeta = {
+  title?: string;
+  description?: string;
+  siteName?: string;
+  image?: string;
+};
+
+const META_CACHE = new Map<string, LinkMeta>();
+
+function absUrl(base: string, maybeRel: string): string {
+  try {
+    return new URL(maybeRel, base).toString();
+  } catch {
+    return maybeRel;
+  }
+}
+
+function pickMeta(doc: Document, selector: string): string | undefined {
+  const el = doc.querySelector(selector);
+  const v = el?.getAttribute("content") ?? el?.getAttribute("href") ?? undefined;
+  return v && v.trim().length ? v.trim() : undefined;
+}
+
+// Best-effort, CORS-safe fetch via jina proxy.
+// If you later add your own endpoint (recommended), swap this function.
+async function fetchLinkMeta(url: string, signal?: AbortSignal): Promise<LinkMeta | null> {
+  const safe = safeHttpUrl(url);
+  if (!safe) return null;
+
+  const cached = META_CACHE.get(safe);
+  if (cached) return cached;
+
+  const proxy = `https://r.jina.ai/${safe}`;
+
+  try {
+    const res = await fetch(proxy, {
+      method: "GET",
+      mode: "cors",
+      signal,
+      headers: { Accept: "text/html, text/plain;q=0.9,*/*;q=0.1" },
+    });
+
+    if (!res.ok) return null;
+
+    const text = await res.text();
+    if (!text || text.length < 20) return null;
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, "text/html");
+
+    const ogTitle = pickMeta(doc, 'meta[property="og:title"]');
+    const ogDesc = pickMeta(doc, 'meta[property="og:description"]');
+    const ogSite = pickMeta(doc, 'meta[property="og:site_name"]');
+    const ogImage = pickMeta(doc, 'meta[property="og:image"]');
+
+    const twTitle = pickMeta(doc, 'meta[name="twitter:title"]');
+    const twDesc = pickMeta(doc, 'meta[name="twitter:description"]');
+    const twImage = pickMeta(doc, 'meta[name="twitter:image"]');
+
+    const titleTag = doc.querySelector("title")?.textContent?.trim() || undefined;
+    const descTag = pickMeta(doc, 'meta[name="description"]');
+
+    const meta: LinkMeta = {
+      title: ogTitle ?? twTitle ?? titleTag,
+      description: ogDesc ?? twDesc ?? descTag,
+      siteName: ogSite,
+      image: ogImage ?? twImage,
+    };
+
+    if (meta.image) meta.image = absUrl(safe, meta.image);
+
+    META_CACHE.set(safe, meta);
+    return meta;
+  } catch {
+    return null;
+  }
+}
+
+function useInView<T extends Element>(): { ref: React.RefCallback<T>; inView: boolean } {
+  const ioSupported = typeof window !== "undefined" && typeof IntersectionObserver !== "undefined";
+  const [inView, setInView] = useState<boolean>(() => !ioSupported);
+
+  const ioRef = useRef<IntersectionObserver | null>(null);
+
+  const ref = useCallback(
+    (node: T | null) => {
+      if (ioRef.current) {
+        ioRef.current.disconnect();
+        ioRef.current = null;
+      }
+      if (!ioSupported) return;
+      if (!node) return;
+
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (e.target === node && e.isIntersecting) {
+              setInView(true);
+              io.disconnect();
+              break;
+            }
+          }
+        },
+        { root: null, rootMargin: "250px 0px", threshold: 0.01 },
+      );
+
+      ioRef.current = io;
+      io.observe(node);
+    },
+    [ioSupported],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (ioRef.current) {
+        ioRef.current.disconnect();
+        ioRef.current = null;
+      }
+    };
+  }, []);
+
+  return { ref, inView };
+}
+
+function useLinkMeta(url: string, enabled: boolean): LinkMeta | null {
+  const safe = safeHttpUrl(url) ?? "";
+  const cached: LinkMeta | null = safe ? (META_CACHE.get(safe) ?? null) : null;
+
+  type FetchedMeta = { safe: string; meta: LinkMeta };
+  const [fetched, setFetched] = useState<FetchedMeta | null>(null);
+  const fetchedForThisUrl = fetched && fetched.safe === safe ? fetched.meta : null;
+
+  useEffect(() => {
+    if (!enabled) return;
+    if (!safe) return;
+    if (META_CACHE.has(safe)) return;
+
+    const ac = new AbortController();
+
+    (async () => {
+      const m = await fetchLinkMeta(safe, ac.signal);
+      if (m) setFetched({ safe, meta: m });
+    })().catch(() => void 0);
+
+    return () => ac.abort();
+  }, [safe, enabled]);
+
+  return cached ?? fetchedForThisUrl;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Attachments: coerce payload attachments into AttachmentManifest
+──────────────────────────────────────────────────────────────── */
+
+function sumBytes(items: AttachmentItem[]): { total: number; inlined: number } {
+  let total = 0;
+  let inlined = 0;
+
+  for (const it of items) {
+    if (it.kind === "file-inline") {
+      if (typeof it.size === "number" && Number.isFinite(it.size) && it.size >= 0) {
+        total += it.size;
+        inlined += it.size;
+      }
+      continue;
+    }
+    if (it.kind === "file-ref") {
+      if (typeof it.size === "number" && Number.isFinite(it.size) && it.size >= 0) {
+        total += it.size;
+      }
+      continue;
+    }
+  }
+
+  return { total, inlined };
+}
+
+function coerceAttachmentManifest(v: unknown): AttachmentManifest | null {
+  if (isAttachmentManifest(v)) return v;
+
+  if (!isRecord(v)) return null;
+  const versionRaw = v["version"];
+  const itemsRaw = v["items"];
+
+  if (versionRaw !== 1) return null;
+  if (!Array.isArray(itemsRaw)) return null;
+
+  const items: AttachmentItem[] = itemsRaw.filter(isAttachmentItem);
+  const totals = sumBytes(items);
+
+  const totalBytes =
+    typeof v["totalBytes"] === "number" && Number.isFinite(v["totalBytes"])
+      ? v["totalBytes"]
+      : totals.total;
+
+  const inlinedBytes =
+    typeof v["inlinedBytes"] === "number" && Number.isFinite(v["inlinedBytes"])
+      ? v["inlinedBytes"]
+      : totals.inlined;
+
+  return { version: 1, totalBytes, inlinedBytes, items };
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Rich URL cards (List)
+──────────────────────────────────────────────────────────────── */
+
+function RichLinkCard(props: {
+  url: string;
+  onInhale?: (u: string) => void;
+  toast?: (kind: "success" | "warn" | "info", msg: string) => void;
+}): React.JSX.Element {
+  const { url, onInhale, toast } = props;
+  const safe = safeHttpUrl(url);
+  const host = safe ? urlHostPretty(safe) : "Invalid URL";
+  const fav = safe ? faviconFor(safe) : null;
+
+  const { ref, inView } = useInView<HTMLElement>();
+  const meta = useLinkMeta(safe ?? "", inView);
+
+  const title = meta?.title?.trim() || host;
+  const desc = meta?.description?.trim() || "";
+  const site = meta?.siteName?.trim() || "";
+  const ogImgSafe = meta?.image ? safeHttpUrl(meta.image) : null;
+
+  const [copied, setCopied] = useState(false);
+  const tRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (tRef.current !== null) window.clearTimeout(tRef.current);
+    };
+  }, []);
+
+  const onCopyUrl = useCallback(async () => {
+    if (!safe) return;
+    try {
+      await writeClipboardText(safe);
+      setCopied(true);
+      if (tRef.current !== null) window.clearTimeout(tRef.current);
+      tRef.current = window.setTimeout(() => setCopied(false), 900);
+      toast?.("success", "Link kopied.");
+    } catch {
+      toast?.("warn", "Copy failed. Select the address bar.");
+    }
+  }, [safe, toast]);
+
+  const onInhaleClick = useCallback(() => {
+    if (!safe) return;
+    onInhale?.(safe);
+    toast?.("success", "Inhaled into your stream.");
+  }, [safe, onInhale, toast]);
+
   return (
-    <div className="sf-attachments">
-      <div className="sf-att-title">Attachments</div>
+    <article ref={ref} className="sf-linkcard" role="article" aria-label="Link preview">
+      <header className="sf-linkcard__head">
+        <div className="sf-linkcard__brand">
+          {fav ? (
+            <img
+              className="sf-favicon"
+              src={fav}
+              alt=""
+              aria-hidden="true"
+              loading="lazy"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <span className="sf-favicon sf-favicon--blank" aria-hidden="true" />
+          )}
 
-      <div className="sf-att-grid">
-        {attachments.items.map((it: AttachmentItem, i: number) => {
-          if (it.kind === "url") {
-            const href = safeHttpUrl(it.url);
-
-            return (
-              <div key={`${it.kind}:${i}`} className="sf-att-item">
-                {href ? (
-                  <UrlEmbed url={href} title={it.title} />
-                ) : (
-                  <div className="sf-error" role="note">
-                    Invalid URL: {it.url}
-                  </div>
-                )}
-              </div>
-            );
-          }
-
-          if (it.kind === "file-ref") {
-            return (
-              <div key={`${it.kind}:${i}`} className="sf-att-item sf-fileref">
-                <div className="sf-att-kind">File ref</div>
-                <div className="sf-mono sf-att-foot">
-                  {it.name ?? "file"}{" "}
-                  {typeof it.size === "number" ? `(${it.size.toLocaleString()} bytes)` : ""}
-                </div>
-                <div className="sf-mono sf-att-foot">sha256: {it.sha256}</div>
-                {it.url ? (
-                  <a className="sf-file-dl" href={it.url} target="_blank" rel="noreferrer noopener">
-                    Open →
-                  </a>
-                ) : null}
-              </div>
-            );
-          }
-
-          return (
-            <div key={`${it.kind}:${i}`} className="sf-att-item sf-file">
-              <div className="sf-att-kind">Inline file</div>
-              <div className="sf-mono sf-att-foot">
-                {it.name ?? "inline"}{" "}
-                {typeof it.size === "number" ? `(${it.size.toLocaleString()} bytes)` : ""}
-              </div>
-              <div className="sf-mono sf-att-foot">
-                data_b64url: {it.data_b64url.length.toLocaleString()} chars
-              </div>
+          <div className="sf-linkcard__brandText">
+            <div className="sf-linkcard__title" title={title}>
+              {title}
             </div>
-          );
-        })}
-      </div>
+            <div className="sf-linkcard__sub">
+              <span className="sf-linkcard__host">{site || host}</span>
+              {safe ? <span className="sf-muted"> · </span> : null}
+              <span className="sf-linkcard__url" title={url}>
+                {safe ?? url}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="sf-linkcard__actions">
+          {safe ? (
+            <a className="sf-btn sf-btn--ghost" href={safe} target="_blank" rel="noreferrer noopener">
+              Open
+            </a>
+          ) : null}
+
+          <button type="button" className="sf-btn sf-btn--ghost" onClick={onCopyUrl} disabled={!safe || copied}>
+            {copied ? "Kopied" : "Kopy"}
+          </button>
+
+          {onInhale ? (
+            <button type="button" className="sf-btn" onClick={onInhaleClick} disabled={!safe}>
+              Inhale
+            </button>
+          ) : null}
+        </div>
+      </header>
+
+      {desc ? <div className="sf-linkcard__desc">{desc}</div> : null}
+
+      {ogImgSafe ? (
+        <div className="sf-linkcard__thumb">
+          <img
+            className="sf-linkcard__thumbImg"
+            src={ogImgSafe}
+            alt=""
+            loading="lazy"
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      ) : null}
+
+      {safe ? (
+        <div className="sf-linkcard__embed">
+          <UrlEmbed url={safe} title={title} />
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function RichStreamList(props: {
+  urls: string[];
+  onInhale?: (u: string) => void;
+  toast?: (kind: "success" | "warn" | "info", msg: string) => void;
+}): React.JSX.Element {
+  const { urls, onInhale, toast } = props;
+
+  return (
+    <div className="sf-rlist" role="list" aria-label="Stream links">
+      {urls.map((u) => (
+        <div key={u} role="listitem" className="sf-rlist__item">
+          <RichLinkCard url={u} onInhale={onInhale} toast={toast} />
+        </div>
+      ))}
     </div>
   );
 }
 
-
+/* ────────────────────────────────────────────────────────────────
+   Post body renderer
+──────────────────────────────────────────────────────────────── */
 
 function PostBodyView({ body, caption }: { body?: PostBody; caption?: string }): React.JSX.Element {
   const effectiveBody: PostBody | null =
@@ -448,14 +781,18 @@ function pickString(obj: unknown, keys: readonly string[]): string | null {
   return null;
 }
 
+/* ────────────────────────────────────────────────────────────────
+   Payload card (uses AttachmentGallery)
+──────────────────────────────────────────────────────────────── */
+
 function PayloadCard(props: {
   token: string;
   payload: FeedPostPayload;
-  attachments: Attachments | null;
+  manifest: AttachmentManifest | null;
   copied: boolean;
   onKopy: () => void;
 }): React.JSX.Element {
-  const { token, payload, attachments, copied, onKopy } = props;
+  const { token, payload, manifest, copied, onKopy } = props;
 
   const pulse = payload.pulse;
   const { beat, step } = pulseToBeatStep(pulse);
@@ -481,7 +818,6 @@ function PayloadCard(props: {
     pickString((payload as unknown as { meta?: unknown }).meta, ["mode", "source", "origin"]) ??
     "Manual";
 
-  // Bridge: register share + action URL (but never render URL)
   useEffect(() => {
     try {
       registerSigilUrl(preferredShareUrl(token));
@@ -521,16 +857,10 @@ function PayloadCard(props: {
 
       <PostBodyView body={payload.body} caption={payload.caption} />
 
-      {attachments ? <AttachmentList attachments={attachments} /> : null}
+      {manifest ? <AttachmentGallery manifest={manifest} /> : null}
 
       <div className="sf-reply-actions">
-        <button
-          type="button"
-          className="sf-btn"
-          onClick={onKopy}
-          disabled={copied}
-          aria-label="Kopy share link"
-        >
+        <button type="button" className="sf-btn" onClick={onKopy} disabled={copied} aria-label="Kopy share link">
           {copied ? "Kopied" : "Kopy"}
         </button>
       </div>
@@ -554,6 +884,7 @@ export function SigilStreamRoot(): React.JSX.Element {
 
 function SigilStreamInner(): React.JSX.Element {
   const toasts = useToasts();
+  const loc = useLocation();
 
   /** ---------- Sources list (seed + storage + ?add ingestion) ---------- */
   const [sources, setSources] = useState<Source[]>([]);
@@ -608,79 +939,75 @@ function SigilStreamInner(): React.JSX.Element {
   const [payload, setPayload] = useState<FeedPostPayload | null>(null);
   const [payloadError, setPayloadError] = useState<string | null>(null);
 
-  const payloadAttachments = useMemo(() => payload?.attachments ?? null, [payload]);
+  const payloadManifest = useMemo<AttachmentManifest | null>(() => {
+    const raw = payload ? (payload as unknown as { attachments?: unknown }).attachments : undefined;
+    return raw ? coerceAttachmentManifest(raw) : null;
+  }, [payload]);
 
-const refreshPayloadFromLocation = useCallback(async () => {
-  if (typeof window === "undefined") return;
+  const refreshPayloadFromLocation = useCallback(async () => {
+    if (typeof window === "undefined") return;
 
-  const raw = extractPayloadTokenFromLocation();
-  const token = raw ? normalizeIncomingToken(raw) : null;
+    const raw = extractPayloadTokenFromLocation();
+    const token = raw ? normalizeIncomingToken(raw) : null;
 
-  setActiveToken(token);
+    setActiveToken(token);
 
-  if (!token) {
-    setPayload(null);
-    setPayloadError(null);
-    return;
-  }
-
-  try {
-    registerSigilUrl(canonicalizeCurrentStreamUrl(token));
-  } catch (e) {
-    report("register current stream url (pre-decode)", e);
-  }
-
-  try {
-    // Try normalized first, then raw as a fallback (covers weird edge legacy)
-    const decoded =
-      (await decodeFeedPayload(token)) ||
-      (raw && raw !== token ? await decodeFeedPayload(raw) : null);
-
-    if (!decoded) {
+    if (!token) {
       setPayload(null);
-      setPayloadError("Invalid or unreadable payload token.");
+      setPayloadError(null);
       return;
     }
 
-    setPayload(decoded);
-    setPayloadError(null);
-
-    if (decoded.url && typeof decoded.url === "string") {
-      registerSigilUrl(decoded.url);
-      prependUniqueToStorage([decoded.url]);
-
-      setSources((prev) => {
-        const seen = new Set(prev.map((s) => s.url));
-        if (seen.has(decoded.url)) return prev;
-        return [{ url: decoded.url }, ...prev];
-      });
+    try {
+      registerSigilUrl(canonicalizeCurrentStreamUrl(token));
+    } catch (e) {
+      report("register current stream url (pre-decode)", e);
     }
 
     try {
-      registerSigilUrl(shortAliasUrl(token));
+      const decoded =
+        (await decodeFeedPayload(token)) ||
+        (raw && raw !== token ? await decodeFeedPayload(raw) : null);
+
+      if (!decoded) {
+        setPayload(null);
+        setPayloadError("Invalid or unreadable payload token.");
+        return;
+      }
+
+      setPayload(decoded);
+      setPayloadError(null);
+
+      if (decoded.url && typeof decoded.url === "string") {
+        registerSigilUrl(decoded.url);
+        prependUniqueToStorage([decoded.url]);
+
+        setSources((prev) => {
+          const seen = new Set(prev.map((s) => s.url));
+          if (seen.has(decoded.url)) return prev;
+          return [{ url: decoded.url }, ...prev];
+        });
+      }
+
+      try {
+        registerSigilUrl(shortAliasUrl(token));
+      } catch (e) {
+        report("register short alias url", e);
+      }
     } catch (e) {
-      report("register short alias url", e);
+      report("payload decode", e);
+      setPayload(null);
+      setPayloadError("Payload decode failed.");
     }
-  } catch (e) {
-    report("payload decode", e);
-    setPayload(null);
-    setPayloadError("Payload decode failed.");
-  }
-}, []);
+  }, []);
 
-
-const loc = useLocation();
-
-useEffect(() => {
-  void refreshPayloadFromLocation();
-  // React Router navigation (pushState) now triggers this via loc changes.
-}, [refreshPayloadFromLocation, loc.pathname, loc.search, loc.hash]);
-
+  useEffect(() => {
+    void refreshPayloadFromLocation();
+  }, [refreshPayloadFromLocation, loc.pathname, loc.search, loc.hash]);
 
   /** ---------- Verified session flag (per-thread) ---------- */
   const sessionKey = useMemo(() => {
-    const token =
-      activeToken ?? (typeof window !== "undefined" ? extractPayloadTokenFromLocation() : null) ?? "root";
+    const token = activeToken ?? (typeof window !== "undefined" ? extractPayloadTokenFromLocation() : null) ?? "root";
     return `sf.verifiedSession:${sessionTokenKey(token)}`;
   }, [activeToken]);
 
@@ -730,10 +1057,7 @@ useEffect(() => {
   const authLike = useMemo(() => coerceAuth(rawSigilAuth), [rawSigilAuth]);
 
   const composerMeta = useMemo(() => (verifiedThisSession ? authLike.meta : null), [verifiedThisSession, authLike.meta]);
-  const composerSvgText = useMemo(
-    () => (verifiedThisSession ? authLike.svgText : null),
-    [verifiedThisSession, authLike.svgText],
-  );
+  const composerSvgText = useMemo(() => (verifiedThisSession ? authLike.svgText : null), [verifiedThisSession, authLike.svgText]);
 
   const composerPhiKey = useMemo(
     () => (composerMeta ? readStringProp(composerMeta, "userPhiKey") : undefined),
@@ -757,7 +1081,7 @@ useEffect(() => {
     });
   };
 
-  /** ---------- KOPY (earlier/toast-driven sound + label flip) ---------- */
+  /** ---------- KOPY (toast-driven sound + label flip) ---------- */
   const [copied, setCopied] = useState<boolean>(false);
   const copiedTimer = useRef<number | null>(null);
 
@@ -768,7 +1092,8 @@ useEffect(() => {
   }, []);
 
   const onKopy = useCallback(async () => {
-    const token = activeToken ?? (typeof window !== "undefined" ? extractPayloadTokenFromLocation() : null);
+    const tokenRaw = activeToken ?? (typeof window !== "undefined" ? extractPayloadTokenFromLocation() : null);
+    const token = tokenRaw ? normalizeIncomingToken(tokenRaw) : null;
     if (!token) return;
 
     const share = preferredShareUrl(token);
@@ -780,7 +1105,6 @@ useEffect(() => {
       if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
       copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
 
-      // ✅ This is what triggers the SAME toast system (and its sound) like the older version.
       toasts.push("success", "Link kopied.");
     } catch (e) {
       report("kopy", e);
@@ -791,9 +1115,13 @@ useEffect(() => {
 
   /** ---------- Derived list: show payload first if present ---------- */
   const urls: string[] = useMemo(() => {
-    if (!payload) return sources.map((s) => s.url);
-    const rest = sources.filter((s) => s.url !== payload.url).map((s) => s.url);
-    return [payload.url, ...rest];
+    const base = sources.map((s) => s.url);
+
+    const payloadUrl = payload && typeof payload.url === "string" && payload.url.length ? payload.url : null;
+    if (!payloadUrl) return base;
+
+    const rest = base.filter((u) => u !== payloadUrl);
+    return [payloadUrl, ...rest];
   }, [sources, payload]);
 
   /** ---------- Render ---------- */
@@ -813,7 +1141,7 @@ useEffect(() => {
           <PayloadCard
             token={activeToken}
             payload={payload}
-            attachments={payloadAttachments}
+            manifest={payloadManifest}
             copied={copied}
             onKopy={onKopy}
           />
@@ -823,9 +1151,8 @@ useEffect(() => {
           </div>
         ) : (
           <p className="sf-sub">
-            Open a payload link at <code>/stream/p/&lt;token&gt;</code> (or <code>/stream#t=&lt;token&gt;</code>).
-            Replies are Kai-sealed and thread via <code>?add=</code>. Short alias accepted: <code>/p~&lt;token&gt;</code>{" "}
-            (and legacy <code>/p#t=</code>, <code>/p?t=</code>, <code>/stream?p=</code>).
+            Open a payload link at <code>/stream/p/&lt;token&gt;</code> (or <code>/stream#t=&lt;token&gt;</code>). Replies are Kai-sealed and thread via{" "}
+            <code>?add=</code>. Short alias accepted: <code>/p~&lt;token&gt;</code> (and legacy <code>/p#t=</code>, <code>/p?t=</code>, <code>/stream?p=</code>).
           </p>
         )}
 
@@ -864,11 +1191,10 @@ useEffect(() => {
       <section className="sf-list">
         {urls.length === 0 ? (
           <div className="sf-empty">
-            No items yet. Paste a link above or open a <code>/stream/p/&lt;payload&gt;</code> link and reply to start a
-            thread.
+            No items yet. Paste a link above or open a <code>/stream/p/&lt;payload&gt;</code> link and reply to start a thread.
           </div>
         ) : (
-          <StreamList urls={urls} />
+          <RichStreamList urls={urls} onInhale={onAddInhaled} toast={(kind, msg) => toasts.push(kind, msg)} />
         )}
       </section>
     </main>
