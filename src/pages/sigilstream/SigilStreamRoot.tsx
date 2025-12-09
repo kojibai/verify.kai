@@ -3,12 +3,12 @@
 
 /**
  * SigilStreamRoot — Memory Stream Shell
- * v7.5.0 — Sealed lock-screen + glyph upload gate (private posts)
+ * v7.5.1 — FIX: Remember/KOPY copies /stream/p link (not /p~) to avoid 404 on hosts without /p~ rewrite
  *
  * ✅ Keeps v7 features:
  *    - extractPayloadTokenFromLocation (ALL token forms)
  *    - Brotli-aware decodeFeedPayload (await-safe)
- *    - /p~ preferred share, hash fallback for huge tokens
+ *    - supports /p~ ingestion + hash fallback for huge tokens
  *    - per-thread verified session keyed off ANY token form
  *    - body renders: text | md (safe) | html (sanitized) | code
  *
@@ -540,14 +540,15 @@ async function tryUnsealWithPostSealModule(args: {
   if (!isFunction(fnUnknown)) throw new Error("postSeal module is missing an unseal function.");
 
   const fnName =
-    (isRecord(mod) &&
-      Object.entries(mod).find(([, v]) => v === fnUnknown)?.[0]) ??
+    (isRecord(mod) && Object.entries(mod).find(([, v]) => v === fnUnknown)?.[0]) ??
     "unseal";
 
   // If module exposes unsealEnvelopeV1(env, creds), pass creds extracted from meta.
   if (fnName === "unsealEnvelopeV1") {
-    const kaiSignature = typeof args.meta === "object" && args.meta !== null ? readStringProp(args.meta, "kaiSignature") : undefined;
-    const phiKey = typeof args.meta === "object" && args.meta !== null ? readStringProp(args.meta, "userPhiKey") : undefined;
+    const kaiSignature =
+      typeof args.meta === "object" && args.meta !== null ? readStringProp(args.meta, "kaiSignature") : undefined;
+    const phiKey =
+      typeof args.meta === "object" && args.meta !== null ? readStringProp(args.meta, "userPhiKey") : undefined;
 
     if (!kaiSignature) throw new Error("Missing kaiSignature in meta (cannot unlock sealed envelope).");
 
@@ -573,7 +574,9 @@ async function tryUnsealWithPostSealModule(args: {
   }
 
   // Default contract: fn(seal, { meta, svgText? }) -> { body?, attachments?, caption? }
-  const outUnknown = await Promise.resolve(fnUnknown(args.seal, { meta: args.meta, svgText: args.svgText ?? undefined }));
+  const outUnknown = await Promise.resolve(
+    fnUnknown(args.seal, { meta: args.meta, svgText: args.svgText ?? undefined }),
+  );
   if (!isUnsealedContent(outUnknown)) throw new Error("Unseal returned an unexpected shape.");
   return outUnknown;
 }
@@ -622,6 +625,48 @@ function PayloadCard(props: {
     body,
     caption,
   } = props;
+  const gateRef = useRef<HTMLDivElement | null>(null);
+
+  const promptGate = useCallback(() => {
+    const el = gateRef.current;
+    if (!el) return;
+
+    try {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch {
+      /* ignore */
+    }
+
+    // Try to open the file picker inside SigilLogin (best effort).
+    const file = el.querySelector('input[type="file"]') as HTMLInputElement | null;
+    if (file) {
+      file.click();
+      return;
+    }
+
+    // Fallback: click the first button in the gate.
+    const btn = el.querySelector("button") as HTMLButtonElement | null;
+    btn?.click();
+  }, []);
+
+  const unsealLabel =
+    unsealState.status === "opening"
+      ? "UNSEALING…"
+      : canUnseal
+        ? "UNSEAL"
+        : !verifiedThisSession
+          ? "UPLOAD GLYPH"
+          : !hasComposerMeta
+            ? "RE-INHALE"
+            : "UNSEAL";
+
+  const handleUnsealPress = useCallback(() => {
+    if (!canUnseal) {
+      promptGate();
+      return;
+    }
+    onUnseal();
+  }, [canUnseal, onUnseal, promptGate]);
 
   const pulse = payload.pulse;
   const { beat, step } = pulseToBeatStep(pulse);
@@ -699,7 +744,12 @@ function PayloadCard(props: {
           {unsealState.status === "open" ? (
             <div className="sf-seal__row">
               <span className="sf-seal__label">Unlocked</span>
-              <button type="button" className="sf-seal__btn" onClick={onForgetUnsealed} aria-label="Forget unsealed view">
+              <button
+                type="button"
+                className="sf-seal__btn"
+                onClick={onForgetUnsealed}
+                aria-label="Forget unsealed view"
+              >
                 FORGET
               </button>
             </div>
@@ -711,11 +761,11 @@ function PayloadCard(props: {
                 <button
                   type="button"
                   className="sf-seal__btn"
-                  onClick={onUnseal}
-                  disabled={!canUnseal || unsealState.status === "opening"}
+                  onClick={handleUnsealPress}
+                  disabled={unsealState.status === "opening"} // ✅ only disable while opening
                   aria-label="Unseal private content"
                 >
-                  {unsealState.status === "opening" ? "UNSEALING…" : "UNSEAL"}
+                  {unsealLabel}
                 </button>
               </div>
 
@@ -726,7 +776,12 @@ function PayloadCard(props: {
               ) : null}
 
               {/* 🔒 LOCK SCREEN: glyph upload gate (ONLY for sealed posts) */}
-              <div className="sf-seal__gate" role="region" aria-label="Unlock gate">
+              <div
+                ref={gateRef}
+                className="sf-seal__gate"
+                role="region"
+                aria-label="Unlock gate"
+              >
                 {!verifiedThisSession ? (
                   <>
                     <div className="sf-seal__hint" role="note">
@@ -745,7 +800,12 @@ function PayloadCard(props: {
                       <SigilLogin onVerified={onVerifiedNow} />
                     </div>
                     <div className="sf-seal__row">
-                      <button type="button" className="sf-seal__btn" onClick={onResetVerified} aria-label="Use a different key">
+                      <button
+                        type="button"
+                        className="sf-seal__btn"
+                        onClick={onResetVerified}
+                        aria-label="Use a different key"
+                      >
                         USE DIFFERENT KEY
                       </button>
                     </div>
@@ -834,7 +894,9 @@ function SigilStreamInner(): React.JSX.Element {
     if (typeof window === "undefined") return;
     try {
       const search = new URLSearchParams(window.location.search);
-      const hash = new URLSearchParams(window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash);
+      const hash = new URLSearchParams(
+        window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash,
+      );
 
       const addsRaw = [...search.getAll("add"), ...hash.getAll("add")];
       const adds = addsRaw.map(normalizeAddParam).filter((x): x is string => Boolean(x));
@@ -871,7 +933,8 @@ function SigilStreamInner(): React.JSX.Element {
       setUnsealState({ status: "none" });
       return;
     }
-    const hasSeal = isRecord(payload as unknown) && (payload as unknown as Record<string, unknown>)["seal"] !== undefined;
+    const hasSeal =
+      isRecord(payload as unknown) && (payload as unknown as Record<string, unknown>)["seal"] !== undefined;
     setUnsealState(hasSeal ? { status: "sealed" } : { status: "none" });
   }, [payload]);
 
@@ -986,7 +1049,8 @@ function SigilStreamInner(): React.JSX.Element {
 
   /** ---------- Verified session flag (per-thread) ---------- */
   const sessionKey = useMemo(() => {
-    const token = activeToken ?? (typeof window !== "undefined" ? extractPayloadTokenFromLocation() : null) ?? "root";
+    const token =
+      activeToken ?? (typeof window !== "undefined" ? extractPayloadTokenFromLocation() : null) ?? "root";
     return `sf.verifiedSession:${sessionTokenKey(token)}`;
   }, [activeToken]);
 
@@ -1036,10 +1100,16 @@ function SigilStreamInner(): React.JSX.Element {
   const authLike = useMemo(() => coerceAuth(rawSigilAuth), [rawSigilAuth]);
 
   const composerMeta = useMemo(() => (verifiedThisSession ? authLike.meta : null), [verifiedThisSession, authLike.meta]);
-  const composerSvgText = useMemo(() => (verifiedThisSession ? authLike.svgText : null), [verifiedThisSession, authLike.svgText]);
+  const composerSvgText = useMemo(
+    () => (verifiedThisSession ? authLike.svgText : null),
+    [verifiedThisSession, authLike.svgText],
+  );
 
   const composerPhiKey = useMemo(() => (composerMeta ? readStringProp(composerMeta, "userPhiKey") : undefined), [composerMeta]);
-  const composerKaiSig = useMemo(() => (composerMeta ? readStringProp(composerMeta, "kaiSignature") : undefined), [composerMeta]);
+  const composerKaiSig = useMemo(
+    () => (composerMeta ? readStringProp(composerMeta, "kaiSignature") : undefined),
+    [composerMeta],
+  );
 
   /** ---------- Optional sigil tint vars (if present in meta) ---------- */
   type CSSVarStyle = React.CSSProperties & { [key: `--${string}`]: string };
@@ -1151,7 +1221,9 @@ function SigilStreamInner(): React.JSX.Element {
   }, [payload, unsealState]);
 
   const effectiveAttachmentsUnknown = useMemo<unknown>(() => {
-    if (unsealState.status === "open") return unsealState.content.attachments ?? (payload as unknown as { attachments?: unknown })?.attachments;
+    if (unsealState.status === "open") {
+      return unsealState.content.attachments ?? (payload as unknown as { attachments?: unknown })?.attachments;
+    }
     return (payload as unknown as { attachments?: unknown })?.attachments;
   }, [payload, unsealState]);
 
@@ -1174,7 +1246,8 @@ function SigilStreamInner(): React.JSX.Element {
     const token = tokenRaw ? normalizeIncomingToken(tokenRaw) : null;
     if (!token) return;
 
-    const share = preferredShareUrl(token);
+    // ✅ FIX: Always copy the canonical /stream/p link (hash fallback if oversized).
+    const share = canonicalizeCurrentStreamUrl(token);
 
     // 1) Prefer sync copy: keeps toast-sound inside the click gesture (v6.1 behavior)
     const okSync = tryCopyExecCommand(share);
