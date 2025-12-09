@@ -9,7 +9,7 @@ import type { SigilMetadata } from "../../VerifierStamper/types";
 import type { SigilMetadataWithOptionals } from "../types/local";
 
 export const PULSES_PER_STEP = 11; // Kai canon
-export const CLAIM_STEPS = 7;     // claimable steps
+export const CLAIM_STEPS = 3;     // claimable steps
 export const CLAIM_PULSES = CLAIM_STEPS * PULSES_PER_STEP;
 
 /**
