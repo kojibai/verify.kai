@@ -167,9 +167,9 @@ const GamePortal: React.FC<Props> = ({ onEnter }) => {
           </div>
 
           <div className="dropzone-text">
-            <div className="dz-title">Drop your Kai Sigil</div>
+            <div className="dz-title">Inhale your Kai Sigil</div>
             <div id={hintId} className="dz-hint">
-              Breath-minted <strong>.svg</strong> only. Click to pick or drag & drop.
+              Breath-minted <strong>Φkey</strong> only. Drag & drop.
             </div>
 
             {fileName && !loading && !error ? (
@@ -205,7 +205,7 @@ const GamePortal: React.FC<Props> = ({ onEnter }) => {
 
         {/* Fine print */}
         <p className="portal-note">
-          Your sigil is verified locally. No upload. No drift. Only truth.
+          Your sigil is verified by breath. No drift. Only truth.
         </p>
       </div>
 

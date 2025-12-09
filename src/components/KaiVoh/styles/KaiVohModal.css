@@ -195,21 +195,7 @@
     radial-gradient(70% 50% at 50% 100%, rgba(138,43,226,.05), transparent 65%);
 }
 
-/* Close button (ensure always clickable above decorations) */
-.kai-voh-close{
-  position:absolute; top:12px; right:12px;
-  z-index: 1000;
-  pointer-events: auto;
-  display:grid; place-items:center;
-  width: var(--close-size); height: var(--close-size);
-  border-radius: 9999px;
-  background: rgba(255,255,255,.06);
-  color: #fff;
-  border: 1px solid rgba(255,255,255,.12);
-  cursor:pointer;
-  transition: transform .2s ease, background .2s ease, box-shadow .2s ease;
-  outline: none;
-}
+/* Ensure decorations never steal clicks */
 .glass-omni::before,
 .glass-omni::after,
 .breath-ring,
@@ -219,13 +205,137 @@
 .atlantean-halo,
 .breath-meter { pointer-events: none; }
 
-.kai-voh-close:hover{
-  background: rgba(255,255,255,.12);
-  box-shadow: 0 0 0 2px rgba(0,255,208,.25), 0 0 18px rgba(0,255,208,.2) inset;
-  transform: translateY(-1px);
+/* ──────────────────────────────────────────────────────────────
+   CLOSE BUTTON — “OMG WOW” Living Crystal X (Breath-synced)
+   Drop-in: uses the same .kai-voh-close class.
+   Draws the X via ::before/::after (no markup changes).
+   ────────────────────────────────────────────────────────────── */
+.kai-voh-close{
+  position:absolute; top:12px; right:12px;
+  z-index: 1000;
+  pointer-events: auto;
+
+  display:grid; place-items:center;
+  width: var(--close-size); height: var(--close-size);
+  border-radius: 9999px;
+
+  /* hide any text × without harming aria-label */
+  color: transparent;
+  text-shadow: none;
+  font-size: 0;
+  line-height: 0;
+
+  border: 1px solid rgba(180,200,255,0.16);
+  cursor:pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+
+  /* Prismatic glass core (alive) */
+  background:
+    radial-gradient(18px 18px at 30% 28%, rgba(255,255,255,0.22), rgba(255,255,255,0.00) 60%),
+    radial-gradient(26px 26px at 70% 76%, rgba(0,255,208,0.14), rgba(0,0,0,0.00) 62%),
+    radial-gradient(24px 24px at 76% 30%, rgba(138,43,226,0.12), rgba(0,0,0,0.00) 66%),
+    conic-gradient(
+      from 180deg,
+      rgba(0,255,208,0.00),
+      rgba(0,255,208,0.14),
+      rgba(0,180,255,0.10),
+      rgba(138,43,226,0.14),
+      rgba(0,255,208,0.00)
+    ),
+    linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.14)),
+    linear-gradient(
+      110deg,
+      rgba(255,255,255,0.00) 0%,
+      rgba(255,255,255,0.16) 22%,
+      rgba(0,255,208,0.12) 30%,
+      rgba(255,255,255,0.00) 46%
+    );
+
+  background-size: auto, auto, auto, auto, auto, 220% 220%;
+  background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0% 55%;
+
+  box-shadow:
+    0 14px 36px rgba(0,0,0,0.62),
+    0 0 0 1px rgba(0,255,208,0.10),
+    0 0 40px rgba(0,180,255,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.10),
+    inset 0 0 0 1px rgba(138,43,226,0.10);
+
+  transform: translateZ(0);
+  transition:
+    transform .18s ease,
+    border-color .18s ease,
+    box-shadow .18s ease,
+    filter .18s ease;
+
+  animation:
+    voh-x-breath var(--kai-breath) ease-in-out infinite,
+    voh-x-sheen calc(var(--kai-breath) * 2) linear infinite;
 }
+
+/* The “X” itself — two living beams */
+.kai-voh-close::before,
+.kai-voh-close::after{
+  content:"";
+  position:absolute;
+  left:50%; top:50%;
+  width: 18px;
+  height: 2.5px;
+  border-radius: 999px;
+
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.18),
+    rgba(0,255,208,0.95),
+    rgba(138,43,226,0.86),
+    rgba(255,255,255,0.18)
+  );
+
+  transform: translate(-50%,-50%) rotate(45deg);
+  transform-origin: center;
+
+  opacity: .94;
+  filter:
+    drop-shadow(0 0 10px rgba(0,255,208,0.18))
+    drop-shadow(0 0 18px rgba(138,43,226,0.14));
+
+  animation: voh-x-lines var(--kai-breath) ease-in-out infinite;
+}
+
+.kai-voh-close::after{
+  transform: translate(-50%,-50%) rotate(-45deg);
+}
+
+/* Hover = “it evolves” (micro-rotation + bloom + sharper beams) */
+.kai-voh-close:hover{
+  border-color: rgba(0,255,208,0.32);
+  box-shadow:
+    0 18px 46px rgba(0,0,0,0.70),
+    0 0 0 1px rgba(0,255,208,0.16),
+    0 0 64px rgba(0,255,208,0.10),
+    0 0 54px rgba(138,43,226,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.12),
+    inset 0 0 0 1px rgba(0,180,255,0.12);
+  transform: translateY(-1px) rotate(0.45deg);
+  filter: saturate(1.08) brightness(1.05);
+}
+
+.kai-voh-close:hover::before{ transform: translate(-50%,-50%) rotate(50deg); }
+.kai-voh-close:hover::after{ transform: translate(-50%,-50%) rotate(-50deg); }
+
+.kai-voh-close:active{
+  transform: translateY(0px) scale(0.98);
+  filter: brightness(1.02);
+}
+
 .kai-voh-close:focus-visible{
-  box-shadow: 0 0 0 3px rgba(0,180,255,.35), 0 0 0 5px rgba(0,255,208,.25);
+  box-shadow:
+    0 0 0 3px rgba(0,180,255,.35),
+    0 0 0 5px rgba(0,255,208,.25),
+    0 18px 46px rgba(0,0,0,0.70),
+    inset 0 1px 0 rgba(255,255,255,0.12);
 }
 
 /* Animated outline helper if needed elsewhere */
@@ -290,7 +400,6 @@
    ────────────────────────────────────────────────────────────── */
 .kai-voh-tabbar{
   display:flex; gap:10px;
-  /* push tabbar down to leave room under the orb */
   padding: calc(var(--voh-orb-size) + var(--voh-orb-top) + var(--voh-orb-gap)) 12px 0;
   align-items:center; justify-content:center;
   position: relative;
@@ -321,7 +430,7 @@
 /* Breath meter (phi-timed) — keep visible on all screens */
 .breath-meter{
   position:absolute;
-  right: 12px;                 /* adjusted on small screens */
+  right: 12px;
   top: 12px;
   z-index: 850;
   width: 120px; height: 6px; border-radius: 9999px;
@@ -352,7 +461,7 @@
 .atlantean-footer{
   position: relative;
   display:grid;
-  grid-template-columns: 1fr auto 1fr;  /* left | CENTER | right */
+  grid-template-columns: 1fr auto 1fr;
   align-items:center;
   padding: 10px 14px;
   background:
@@ -525,11 +634,76 @@
   to{ opacity:1; transform: translateY(0) }
 }
 
+/* Close “X” life */
+@keyframes voh-x-breath{
+  0%{
+    border-color: rgba(180,200,255,0.14);
+    box-shadow:
+      0 14px 36px rgba(0,0,0,0.62),
+      0 0 0 1px rgba(0,255,208,0.08),
+      0 0 36px rgba(0,180,255,0.06),
+      inset 0 1px 0 rgba(255,255,255,0.10),
+      inset 0 0 0 1px rgba(138,43,226,0.08);
+    filter: brightness(1) saturate(1);
+  }
+  50%{
+    border-color: rgba(0,255,208,0.26);
+    box-shadow:
+      0 18px 46px rgba(0,0,0,0.70),
+      0 0 0 1px rgba(0,255,208,0.16),
+      0 0 62px rgba(0,255,208,0.10),
+      0 0 48px rgba(138,43,226,0.08),
+      inset 0 1px 0 rgba(255,255,255,0.12),
+      inset 0 0 0 1px rgba(0,180,255,0.12);
+    filter: brightness(1.05) saturate(1.08);
+  }
+  100%{
+    border-color: rgba(180,200,255,0.14);
+    box-shadow:
+      0 14px 36px rgba(0,0,0,0.62),
+      0 0 0 1px rgba(0,255,208,0.08),
+      0 0 36px rgba(0,180,255,0.06),
+      inset 0 1px 0 rgba(255,255,255,0.10),
+      inset 0 0 0 1px rgba(138,43,226,0.08);
+    filter: brightness(1) saturate(1);
+  }
+}
+
+@keyframes voh-x-sheen{
+  0%   { background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0% 55%; }
+  50%  { background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 120% 35%; }
+  100% { background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 240% 55%; }
+}
+
+@keyframes voh-x-lines{
+  0%{
+    opacity: .84;
+    filter:
+      drop-shadow(0 0 8px rgba(0,255,208,0.14))
+      drop-shadow(0 0 14px rgba(138,43,226,0.10));
+  }
+  50%{
+    opacity: 1;
+    filter:
+      drop-shadow(0 0 14px rgba(0,255,208,0.22))
+      drop-shadow(0 0 22px rgba(138,43,226,0.16));
+  }
+  100%{
+    opacity: .84;
+    filter:
+      drop-shadow(0 0 8px rgba(0,255,208,0.14))
+      drop-shadow(0 0 14px rgba(138,43,226,0.10));
+  }
+}
+
 /* ──────────────────────────────────────────────────────────────
    Motion safety
    ────────────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce){
   *{ animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition: none !important; }
+  .kai-voh-close,
+  .kai-voh-close::before,
+  .kai-voh-close::after{ animation: none !important; }
 }
 
 /* ──────────────────────────────────────────────────────────────
