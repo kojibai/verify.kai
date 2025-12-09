@@ -846,7 +846,7 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
     const looksSigil = isLikelySigilUrl(rawUrl);
 
     if (!looksSigil) {
-      setWarn("Sigil verifikation URL not detected; using fallback. Link generation will still work.");
+      setWarn("Proof of Breath™ URL not detected; using fallback. Link generation will still work.");
     }
 
     // 🔒 Private guard: do not allow cache-only file-ref attachments

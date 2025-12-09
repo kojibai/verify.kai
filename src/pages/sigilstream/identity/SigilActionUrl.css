@@ -1,0 +1,251 @@
+/* src/pages/sigilstream/identity/SigilActionUrl.css
+   SigilActionUrl — Krystal Dock UI
+   • Adds Copy + Open controls
+   • Breath-glow + frost glass, overflow-safe, mobile-first
+*/
+
+.sf-actionurl{
+  --a-ink: rgba(236,241,251,0.92);
+  --a-muted: rgba(180,192,210,0.80);
+  --a-glass: rgba(255,255,255,0.06);
+  --a-glass2: rgba(255,255,255,0.10);
+  --a-ring: rgba(255,255,255,0.16);
+  --a-ring2: rgba(255,255,255,0.28);
+  --a-ok: rgba(120, 255, 196, 0.95);
+  --a-warn: rgba(255, 209, 102, 0.95);
+  --a-bad: rgba(255, 120, 150, 0.92);
+  --pulse-dur: var(--pulse-dur, 5.236s);
+
+  border: 1px solid var(--a-ring);
+  border-radius: 16px;
+  padding: 12px;
+  background:
+    radial-gradient(120% 140% at 10% 0%, rgba(120,255,196,0.10), transparent 55%),
+    radial-gradient(120% 140% at 100% 20%, rgba(150,200,255,0.10), transparent 55%),
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow:
+    0 10px 28px rgba(0,0,0,0.32),
+    0 1px 0 rgba(255,255,255,0.05) inset;
+  position: relative;
+  overflow: hidden;
+}
+
+.sf-actionurl::before{
+  content:"";
+  position:absolute;
+  inset:-2px;
+  background:
+    conic-gradient(from 180deg,
+      rgba(120,255,196,0.0),
+      rgba(120,255,196,0.10),
+      rgba(150,200,255,0.12),
+      rgba(255,209,102,0.10),
+      rgba(120,255,196,0.0)
+    );
+  filter: blur(16px);
+  opacity: 0.65;
+  transform: translate3d(0,0,0);
+  animation: sf_actionurl_breathe var(--pulse-dur) ease-in-out infinite;
+  pointer-events:none;
+}
+
+@keyframes sf_actionurl_breathe{
+  0%,100%{ opacity: 0.45; transform: scale(1.00); }
+  50%{ opacity: 0.80; transform: scale(1.03); }
+}
+
+.sf-actionurl__head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
+}
+
+.sf-actionurl__label{
+  margin: 0;
+}
+
+.sf-actionurl__pill{
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--a-ring2);
+  background: rgba(0,0,0,0.22);
+  color: var(--a-ink);
+  box-shadow:
+    0 10px 22px rgba(0,0,0,0.22),
+    0 1px 0 rgba(255,255,255,0.07) inset;
+  white-space: nowrap;
+}
+
+.sf-actionurl__pill.is-ok{
+  border-color: rgba(120,255,196,0.35);
+  box-shadow:
+    0 0 0 1px rgba(120,255,196,0.12) inset,
+    0 10px 22px rgba(0,0,0,0.22);
+}
+
+.sf-actionurl__pill.is-warn{
+  border-color: rgba(255,209,102,0.35);
+  box-shadow:
+    0 0 0 1px rgba(255,209,102,0.12) inset,
+    0 10px 22px rgba(0,0,0,0.22);
+}
+
+.sf-actionurl__field{
+  display:grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 10px;
+  position: relative;
+  z-index: 1;
+}
+
+.sf-actionurl__inputWrap{
+  display:flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sf-actionurl__input{
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--a-ring);
+  background: rgba(0,0,0,0.28);
+  color: var(--a-ink);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.06) inset,
+    0 12px 26px rgba(0,0,0,0.26);
+}
+
+.sf-actionurl__meta{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.05);
+  color: var(--a-muted);
+  overflow: hidden;
+}
+
+.sf-actionurl__host{
+  font-weight: 700;
+  color: rgba(236,241,251,0.88);
+  flex: 0 0 auto;
+}
+
+.sf-actionurl__dot{
+  opacity: 0.55;
+  flex: 0 0 auto;
+}
+
+.sf-actionurl__pretty{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  opacity: 0.90;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.sf-actionurl__btns{
+  display:flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.sf-actionurl__btn{
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.18);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.06));
+  color: var(--a-ink);
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow:
+    0 12px 28px rgba(0,0,0,0.28),
+    0 1px 0 rgba(255,255,255,0.08) inset;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 140ms ease, border-color 140ms ease, filter 140ms ease;
+}
+
+.sf-actionurl__btn:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,0.30);
+  filter: brightness(1.06);
+}
+
+.sf-actionurl__btn:active{
+  transform: translateY(0px) scale(0.99);
+}
+
+.sf-actionurl__btn--link{
+  text-decoration: none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.sf-actionurl__btn.is-copied{
+  border-color: rgba(120,255,196,0.38);
+  box-shadow:
+    0 0 0 1px rgba(120,255,196,0.14) inset,
+    0 12px 28px rgba(0,0,0,0.28);
+}
+
+.sf-actionurl__btn.is-fail{
+  border-color: rgba(255,120,150,0.38);
+  box-shadow:
+    0 0 0 1px rgba(255,120,150,0.12) inset,
+    0 12px 28px rgba(0,0,0,0.28);
+}
+
+.sf-actionurl__btn--disabled{
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: saturate(0.6);
+}
+
+.sf-actionurl__warn{
+  margin-top: 10px;
+  border-radius: 12px;
+  background: rgba(255,209,102,0.08);
+  border: 1px solid rgba(255,209,102,0.22);
+  color: rgba(255, 235, 200, 0.95);
+  padding: 10px 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.sf-actionurl--empty{
+  opacity: 0.98;
+}
+
+@media (min-width: 520px){
+  .sf-actionurl__field{
+    grid-template-columns: 1fr auto;
+    align-items: end;
+  }
+  .sf-actionurl__btns{
+    justify-content: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .sf-actionurl::before{ animation: none; }
+  .sf-actionurl__btn{ transition: none; }
+}
