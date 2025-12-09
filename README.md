@@ -19,7 +19,7 @@ It is designed to feel less like “a website” and more like a **mint / reserv
 - **ΦNet Sovereign Gate** chrome with Atlantean banking UI
 - Top-right **LIVE ΦKAI** orb showing current issuance / pulse state
 - **ATRIUM** header: _Breath-Sealed Identity · Kairos-ZK Proof_
-- Runs natively at `https://verify.kai` via IKANN DNS
+- Runs natively at `http://verify.kai` via IKANN DNS
 
 ### Verifier
 
@@ -125,11 +125,11 @@ Serve dist/ behind any static host:
 
 IKANN / verify.kai deployment
 
-To run as https://verify.kai on IKANN:
+To run as http://verify.kai on IKANN:
 	1.	Deploy the contents of dist/ to your origin server.
 	2.	In your IKANN root, point A / AAAA records for verify.kai to that origin.
 	3.	On a device, set DNS manually to your IKANN resolver (e.g. 137.66.18.241).
-	4.	Visit https://verify.kai in Safari / any browser.
+	4.	Visit http://verify.kai in Safari / any browser.
 
 The OS will use IKANN as the authoritative root and resolve .kai names.
 
