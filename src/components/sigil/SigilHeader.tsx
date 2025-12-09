@@ -259,7 +259,7 @@ export default function SigilHeader(props: SigilHeaderProps) {
 
   const authLabel =
     props.glyphAuth === "authentic"
-      ? "AUTHENTIK"
+      ? "SOVEREIGN"
       : props.glyphAuth === "forged"
       ? "HASH MISMATCH"
       : "VERIFYING…";
@@ -287,7 +287,7 @@ export default function SigilHeader(props: SigilHeaderProps) {
       </h1>
 
       <p id="sp-sub" className="sp-sub">
-        Inhale • Verify • Remember • Exhale
+        Inhale • Remember • Verify • Exhale
       </p>
 
       {/* Glyph Authenticity & Link Status */}
@@ -346,7 +346,7 @@ export default function SigilHeader(props: SigilHeaderProps) {
                 />
               </svg>
             )}
-            {props.isArchived ? "ARKIVED" : "AKTIVE"}
+            {props.isArchived ? "RETIRED" : "IMMANENT"}
           </span>
         )}
       </div>
