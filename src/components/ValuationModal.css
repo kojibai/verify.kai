@@ -457,6 +457,14 @@ dialog.valuation-modal .val-body,
 .tt-row strong{ font-weight:900; color:var(--seal-core) }
 .tt-row strong.gain{ color:#39e29e }
 .tt-row strong.loss{ color:#ff6b7a }
+.tt-phi-icon{
+  width: 12px;
+  height: 12px;
+  display: inline-block;
+  vertical-align: -2px;
+  margin: 0 6px 0 0;
+  opacity: 0.95;
+}
 
 /* Chart hint */
 .chart-hint{ margin-top:6px; text-align:center; color:var(--ink-dim); opacity:.9 }

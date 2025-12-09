@@ -475,7 +475,7 @@ function AppChrome(): React.JSX.Element {
               <img src="/phi.svg" alt="" className="brand__mark-img" />
             </div>
             <div className="brand__text">
-              <div className="brand__title">ΦNet Sovereign Gate</div>
+              <div className="brand__title">Sovereign Gate</div>
               <div className="brand__subtitle">
                 Custody of Breath-Minted Value · Kairos Identity Registry
               </div>
