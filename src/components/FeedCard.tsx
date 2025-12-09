@@ -418,7 +418,7 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
           {/* Fallback body if no typed content is present */}
           {!post && !message && !share && !reaction && (
             <section className="fc-bodywrap" aria-label="Sigil body">
-              <h3 className="fc-title">Sigil Verifikation</h3>
+              <h3 className="fc-title">Proof Of Breath™</h3>
               <a className="fc-link" href={url} target="_blank" rel="noreferrer" title={url}>
                 {hostOf(url) ?? url}
               </a>
@@ -442,13 +442,13 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
               type="button"
               onClick={onCopy}
               aria-pressed={copied}
-              data-state={copied ? "copied" : "idle"}
+              data-state={copied ? "kopied" : "idle"}
             >
               {copied ? "Kopied" : "Kopy URL"}
             </button>
 
             <span className="fc-live" aria-live="polite">
-              {copied ? "Copied to clipboard." : ""}
+              {copied ? "Inhaled to Memory." : ""}
             </span>
           </footer>
         </section>

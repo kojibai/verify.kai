@@ -122,6 +122,7 @@
   --accent-r: var(--fc-accent-r, var(--gold));
   --accent-g: var(--fc-accent-g, var(--gold));
   --accent-b: var(--fc-accent-b, var(--gold));
+  
 
   /* Breath timings */
   --pulse-dur: var(--fc-pulse-dur, var(--dur-breath));

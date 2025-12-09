@@ -606,7 +606,7 @@ function AppChrome(): React.JSX.Element {
                   </div>
                   <div className="panel-foot__right">
                     <span className="mono">V</span>{" "}
-                    <span className="mono">24.3</span>
+                    <span className="mono">24.6</span>
                   </div>
                 </footer>
               </section>
