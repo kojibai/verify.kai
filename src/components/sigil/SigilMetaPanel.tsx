@@ -307,7 +307,7 @@ export default function SigilMetaPanel({
               )}
 
             <div className="sp-meta-row">
-              <span className="lbl">Sync:</span>
+              <span className="lbl">Seal:</span>
               <span>Kai-Klok</span>
             </div>
           </>
