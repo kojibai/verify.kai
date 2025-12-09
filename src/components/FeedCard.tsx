@@ -434,7 +434,7 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
               rel="noreferrer"
               title="Open original sigil"
             >
-              Open Sigil
+              ↗ Sigil
             </a>
 
             <button
@@ -448,7 +448,7 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
             </button>
 
             <span className="fc-live" aria-live="polite">
-              {copied ? "Inhaled to Memory." : ""}
+              {copied ? "Inhaled to Memory" : ""}
             </span>
           </footer>
         </section>
