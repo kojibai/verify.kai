@@ -86,7 +86,7 @@ function kaiDMYFromPulseKKS(pulse: number): { day: number; month: number; year: 
 
   const dayOfMonth = toSafeNumber(modE(dayIdx, BigInt(DAYS_PER_MONTH))) + 1; // 1..42
   const month = toSafeNumber(modE(monthIdx, BigInt(MONTHS_PER_YEAR))) + 1; // 1..8
-  const year = toSafeNumber(yearIdx) + 1; // display year
+  const year = toSafeNumber(yearIdx); // display year
 
   return { day: dayOfMonth, month, year };
 }
