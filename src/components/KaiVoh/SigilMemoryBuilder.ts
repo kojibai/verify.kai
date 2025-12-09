@@ -1,4 +1,5 @@
-import type { SessionData } from "./SessionManager";
+import type { SessionData } from "../session/sessionTypes";
+
 
 /**
  * KaiVoh Session Memory Builder — KKS v1.0 aligned
