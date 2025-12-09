@@ -63,7 +63,7 @@ import {
   type AttachmentItem,
   type Attachments,
 } from "../../utils/feedPayload";
-
+import { UrlEmbed } from "./attachments/embeds";
 /* Explorer bridge: register any stream/sigil URL */
 import { registerSigilUrl } from "../../utils/sigilRegistry";
 
@@ -358,23 +358,31 @@ function AttachmentList({ attachments }: { attachments: Attachments }): React.JS
 
       <div className="sf-att-grid">
         {attachments.items.map((it: AttachmentItem, i: number) => {
-          if (it.kind === "url") {
-            const href = safeHttpUrl(it.url);
-            return (
-              <div key={`${it.kind}:${i}`} className="sf-att-item">
-                <div className="sf-att-kind">Link</div>
-                {href ? (
-                  <a className="sf-link" href={href} target="_blank" rel="noreferrer noopener">
-                    {it.title ? it.title : href}
-                  </a>
-                ) : (
-                  <div className="sf-error" role="note">
-                    Invalid URL: {it.url}
-                  </div>
-                )}
-              </div>
-            );
-          }
+        if (it.kind === "url") {
+  const href = safeHttpUrl(it.url);
+  return (
+    <div key={`${it.kind}:${i}`} className="sf-att-item">
+      <div className="sf-att-kind">Link</div>
+
+      {href ? (
+        <>
+          {/* ✅ real embed (spotify / video / yt / etc) */}
+          <UrlEmbed url={href} />
+
+          {/* ✅ still show the canonical link text exactly like before */}
+          <a className="sf-link" href={href} target="_blank" rel="noreferrer noopener">
+            {it.title ? it.title : href}
+          </a>
+        </>
+      ) : (
+        <div className="sf-error" role="note">
+          Invalid URL: {it.url}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
           if (it.kind === "file-ref") {
             return (
