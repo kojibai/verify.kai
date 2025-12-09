@@ -147,7 +147,7 @@ function EmbedCard(props: {
           </div>
 
           <span className="sf-att-open" aria-hidden="true">
-            Open ↗
+            ↗
           </span>
         </a>
       </div>
