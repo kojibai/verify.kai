@@ -56,20 +56,20 @@ function toChakra(value: unknown, fallback: ChakraDay): ChakraDay {
 
 /** Arc name from *zero-based* beat (0..35) — 6 beats per arc */
 function arcFromBeat(beatZ: number):
-  | "Ignition"
-  | "Integration"
-  | "Harmonization"
-  | "Reflektion"
-  | "Purifikation"
+  | "Ignite"
+  | "Integrate"
+  | "Harmonize"
+  | "Reflekt"
+  | "Purify"
   | "Dream" {
   const idx = Math.max(0, Math.min(5, Math.floor(beatZ / 6)));
   return (
     [
-      "Ignition",
-      "Integration",
-      "Harmonization",
-      "Reflektion",
-      "Purifikation",
+      "Ignite",
+      "Integrate",
+      "Harmonize",
+      "Reflekt",
+      "Purify",
       "Dream",
     ] as const
   )[idx];
