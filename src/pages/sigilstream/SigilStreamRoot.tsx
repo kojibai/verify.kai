@@ -743,14 +743,14 @@ function PayloadCard(props: {
         <div className="sf-seal" role="group" aria-label="Private sealed content">
           {unsealState.status === "open" ? (
             <div className="sf-seal__row">
-              <span className="sf-seal__label">Unlocked</span>
+              <span className="sf-seal__label">Unsealed</span>
               <button
                 type="button"
                 className="sf-seal__btn"
                 onClick={onForgetUnsealed}
-                aria-label="Forget unsealed view"
+                aria-label="Seal view"
               >
-                FORGET
+                SEAL
               </button>
             </div>
           ) : (
@@ -806,7 +806,7 @@ function PayloadCard(props: {
                         onClick={onResetVerified}
                         aria-label="Use a different key"
                       >
-                        USE DIFFERENT KEY
+                        USE DIFFERENT ΦKEY
                       </button>
                     </div>
                   </>
