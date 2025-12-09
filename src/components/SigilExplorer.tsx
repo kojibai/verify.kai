@@ -693,14 +693,14 @@ function ExplorerToolbar({
           >
             <input
               className="kx-input"
-              placeholder="Paste a sigil URL (or memory URL)…"
+              placeholder="Inhale a sigil (or memory)…"
               spellCheck={false}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               aria-label="Sigil URL"
             />
             <button className="kx-button" type="submit">
-              Add
+              Inhale
             </button>
           </form>
 
@@ -715,7 +715,7 @@ function ExplorerToolbar({
                 }}
                 aria-label="Import JSON"
               />
-              Import
+              Inhale
             </label>
             <button
               className="kx-export"
@@ -723,7 +723,7 @@ function ExplorerToolbar({
               aria-label="Export registry to JSON"
               type="button"
             >
-              Export
+              Exhale
             </button>
           </div>
 
@@ -930,8 +930,8 @@ const SigilExplorer: React.FC = () => {
                 <li>Import your keystream data.</li>
                 <li>Seal a moment — auto-registered here.</li>
                 <li>
-                  Paste any sigil-glyph URL above — for reconstruction of its
-                  ancestry instantly.
+                  Inhale any sigil-glyph or memory URL above — for realignment of its
+                  lineage instantly.
                 </li>
               </ol>
             </div>
