@@ -655,7 +655,7 @@ function PayloadCard(props: {
       : canUnseal
         ? "UNSEAL"
         : !verifiedThisSession
-          ? "UPLOAD GLYPH"
+          ? "🔐 Sealed"
           : !hasComposerMeta
             ? "RE-INHALE"
             : "UNSEAL";
@@ -785,7 +785,7 @@ function PayloadCard(props: {
                 {!verifiedThisSession ? (
                   <>
                     <div className="sf-seal__hint" role="note">
-                      Upload your glyph to inhale your ΦKey, then unseal.
+                      Inhale your ΦKey, then unseal.
                     </div>
                     <div className="sf-seal__login" aria-label="Glyph upload">
                       <SigilLogin onVerified={onVerifiedNow} />
