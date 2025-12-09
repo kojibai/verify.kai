@@ -146,7 +146,7 @@ function buildKaiMetaLineZero(
   const d = Math.max(1, Math.floor(day));
   const m = Math.max(1, Math.floor(month));
   const y = Math.floor(year); // year may be <=0 for pre-genesis; keep exact
-  const line = `☤Kai:${pulse} • ${label} • D${d}/M${m}/Y${y}`;
+  const line = `☤Kai:${pulse} • D${d}/M${m}/Y${y}-${label}`;
   return { arc, label, line };
 }
 
