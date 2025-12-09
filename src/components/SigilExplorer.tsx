@@ -947,7 +947,7 @@ const SigilExplorer: React.FC = () => {
             <div className="row">
               <span>Determinate • Stateless • Kairos-remembered</span>
               <span className="dot">•</span>
-              <span>No DB. No backend. Pure Φ.</span>
+              <span>No DB. No Server. Pure Φ.</span>
             </div>
           </footer>
         </div>
