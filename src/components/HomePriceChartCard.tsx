@@ -62,7 +62,10 @@ function withTimeout<T>(fn: (signal: AbortSignal) => Promise<T>, ms = 15000): Pr
   return fn(ctl.signal).finally(() => clearTimeout(t));
 }
 
-async function createPaymentIntent(apiBase: string, amountUsd: number): Promise<{ clientSecret: string; intentId: string }> {
+async function createPaymentIntent(
+  apiBase: string,
+  amountUsd: number
+): Promise<{ clientSecret: string; intentId: string }> {
   return withTimeout(async (signal) => {
     const res = await fetch(`${apiBase}/api/payments/intent`, {
       method: "POST",
@@ -84,15 +87,9 @@ async function createPaymentIntent(apiBase: string, amountUsd: number): Promise<
   });
 }
 
-/* ---------- Breathing Φ logo ---------- */
-function PhiLogo(): React.JSX.Element {
-  return (
-    <span className="phi-logo" aria-hidden>
-      <span className="phi-core" />
-      <span className="phi-glow" />
-      <img className="phi-fallback" src="/phi.svg" alt="" aria-hidden />
-    </span>
-  );
+/* ---------- Inline Φ icon (for price text) ---------- */
+function PhiIconInline(): React.JSX.Element {
+  return <img className="hp-phi-icon" src="/phi.svg" alt="Φ" />;
 }
 
 /* ---------- deterministic meta hook (no unused params) ---------- */
@@ -242,8 +239,23 @@ export default function HomePriceChartCard({
     return ((chartTick.price - prev) / prev) * 100;
   }, [chartTick, computePrice]);
 
-  const priceLabel =
-    chartTick && Number.isFinite(chartTick.price) && chartTick.price > 0 ? `$${chartTick.price.toFixed(2)} / Φ` : "—";
+  const hasPrice = !!(chartTick && Number.isFinite(chartTick.price) && chartTick.price > 0);
+
+  // Keep an accessible text version (screen readers), but render Φ as svg visibly.
+  const priceAria = hasPrice ? `$${chartTick!.price.toFixed(2)} / Φ` : "—";
+
+  const priceNode: React.ReactNode = hasPrice ? (
+    <span className="hp-price-row" aria-label={priceAria}>
+      <span className="hp-price-usd">{`$${chartTick!.price.toFixed(2)}`}</span>
+      <span className="hp-price-slash" aria-hidden>
+        {" "}
+        /{" "}
+      </span>
+      <PhiIconInline />
+    </span>
+  ) : (
+    "—"
+  );
 
   const pctLabel = (() => {
     if (pct24h == null || !Number.isFinite(pct24h)) return "0.00%";
@@ -320,12 +332,13 @@ export default function HomePriceChartCard({
         }}
       >
         <div className="hp-left">
-          <PhiLogo />
+          {/* ✅ Removed the left-side PhiLogo next to "Value Index" */}
           <span className="hp-title">{title}</span>
         </div>
+
         <div className="hp-right">
-          <span className="hp-price" aria-live="polite">
-            {priceLabel}
+          <span className="hp-price" aria-live="polite" aria-label={priceAria}>
+            {priceNode}
           </span>
           <span className={`hp-pct ${pctClass}`} aria-live="polite">
             {pct24h != null && pct24h >= 0 ? "▲" : "▼"} {pctLabel}

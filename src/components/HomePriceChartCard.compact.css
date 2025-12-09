@@ -510,3 +510,14 @@
     display: inline !important;
   }
 }
+.hp-phi-icon{
+  width: 20px;
+  height: 20px;
+  display: inline-block;
+  vertical-align: -0.12em;
+  margin-left: 2px;
+  filter: drop-shadow(0 0 10px rgba(55,255,228,.22));
+}
+
+.hp-price-row{ display:inline-flex; align-items:center; gap:4px; }
+.hp-price-slash{ opacity:.9; }
