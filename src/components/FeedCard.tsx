@@ -83,11 +83,11 @@ function buildKaiMetaLineZero(
   pulse: number,
   beatZ: number,
   stepZ: number,
-  chakraDay: ChakraDay
+
 ): { arc: string; label: string; line: string } {
   const arc = arcFromBeat(beatZ);
   const label = `${pad2(beatZ)}:${pad2(stepZ)}`; // zero-based, two-digit BB:SS
-  const line = `☤Kai:${pulse} • ${label} • ${chakraDay} • ${arc}`;
+  const line = `☤Kai:${pulse} • ${label} `;
   return { arc, label, line };
 }
 
@@ -217,7 +217,7 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
   const sourceBadge = (isNonEmpty(capsule.source) ? capsule.source : undefined) ?? legacySourceFromData(data);
 
   // Kai meta (split + full line)
-  const kai = buildKaiMetaLineZero(pulse, beatZ, stepZ, chakraDay);
+  const kai = buildKaiMetaLineZero(pulse, beatZ, stepZ);
   const stepPct = stepPctFromIndex(stepZ);
 
   // Accent vars for “alive frosted crystal” CSS
