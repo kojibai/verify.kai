@@ -1,17 +1,19 @@
 /* ──────────────────────────────────────────────────────────────────────
    WeekKalendarModal.css · Atlantean Lumitech
-   v5.8.1 · Φ-God-Mode Divine UX — DARK DEPTH FIX (Atlantean Week Kalendar)
-   • Keeps the entire look/feel + etherik grid + neon breathing
-   • Fix: backdrop no longer blooms “white” — stays deep, dark, dimensional
-   • No layout or class-name changes required
-   ────────────────────────────────────────────────────────────────────── */
+   v6.0.0 · Matches WeekKalendarModal.tsx v10.0.0 EXACTLY
+   - Deep, dark, dimensional backdrop (no white bloom)
+   - Fixed bottom-center Add button (safe-area aware)
+   - Notes dock fixed + responsive (mobile snaps to bottom-center)
+   - Overlay stacking: Day > Note > Dock > Backdrop
+   - Keyboard focus + reduced motion supported
+────────────────────────────────────────────────────────────────────── */
 
 :root {
   /* deep-space palette */
   --nebula-base: #04060c;
   --nebula-deep: #01050e;
 
-  /* aqua zero-point */
+  /* live hue injected by TSX (applySpiralHue) */
   --aqua-core: #00eaff;
   --aqua-soft: rgba(0, 234, 255, 0.14);
 
@@ -19,9 +21,6 @@
   --seal-glow-inset: rgba(0, 234, 255, 0.36);
   --seal-glow-mid: rgba(0, 234, 255, 0.42);
   --seal-glow-outer: rgba(0, 234, 255, 0.24);
-
-  /* note dot */
-  --note-dot: #ff1559;
 
   /* portal layers */
   --portal-1: rgba(0, 12, 26, 0.78);
@@ -54,7 +53,6 @@
   -moz-osx-font-smoothing: grayscale;
   backface-visibility: hidden;
   transform-style: preserve-3d;
-  transition: transform 0.25s ease, opacity 0.25s ease;
 }
 
 /* ───────── BACKDROP – EVOLVING PORTAL (DARK, DEEP, ETHERIK) ───────── */
@@ -64,7 +62,6 @@
   z-index: 10000;
   background: var(--nebula-base);
 
-  /* DARK-FIRST layering: keep grid, keep portal, remove “white bloom” */
   background-image:
     radial-gradient(ellipse at 50% 42%, var(--portal-1) 0%, var(--nebula-deep) 78%),
     radial-gradient(circle at 30% 30%, var(--portal-2) 0%, transparent 72%),
@@ -72,7 +69,6 @@
     repeating-radial-gradient(circle at 48% 50%, var(--grid-ink) 0 2px, transparent 2px 6px),
     repeating-radial-gradient(circle at 52% 54%, var(--grid-ink-2) 0 1px, transparent 1px 8px);
 
-  /* remove “lighten” (the usual culprit); keep the Atlantean glow logic */
   background-blend-mode: overlay, screen, soft-light, normal, normal;
 
   animation:
@@ -83,20 +79,17 @@
 
   padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
 
-  /* Mobile smoothness */
   overscroll-behavior: none;
   contain: layout paint style;
-  content-visibility: auto;
 }
 
-/* Depth + vignette (this is what keeps it DARK on HDR / wide-gamut) */
+/* Depth + vignette */
 .wk-backdrop::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
 
-  /* Vignette + deep wash + subtle grain */
   background-image:
     radial-gradient(ellipse at 50% 42%, rgba(0, 0, 0, 0) 0%, var(--void-wash) 58%, var(--void-edge) 100%),
     radial-gradient(circle at 50% 42%, var(--core-halo) 0%, transparent 62%),
@@ -112,7 +105,7 @@
   transform: translateZ(0);
 }
 
-/* Star twinkle (kept, but tuned so it never “whites out” the void) */
+/* Star twinkle tuned dark */
 .wk-backdrop::after {
   content: "";
   position: fixed;
@@ -127,54 +120,23 @@
   background-position: 0 0, 1px 2px;
 
   mix-blend-mode: screen;
-  opacity: 0.028; /* KEY: low enough to preserve darkness */
+  opacity: 0.028;
   animation: twinkle 9s linear infinite;
   transform: translateZ(0);
 }
 
 @keyframes nebulaFlow {
   0%,
-  100% {
-    background-position: 50% 40%, 50% 50%;
-  }
-  50% {
-    background-position: 52% 44%, 48% 48%;
-  }
+  100% { background-position: 50% 40%, 50% 50%; }
+  50% { background-position: 52% 44%, 48% 48%; }
 }
-@keyframes portalShift1 {
-  0% {
-    background-position: 50% 42%;
-  }
-  100% {
-    background-position: 55% 38%;
-  }
-}
-@keyframes portalShift2 {
-  0% {
-    background-position: 30% 30%;
-  }
-  100% {
-    background-position: 25% 35%;
-  }
-}
-@keyframes portalShift3 {
-  0% {
-    background-position: 70% 60%;
-  }
-  100% {
-    background-position: 65% 55%;
-  }
-}
+@keyframes portalShift1 { 0% { background-position: 50% 42%; } 100% { background-position: 55% 38%; } }
+@keyframes portalShift2 { 0% { background-position: 30% 30%; } 100% { background-position: 25% 35%; } }
+@keyframes portalShift3 { 0% { background-position: 70% 60%; } 100% { background-position: 65% 55%; } }
 @keyframes twinkle {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(-0.5rem, 0.75rem, 0) scale(1.03);
-  }
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-0.5rem, 0.75rem, 0) scale(1.03); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
 }
 
 /* ───────── CONTAINER BLOCK ───────── */
@@ -185,10 +147,7 @@
   overflow: hidden;
   pointer-events: auto;
 
-  /* Perf containment */
   contain: layout paint style;
-  content-visibility: auto;
-  will-change: transform;
 }
 
 /* Ambient stage glow (deep, not bleaching) */
@@ -205,14 +164,16 @@
 }
 @keyframes stagePulse {
   0%,
-  100% {
-    transform: scale(0.94);
-    opacity: 0.48;
-  }
-  50% {
-    transform: scale(1.05);
-    opacity: 0.88;
-  }
+  100% { transform: scale(0.94); opacity: 0.48; }
+  50% { transform: scale(1.05); opacity: 0.88; }
+}
+
+/* When Month is open, Week stage is visually there but not interactive */
+.wk-container[data-month-open="1"] .wk-stage,
+.wk-container[data-month-open="1"] .wk-add-note-btn {
+  pointer-events: none;
+  opacity: 0.35;
+  filter: saturate(0.85);
 }
 
 /* ───────── GOD-MODE CLOSE ───────── */
@@ -229,8 +190,11 @@
   z-index: 10040;
   transition: transform 0.25s ease;
 }
-.wk-close.god-x:hover {
-  transform: scale(1.1);
+.wk-close.god-x:hover { transform: scale(1.1); }
+.wk-close.god-x:focus-visible {
+  outline: 2px solid rgba(160, 240, 255, 0.55);
+  outline-offset: 4px;
+  border-radius: 12px;
 }
 .wk-close.god-x svg {
   width: 100%;
@@ -239,15 +203,9 @@
   animation: xGradient var(--pulse) linear infinite;
 }
 @keyframes xGradient {
-  0% {
-    transform: rotate(0deg);
-  }
-  50% {
-    transform: rotate(90deg);
-  }
-  100% {
-    transform: rotate(180deg);
-  }
+  0% { transform: rotate(0deg); }
+  50% { transform: rotate(90deg); }
+  100% { transform: rotate(180deg); }
 }
 
 /* ───────── HEADER & TOGGLE ───────── */
@@ -256,8 +214,6 @@
   top: calc(var(--safe-top) + 0.75rem);
   left: 50%;
   transform: translateX(-50%);
-  display: flex;
-  gap: 1rem;
   z-index: 10035;
   padding: 0.25rem 0.5rem;
   background: var(--aqua-soft);
@@ -276,47 +232,55 @@
   animation: neonPulse var(--pulse) ease-in-out infinite;
   pointer-events: none;
 }
-.wk-toggle {
-  display: flex;
-  gap: 0.5rem;
-  position: relative;
-  z-index: 10036;
-}
+.wk-toggle { display: flex; gap: 0.5rem; position: relative; z-index: 1; }
 .wk-toggle button {
   all: unset;
   cursor: pointer;
   padding: 0.5rem 1rem;
   border-radius: 9999px;
-  background: var(--aqua-soft);
+  background: rgba(0,0,0,0.18);
   color: #e6faff;
-  font-weight: 600;
-  position: relative;
+  font-weight: 700;
   transition: background 0.18s, color 0.18s, transform 0.18s;
   touch-action: manipulation;
+  position: relative;
 }
 .wk-toggle button.active,
 .wk-toggle button:hover {
   background: var(--aqua-core);
   color: var(--nebula-base);
 }
-.wk-toggle button.active::after {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  border: 2px solid var(--aqua-core);
-  border-radius: 9999px;
-  animation: neonPulse var(--pulse) ease-in-out infinite;
+.wk-toggle button:focus-visible {
+  outline: 2px solid rgba(160, 240, 255, 0.55);
+  outline-offset: 3px;
 }
 @keyframes neonPulse {
-  0% {
-    box-shadow: 0 0 8px var(--aqua-core);
-  }
-  50% {
-    box-shadow: 0 0 16px var(--aqua-core);
-  }
-  100% {
-    box-shadow: 0 0 8px var(--aqua-core);
-  }
+  0% { box-shadow: 0 0 8px var(--aqua-core); }
+  50% { box-shadow: 0 0 16px var(--aqua-core); }
+  100% { box-shadow: 0 0 8px var(--aqua-core); }
+}
+
+/* ───────── SEAL CHIP (top-center) ───────── */
+.wk-seal {
+  position: absolute;
+  top: calc(var(--safe-top) + 3.8rem);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.6rem 1.2rem;
+  border-radius: 1rem;
+  background: var(--aqua-soft);
+  color: #e6faff;
+  font: 600 1rem/1.1 "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  box-shadow: inset 0 0 1px var(--seal-glow-inset), 0 0 12px var(--seal-glow-mid);
+  animation: sealPulse var(--pulse) ease-in-out infinite, sealFloat var(--double) ease-in-out infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+@keyframes sealPulse {
+  50% { box-shadow: inset 0 0 1px var(--seal-glow-inset), 0 0 16px var(--seal-glow-mid); }
+}
+@keyframes sealFloat {
+  50% { transform: translateX(-50%) translateY(-0.45rem); }
 }
 
 /* ───────── SVG STAGE ───────── */
@@ -328,181 +292,49 @@
   height: 98vmin;
   transform: translate(-50%, -50%) rotateX(40deg);
   overflow: visible;
-  will-change: transform;
   z-index: 1;
 
   animation:
     stageDrift var(--double) ease-in-out infinite alternate,
     stageNeon var(--double) ease-in-out infinite;
 
-  /* Rendering hints */
   contain: layout paint style;
-  content-visibility: auto;
 }
 @keyframes stageDrift {
-  0% {
-    transform: translate(-50%, -50%) rotateX(40deg) rotateZ(0);
-  }
-  50% {
-    transform: translate(-50%, -50%) rotateX(42deg) rotateZ(5deg);
-  }
-  100% {
-    transform: translate(-50%, -50%) rotateX(40deg) rotateZ(0);
-  }
+  0% { transform: translate(-50%, -50%) rotateX(40deg) rotateZ(0); }
+  50% { transform: translate(-50%, -50%) rotateX(42deg) rotateZ(5deg); }
+  100% { transform: translate(-50%, -50%) rotateX(40deg) rotateZ(0); }
 }
 @keyframes stageNeon {
   0%,
-  100% {
-    filter: drop-shadow(0 0 10px rgba(0, 234, 255, 0.18)) drop-shadow(0 0 20px rgba(0, 234, 255, 0.12));
-  }
-  50% {
-    filter: drop-shadow(0 0 16px rgba(0, 234, 255, 0.26)) drop-shadow(0 0 30px rgba(0, 234, 255, 0.16));
-  }
-}
-.wk-stage path {
-  stroke-linecap: round;
-}
-.wk-stage text {
-  font-family: "Inter", sans-serif;
-  font-size: 4px;
-  pointer-events: none;
-  text-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+  100% { filter: drop-shadow(0 0 10px rgba(0, 234, 255, 0.18)) drop-shadow(0 0 20px rgba(0, 234, 255, 0.12)); }
+  50% { filter: drop-shadow(0 0 16px rgba(0, 234, 255, 0.26)) drop-shadow(0 0 30px rgba(0, 234, 255, 0.16)); }
 }
 
-/* ───────── CURRENT DAY RING & LABEL ───────── */
-.is-today-ring {
-  filter: drop-shadow(0 0 8px var(--aqua-core)) drop-shadow(0 0 12px var(--seal-glow-mid));
-  animation: ringGlow var(--pulse) ease-in-out infinite;
+.wk-day { cursor: pointer; }
+.wk-day:focus { outline: none; }
+.wk-day:focus-visible {
+  filter: drop-shadow(0 0 10px rgba(160, 240, 255, 0.55));
 }
-@keyframes ringGlow {
-  50% {
-    filter: drop-shadow(0 0 16px var(--aqua-core)) drop-shadow(0 0 20px var(--seal-glow-mid));
-  }
+
+/* Today ring/label hooks (used by TSX) */
+.is-today-ring {
+  filter: drop-shadow(0 0 10px rgba(0, 234, 255, 0.35)) drop-shadow(0 0 16px rgba(0, 234, 255, 0.22));
 }
 .is-today-label {
-  filter: drop-shadow(0 0 8px var(--aqua-core)) drop-shadow(0 0 12px var(--seal-glow-mid));
-  animation: textPulse var(--pulse) ease-in-out infinite;
-}
-@keyframes textPulse {
-  50% {
-    transform: scale(1.1);
-    filter: drop-shadow(0 0 12px var(--aqua-core)) drop-shadow(0 0 16px var(--seal-glow-mid));
-  }
+  filter: drop-shadow(0 0 8px rgba(0, 234, 255, 0.45));
 }
 
-/* -------------  ✨ WEEK BAND HIGHLIGHT ADDITIONS  ------------- */
-.wk-month-row.current-week {
-  position: relative;
-  z-index: 2; /* keeps it above base grid */
-  animation: weekGlow var(--double) ease-in-out infinite;
-}
-.wk-month-row.current-week::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 0.5rem;
-  background: rgba(0, 234, 255, 0.06);
-  box-shadow: 0 0 20px rgba(0, 234, 255, 0.2), 0 0 40px rgba(0, 234, 255, 0.1);
-  z-index: -1;
-  pointer-events: none;
-  animation: weekBandPulse var(--pulse) ease-in-out infinite;
-}
-@keyframes weekGlow {
-  0%,
-  100% {
-    filter: brightness(1);
-  }
-  50% {
-    filter: brightness(1.15);
-  }
-}
-@keyframes weekBandPulse {
-  0%,
-  100% {
-    opacity: 0.06;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.1;
-    transform: scale(1.01);
-  }
-}
-
-/* ───────── SEAL CHIP ───────── */
-.wk-seal {
-  position: absolute;
-  bottom: calc(var(--safe-bottom) + 2.5rem);
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 0.6rem 1.2rem;
-  border-radius: 1rem;
-  background: var(--aqua-soft);
-  color: #e6faff;
-  font: 500 1rem "JetBrains Mono", monospace;
-  box-shadow: inset 0 0 1px var(--seal-glow-inset), 0 0 12px var(--seal-glow-mid);
-  animation: sealPulse var(--pulse) ease-in-out infinite, sealFloat var(--double) ease-in-out infinite;
-  pointer-events: none;
-  z-index: 2;
-
-  contain: paint;
-}
-@keyframes sealPulse {
-  50% {
-    box-shadow: inset 0 0 1px var(--seal-glow-inset), 0 0 16px var(--seal-glow-mid);
-  }
-}
-@keyframes sealFloat {
-  50% {
-    transform: translateX(-50%) translateY(-0.5rem);
-  }
-}
-
-/* ───────── UPCOMING NOTES ───────── */
-.wk-notes-list {
-  position: absolute;
-  top: 50%;
-  right: calc(var(--safe-right) + 2rem);
-  transform: translateY(-50%);
-  background: rgba(1, 5, 14, 0.95);
-  border: 1px solid var(--aqua-soft);
-  border-radius: 1rem;
-  padding: 1rem;
-  width: 14rem;
-  max-height: 60vh;
-  overflow-y: auto;
-  box-shadow: 0 8px 32px var(--seal-glow-mid);
-  -webkit-overflow-scrolling: touch;
-
-  contain: layout paint style;
-  content-visibility: auto;
-  scrollbar-gutter: stable both-edges;
-}
-.wk-notes-list h3 {
-  margin-bottom: 0.5rem;
-  color: var(--aqua-core);
-  font-size: 1rem;
-}
-.wk-notes-list ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-.wk-notes-list li {
-  margin-bottom: 0.4rem;
-  color: #e6faff;
-  line-height: 1.2;
-  font-size: 0.875rem;
-}
-
-/* ───────── ADD-NOTE BUTTON ───────── */
+/* ───────── ADD MEMORY BUTTON (fixed bottom-center) ───────── */
 .wk-add-note-btn {
   all: unset;
-  position: absolute;
-  bottom: calc(var(--safe-bottom) + 2rem);
-  right: 1rem;
-  width: 3.2rem;
-  height: 3.2rem;
-  border-radius: 50%;
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(clamp(14px, 2.2vh, 22px) + var(--safe-bottom));
+  width: 3.35rem;
+  height: 3.35rem;
+  border-radius: 999px;
   background: var(--aqua-core);
   color: var(--nebula-base);
   font-size: 2rem;
@@ -510,153 +342,25 @@
   place-content: center;
   box-shadow: 0 0 12px var(--seal-glow-mid);
   cursor: pointer;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
   touch-action: manipulation;
-  z-index: 2;
-
-  contain: paint;
+  z-index: 10012;
 }
 .wk-add-note-btn:hover {
-  transform: scale(1.15);
+  transform: translateX(-50%) scale(1.12);
+  box-shadow: 0 0 18px var(--seal-glow-mid);
 }
 .wk-add-note-btn:active {
-  transform: scale(1.05);
+  transform: translateX(-50%) scale(1.05);
+}
+.wk-add-note-btn:focus-visible {
+  outline: 2px solid rgba(160, 240, 255, 0.55);
+  outline-offset: 4px;
 }
 
-/* ───────── NOTE MODAL ───────── */
-.note-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10020;
-  overscroll-behavior: contain;
-}
-.note-modal {
-  background: var(--nebula-deep);
-  border: 1px solid var(--aqua-core);
-  border-radius: 1rem;
-  padding: 1rem;
-  width: 95vw;
-  max-width: 24rem;
-  box-shadow: 0 16px 48px var(--seal-glow-mid);
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  color: #e6faff;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  z-index: 10020;
-
-  contain: layout paint style;
-}
-.note-modal textarea {
-  width: 100%;
-  height: 6rem;
-  background: rgba(0, 12, 26, 0.8);
-  border: 1px solid var(--aqua-soft);
-  border-radius: 0.5rem;
-  padding: 0.75rem;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 0.95rem;
-  color: #e6faff;
-  resize: none;
-  -webkit-overflow-scrolling: touch;
-}
-.note-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-}
-.note-modal-actions button {
-  all: unset;
-  cursor: pointer;
-  padding: 0.5rem 1rem;
-  border-radius: 9999px;
-  background: var(--aqua-soft);
-  color: var(--nebula-base);
-  font-weight: 600;
-  transition: background 0.2s ease, transform 0.2s ease;
-  touch-action: manipulation;
-}
-.note-modal-actions button:hover:not(:disabled) {
-  background: var(--aqua-core);
-  transform: translateY(-2px);
-}
-.note-modal-actions button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* ───────── MONTH GRID ───────── */
-.wk-month-grid {
-  display: grid;
-  grid-template-rows: repeat(6, 1fr);
-  gap: 0.25rem;
-  width: 90vw;
-  max-width: 100vw;
-}
-.wk-month-row {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 0.25rem;
-}
-.wk-month-cell {
-  position: relative;
-  aspect-ratio: 1;
-  background: rgba(255, 255, 255, 0.018);
-  border: 1px solid rgba(0, 234, 255, 0.12);
-  border-radius: 0.5rem;
-  padding: 0.5rem;
-  cursor: pointer;
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
-  transition: background 0.2s, transform 0.2s, box-shadow 0.3s ease;
-  touch-action: manipulation;
-}
-.wk-month-cell:hover {
-  transform: translateY(-2px);
-}
-.wk-month-cell.has-note {
-  background: rgba(0, 234, 255, 0.12);
-}
-
-/* ───────── CURRENT DAY CELL & TEXT NEON OUTLINE ───────── */
-.wk-month-cell.current {
-  box-shadow: 0 0 12px var(--aqua-core), 0 0 20px var(--seal-glow-outer);
-  animation: cellPulse var(--pulse) ease-in-out infinite;
-  border: 2px solid var(--aqua-core);
-  outline: 2px solid var(--aqua-core);
-  outline-offset: -4px;
-}
-.wk-month-cell.current .wk-month-day-label {
-  font: 600 0.75rem Inter, sans-serif;
-  color: var(--aqua-core);
-  text-shadow: 0 0 8px var(--aqua-core), 0 0 16px var(--seal-glow-mid), 0 0 24px var(--seal-glow-outer);
-  animation: textNeon var(--pulse) ease-in-out infinite;
-}
-@keyframes cellPulse {
-  50% {
-    box-shadow: 0 0 20px var(--aqua-core), 0 0 30px var(--seal-glow-outer);
-  }
-}
-@keyframes textNeon {
-  0%,
-  100% {
-    filter: saturate(1);
-  }
-  50% {
-    filter: saturate(1.25);
-  }
-}
-
-/* micron-glint on note dots & active elements */
-.wk-notes-list li::before,
-.wk-toggle button.active::before,
-.wk-add-note-btn::before {
+/* micron-glint */
+.wk-add-note-btn::before,
+.wk-toggle button::before {
   content: "";
   position: absolute;
   top: -6px;
@@ -671,116 +375,60 @@
 }
 @keyframes glint {
   0%,
-  95% {
-    opacity: 0;
-    transform: scale(0.3) translate(0, 0);
-  }
-  10% {
-    opacity: 0.9;
-    transform: scale(1) translate(-2px, 2px);
-  }
-  20% {
-    opacity: 0;
-  }
+  95% { opacity: 0; transform: scale(0.3) translate(0, 0); }
+  10% { opacity: 0.9; transform: scale(1) translate(-2px, 2px); }
+  20% { opacity: 0; }
 }
 
-/* ultra-fine neon outline helper (use via utility class) */
-.neon-outline {
-  --glow: var(--aqua-core);
-  color: var(--aqua-core);
-  text-shadow: 0 0 4px var(--glow), 0 0 8px var(--glow), 0 0 12px var(--glow), 0 0 16px var(--glow);
-  filter: drop-shadow(0 0 4px var(--glow)) drop-shadow(0 0 8px var(--glow));
-  animation: textNeon var(--pulse) ease-in-out infinite;
+/* ───────── OVERLAYS (TSX classnames) ───────── */
+.wk-notemodal-overlay,
+.wk-daydetail-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
 }
 
-/* HDR hue-tilt for neon core (optional on HDR displays)
-   NOTE: removed .wk-backdrop to prevent HDR “white wash” */
-@media (dynamic-range: high) {
-  .wk-header,
-  .wk-seal,
-  .wk-add-note-btn,
-  .wk-month-cell.current {
-    animation: hueDrift calc(var(--double) * 6) linear infinite;
-  }
-  @keyframes hueDrift {
-    0% {
-      filter: hue-rotate(0deg);
-    }
-    100% {
-      filter: hue-rotate(360deg);
-    }
-  }
+.wk-notemodal-overlay { z-index: 10020; }
+.wk-daydetail-overlay { z-index: 10030; }
+
+/* ───────── NOTES DOCK ───────── */
+.wk-notes-dock {
+  position: fixed;
+  right: clamp(8px, 2vw, 16px);
+  bottom: clamp(8px, 2vh, 16px);
+  width: min(440px, 86vw);
+  max-height: 48vh;
+  z-index: 10008;
+  pointer-events: auto;
 }
 
-/* -------------  📱 MOBILE SNAP TUNING  ------------- */
-@media (max-width: 900px) {
-  .wk-note-list,
-  .wk-notes-list {
-    max-height: 50vh;
-  }
-  .wk-stage {
-    width: 94vmin;
-    height: 94vmin;
-  }
-}
-
-@media (max-width: 680px) {
-  .wk-header {
-    top: calc(var(--safe-top) + 0.5rem);
-    gap: 0.5rem;
-    padding: 0.2rem 0.4rem;
-  }
-  .wk-toggle button {
-    padding: 0.45rem 0.8rem;
-  }
-
-  .wk-notes-list {
-    position: fixed;
-    top: auto;
-    right: 50%;
-    left: 50%;
-    bottom: calc(var(--safe-bottom) + 4.5rem);
-    transform: translateX(-50%);
-    width: min(92vw, 22rem);
-    max-height: 36vh;
-  }
-
-  .wk-seal {
-    bottom: calc(var(--safe-bottom) + 4.5rem);
-  }
-  .wk-add-note-btn {
-    right: calc(var(--safe-right) + 0.75rem);
-    bottom: calc(var(--safe-bottom) + 1rem);
-  }
-}
-
-@media (max-width: 420px) {
-  .wk-toggle button {
-    padding: 0.4rem 0.7rem;
-  }
-  .wk-notes-list {
-    width: 92vw;
-  }
-  .wk-stage {
-    width: 90vmin;
-    height: 90vmin;
-  }
-}
-
-/* Notes header + actions */
 .wk-notes-list {
-  margin-top: 10px;
+  background: rgba(0, 0, 0, 0.50);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.10);
+  padding: 10px 12px;
+  overflow: hidden;
 }
+
 .wk-notes-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
 }
 .wk-notes-header h3 {
   margin: 0;
-  font: 600 14px/1.3 Inter, system-ui, sans-serif;
+  font: 700 14px/1.2 Inter, system-ui, sans-serif;
   color: #cfeaff;
+}
+.wk-notes-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .wk-export-group {
@@ -795,16 +443,17 @@
   border-radius: 1px;
 }
 
+/* chips/buttons */
 .wk-chip {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.14);
   color: #cfeaff;
   padding: 4px 10px;
   border-radius: 999px;
-  font: 600 11px/1 Inter, system-ui, sans-serif;
+  font: 700 11px/1 Inter, system-ui, sans-serif;
   letter-spacing: 0.2px;
   cursor: pointer;
-  opacity: 0.85;
+  opacity: 0.88;
   transition: opacity 0.15s, background 0.15s, border-color 0.15s, transform 0.15s;
   backdrop-filter: saturate(140%) blur(4px);
 }
@@ -813,114 +462,97 @@
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.22);
 }
-.wk-chip:active {
-  transform: translateY(1px);
-}
+.wk-chip:active { transform: translateY(1px); }
 .wk-chip:focus-visible {
   outline: 2px solid rgba(160, 240, 255, 0.55);
   outline-offset: 2px;
 }
-.wk-clear-btn {
-  color: #e7fbff;
-}
-
 .wk-export-btn {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: #e7fbff;
   padding: 4px 10px;
   border-radius: 999px;
-  font: 600 11px/1 Inter, system-ui, sans-serif;
+  font: 700 11px/1 Inter, system-ui, sans-serif;
   letter-spacing: 0.2px;
   cursor: pointer;
-  opacity: 0.82;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  opacity: 0.86;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.04);
   backdrop-filter: saturate(140%) blur(6px);
   transition: opacity 0.15s, border-color 0.15s, box-shadow 0.2s, transform 0.15s;
 }
 .wk-export-btn:hover {
   opacity: 1;
   border-color: rgba(255, 255, 255, 0.22);
-  box-shadow: 0 3px 16px rgba(0, 0, 0, 0.36), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  box-shadow: 0 3px 16px rgba(0,0,0,0.36), inset 0 0 0 1px rgba(255,255,255,0.06);
 }
-.wk-export-btn:active {
-  transform: translateY(1px);
-}
+.wk-export-btn:active { transform: translateY(1px); }
 .wk-export-btn:focus-visible {
   outline: 2px solid rgba(160, 240, 255, 0.55);
   outline-offset: 2px;
 }
 
+/* list */
+.wk-mem-ul {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: min(40vh, 240px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.wk-mem-li {
+  padding: 6px 4px;
+  color: #e6faff;
+  line-height: 1.25;
+  font: 12px/1.35 Inter, system-ui, sans-serif;
+}
+.wk-mem-kai {
+  color: #e7fbff;
+  font-weight: 800;
+}
+.wk-mem-text {
+  color: rgba(231, 251, 255, 0.88);
+}
+
 .wk-notes-empty {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   color: #9db4c1;
   font: 12px/1.4 Inter, system-ui, sans-serif;
 }
 
-/* ───────── OVERRIDE: place the seal above the kalendar (top-center) ───────── */
-.wk-seal {
-  top: calc(var(--safe-top) + 3.8rem);
-  bottom: auto;
-}
+/* Mobile snap: dock becomes bottom-center */
 @media (max-width: 680px) {
-  .wk-seal {
-    top: calc(var(--safe-top) + 3.6rem);
-    bottom: auto;
+  .wk-stage { width: 92vmin; height: 92vmin; }
+
+  .wk-notes-dock {
+    right: 50%;
+    left: 50%;
+    bottom: calc(var(--safe-bottom) + 4.8rem);
+    transform: translateX(-50%);
+    width: min(92vw, 22rem);
+    max-height: 36vh;
   }
+  .wk-seal { top: calc(var(--safe-top) + 3.6rem); }
 }
 
-/* ────────────────────────────────────────────────────────────────
-   STACKING ORDER OVERRIDES (Day modal on top; Month beneath; Notes behind)
-   ──────────────────────────────────────────────────────────────── */
-
-/* Month wrap (MonthKalendarModal container from TSX) */
-.wk-month-wrap {
-  z-index: 10012 !important;
-  overscroll-behavior: contain;
-  touch-action: none;
+/* Ultra-small */
+@media (max-width: 420px) {
+  .wk-stage { width: 90vmin; height: 90vmin; }
+  .wk-toggle button { padding: 0.45rem 0.8rem; }
 }
 
-/* Persistent dock behind modals (but above portal backdrop) */
-.wk-notes-dock {
-  z-index: 10008 !important;
-  pointer-events: auto;
-  display: block;
-}
-
-/* Note modal layer */
-.wk-notemodal-overlay,
-.note-modal-backdrop,
-.note-modal {
-  z-index: 10020 !important;
-}
-
-/* Day modal layer — TOPMOST */
-.wk-daydetail-overlay,
-.day-modal-backdrop,
-.day-modal,
-.note-editor,
-.note-editor-backdrop {
-  z-index: 10030 !important;
-}
-
-/* FUNCTIONAL FIX: inner list must be normal flow inside dock */
-.wk-notes-dock .wk-notes-list {
-  position: relative !important;
-  top: auto !important;
-  right: auto !important;
-  left: auto !important;
-  bottom: auto !important;
-  transform: none !important;
-  width: 100% !important;
-  max-height: 100% !important;
-}
-
-/* Ensure glints position correctly */
-.wk-add-note-btn,
-.wk-toggle button,
-.wk-toggle button.active,
-.wk-notes-list li {
-  position: relative;
+/* HDR hue drift on core elements (NOT on backdrop) */
+@media (dynamic-range: high) {
+  .wk-header,
+  .wk-seal,
+  .wk-add-note-btn {
+    animation: hueDrift calc(var(--double) * 6) linear infinite;
+  }
+  @keyframes hueDrift {
+    0% { filter: hue-rotate(0deg); }
+    100% { filter: hue-rotate(360deg); }
+  }
 }
 
 /* ───────── REDUCED MOTION ───────── */
@@ -928,5 +560,6 @@
   * {
     animation: none !important;
     transition: none !important;
+    scroll-behavior: auto !important;
   }
 }

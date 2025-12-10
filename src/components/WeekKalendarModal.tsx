@@ -1,25 +1,20 @@
-// src/components/WeekKalendarModal.tsx
 /* ────────────────────────────────────────────────────────────────
    WeekKalendarModal.tsx · Atlantean Lumitech “Kairos Kalendar”
-   v9.4.1 · FIX: DOM timer typing (no NodeJS.Timeout)
+   v10.0.0 · UX + Determinism + DOM-Safe Timers (NO NodeJS.Timeout)
    ────────────────────────────────────────────────────────────────
-   • DayDetailModal sits ABOVE both Note box and NoteModal
-   • Notes Dock is fixed, scrollable, and persists until user clears
-   • No note counters on weekday labels
-   • Notes saved in Day modal map to the exact Beat:Step moment
-   • Fully offline (pure Kai math), μpulse-aligned scheduler
-   • ✅ No synchronous setState in effect bodies:
-       - notes + hiddenIds load via useState initializers (not effects)
-       - scheduler effect only schedules timers; setState happens in timer/event callbacks
-       - external DOM sync (CSS vars, framer motion value) done in effects (no React state)
+   ✅ DOM timer typing: timeoutRef is always number | null
+   ✅ No setState synchronously in effect bodies (only callbacks)
+   ✅ Tap outside closes (topmost first), ESC closes (topmost first)
+   ✅ Keyboard accessible day rings (Enter/Space)
+   ✅ Unique SVG ids (no filter/gradient collisions)
+   ✅ Notes dock is fully class-driven (CSS owns layout)
 ───────────────────────────────────────────────────────────────── */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type React from "react";
-import type { FC } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import type { FC, KeyboardEvent, SyntheticEvent } from "react";
 
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion, useMotionValue, useSpring } from "framer-motion";
+import { AnimatePresence, motion, useMotionValue, useReducedMotion, useSpring } from "framer-motion";
 
 import "./WeekKalendarModal.css";
 
@@ -33,22 +28,21 @@ import NoteModal from "./NoteModal";
 import type { Note as EnrichedNote } from "./NoteModal";
 
 /* ══════════════ constants ══════════════ */
-const PULSE_MS = (3 + Math.sqrt(5)) * 1000; // ≈ 5236ms
-
-/* μpulse-accurate timing (match SigilModal/Month/NoteModal) */
 const GENESIS_TS = Date.UTC(2024, 4, 10, 6, 45, 41, 888);
 const KAI_PULSE_SEC = 3 + Math.sqrt(5);
-const PULSE_MS_EXACT = KAI_PULSE_SEC * 1000; // scheduler tick in ms
+const PULSE_MS_EXACT = KAI_PULSE_SEC * 1000;
+const PULSE_MS_SOFT = (3 + Math.sqrt(5)) * 1000; // for animation cadence (≈5236ms)
 
 /* day pulses (whole pulses, not μpulses) */
 const DAY_PULSES = 17_491.270_421;
 const PHI = (1 + Math.sqrt(5)) / 2;
 
 const NOTES_KEY = "kairosNotes";
-const HIDDEN_IDS_KEY = "kairosNotesHiddenIds"; // panel-only hides
+const HIDDEN_IDS_KEY = "kairosNotesHiddenIds";
+
 const Z_INDEX = 10_000;
 
-/* ───────── Spiral → hex palette (Root-►Krown) ───────── */
+/* ───────── Spiral → palette (Root-►Krown) ───────── */
 const Spiral_COLOR = {
   Root: "#ff0024",
   Sakral: "#ff6f00",
@@ -59,7 +53,6 @@ const Spiral_COLOR = {
   MemorySpiral: "#ff80ab",
 } as const;
 
-/* Legacy SpiralArc labels mapped to palette keys */
 const ARC_TO_CHARKA = {
   "Ignition ArK": "Root",
   "Integration ArK": "Sakral",
@@ -69,7 +62,6 @@ const ARC_TO_CHARKA = {
   "Dream ArK": "Krown",
 } as const;
 
-/* Deterministic Day → SpiralArc so hue can be derived offline */
 const DAYS = ["Solhara", "Aquaris", "Flamora", "Verdari", "Sonari", "Kaelith"] as const;
 type Day = (typeof DAYS)[number];
 
@@ -82,7 +74,6 @@ const DAY_TO_ARC: Record<Day, keyof typeof ARC_TO_CHARKA> = {
   Kaelith: "Dream ArK",
 };
 
-/* Canonical weekday colors (fixed identity, not dynamic) */
 const DAY_COLOR: Record<Day, string> = {
   Solhara: "#ff0024",
   Aquaris: "#ff6f00",
@@ -93,15 +84,13 @@ const DAY_COLOR: Record<Day, string> = {
 };
 
 /* ══════════════ helpers ══════════════ */
-const stopBubble = (e: React.SyntheticEvent) => {
-  e.preventDefault();
+const stop = (e: SyntheticEvent) => {
   e.stopPropagation();
 };
 
 const squashSeal = (seal: string) =>
   seal.replace(/D\s+(\d+)/, "D$1").replace(/\/\s*M(\d+)/, "/M$1");
 
-/* Convert #rrggbb → rgba(r,g,b,a) */
 const rgba = (hex: string, a: number) => {
   const h = hex.replace("#", "");
   const bigint = Number.parseInt(h, 16);
@@ -111,12 +100,12 @@ const rgba = (hex: string, a: number) => {
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 };
 
-/* Push live Spiral hue into :root CSS vars */
 const applySpiralHue = (arc: string | undefined) => {
   if (typeof document === "undefined") return;
   const SpiralKey = ARC_TO_CHARKA[arc as keyof typeof ARC_TO_CHARKA] ?? "Root";
   const core = Spiral_COLOR[SpiralKey as keyof typeof Spiral_COLOR];
   const doc = document.documentElement;
+
   doc.style.setProperty("--aqua-core", core);
   doc.style.setProperty("--aqua-soft", rgba(core, 0.14));
   doc.style.setProperty("--seal-glow-inset", rgba(core, 0.36));
@@ -124,7 +113,7 @@ const applySpiralHue = (arc: string | undefined) => {
   doc.style.setProperty("--seal-glow-outer", rgba(core, 0.24));
 };
 
-/* ───────────────────── μpulse math (SigilModal parity) ───────────────────── */
+/* ───────────────────── μpulse math (deterministic) ───────────────────── */
 const ONE_PULSE_MICRO = 1_000_000n;
 const N_DAY_MICRO = 17_491_270_421n;
 const PULSES_PER_STEP_MICRO = 11_000_000n;
@@ -160,16 +149,15 @@ function microPulsesSinceGenesis(date: Date): bigint {
 /* ══════════════ types ══════════════ */
 interface KaiKlock {
   harmonicDay: Day;
-  eternalKaiPulseToday: number;
+  eternalKaiPulseToday: number; // absolute whole pulses since genesis
   kairos_seal_day_month: string;
   SpiralArc?: string;
 }
 
-/* ✅ Notes saved in storage (extends enriched Note with timestamp) */
 type SavedNote = EnrichedNote & { createdAt: number };
 
-/* Local Kai snapshot used for live UI */
 type LocalKai = {
+  dayIndex: bigint;
   beat: number;
   step: number;
   pulsesIntoDay: number;
@@ -195,12 +183,11 @@ function computeLocalKai(now: Date): LocalKai {
   const weekdayIdx = Number(imod(dayIndex, 6n));
   const harmonicDay = DAYS[weekdayIdx];
 
-  const dayIndexNum = Number(dayIndex);
-  const dayOfMonth = ((dayIndexNum % 42) + 42) % 42 + 1;
-  const monthIndex0 = Math.floor(dayIndexNum / 42) % 8;
-  const monthIndex1 = ((monthIndex0 + 8) % 8) + 1;
+  const dayOfMonth = Number(imod(dayIndex, 42n)) + 1;
+  const monthIndex1 = Number(imod(floorDiv(dayIndex, 42n), 8n)) + 1;
 
   return {
+    dayIndex,
     beat,
     step,
     pulsesIntoDay,
@@ -211,39 +198,7 @@ function computeLocalKai(now: Date): LocalKai {
   };
 }
 
-/* ──────────── extra helpers ──────────── */
-const eucMod = (n: number, m: number) => ((n % m) + m) % m;
-
-const parseSealDM = (seal?: string): { d: number; m: number } | null => {
-  if (!seal) return null;
-  const m = squashSeal(seal).match(/D\s*(\d+)\s*\/\s*M\s*(\d+)/i);
-  return m ? { d: Number(m[1]), m: Number(m[2]) } : null;
-};
-
-function addDaysWithinMonth(
-  dayOfMonth1: number,
-  monthIndex1: number,
-  deltaDays: number,
-): { dayOfMonth: number; monthIndex1: number } {
-  const dm0 = dayOfMonth1 - 1;
-  const total = dm0 + deltaDays;
-  const newDm0 = eucMod(total, 42);
-  const monthDelta = Math.floor(total / 42);
-  const newMi1 = eucMod(monthIndex1 - 1 + monthDelta, 8) + 1;
-  return { dayOfMonth: newDm0 + 1, monthIndex1: newMi1 };
-}
-
-/* ✅ derive beat/step from an absolute pulse (legacy migration helper) */
-const BEAT_PULSES = DAY_PULSES / 36;
-function deriveBeatStepFromPulse(absPulse: number): { beat: number; step: number } {
-  const intoDay = ((absPulse % DAY_PULSES) + DAY_PULSES) % DAY_PULSES;
-  const beat = Math.floor(intoDay / BEAT_PULSES);
-  const intoBeat = intoDay - beat * BEAT_PULSES;
-  const step = Math.min(43, Math.max(0, Math.floor(intoBeat / 11)));
-  return { beat, step };
-}
-
-/* ══════════════ EXPORT HELPERS (Kairos-only) ══════════════ */
+/* ══════════════ export helpers (Kairos-only) ══════════════ */
 type ExportRow = {
   id: string;
   text: string;
@@ -256,6 +211,8 @@ type ExportRow = {
   dayOfMonth: number;
   monthIndex1: number;
 };
+
+const eucMod = (n: number, m: number) => ((n % m) + m) % m;
 
 function augmentForExport(n: SavedNote): ExportRow {
   const dayIndex = Math.floor(n.pulse / DAY_PULSES);
@@ -341,6 +298,16 @@ type StoredUnknownNote = {
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isStr = (v: unknown): v is string => typeof v === "string";
 
+const BEAT_PULSES = DAY_PULSES / 36;
+
+function deriveBeatStepFromPulse(absPulse: number): { beat: number; step: number } {
+  const intoDay = ((absPulse % DAY_PULSES) + DAY_PULSES) % DAY_PULSES;
+  const beat = Math.floor(intoDay / BEAT_PULSES);
+  const intoBeat = intoDay - beat * BEAT_PULSES;
+  const step = Math.min(43, Math.max(0, Math.floor(intoBeat / 11)));
+  return { beat, step };
+}
+
 function toSavedNote(u: unknown): SavedNote | null {
   const r = u as StoredUnknownNote;
   if (!isStr(r.id) || !isStr(r.text) || !isNum(r.pulse)) return null;
@@ -364,8 +331,7 @@ function loadNotesFromStorage(): SavedNote[] {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return (parsed as unknown[]).map(toSavedNote).filter((n): n is SavedNote => n !== null);
-  } catch (err) {
-    void err;
+  } catch {
     return [];
   }
 }
@@ -379,8 +345,7 @@ function loadHiddenIdsFromStorage(): Set<string> {
     if (!Array.isArray(parsed)) return new Set<string>();
     const onlyStrings = parsed.filter((x) => typeof x === "string") as string[];
     return new Set<string>(onlyStrings);
-  } catch (err) {
-    void err;
+  } catch {
     return new Set<string>();
   }
 }
@@ -392,44 +357,43 @@ interface Props {
 }
 
 const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
-  /* ── minimal time state (pulse-bound) ── */
+  const reduceMotion = useReducedMotion();
+
+  /* ── time state (pulse-bound) ── */
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
-  /* derived snapshots (no extra React state) */
   const nowDate = useMemo(() => new Date(nowMs), [nowMs]);
   const localKai = useMemo<LocalKai>(() => computeLocalKai(nowDate), [nowDate]);
   const data = useMemo<KaiKlock>(() => buildKaiSnapshot(nowDate), [nowDate]);
 
-  /* ── notes (loaded via initializer — no setState-in-effect) ── */
+  /* ── notes (initializer — no setState-in-effect) ── */
   const [notes, setNotes] = useState<SavedNote[]>(() => loadNotesFromStorage());
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => loadHiddenIdsFromStorage());
 
-  const [monthOpen, setMO] = useState(false);
-  const [noteModal, setNM] = useState<{ open: boolean; pulse: number; initialText: string }>({
+  const [monthOpen, setMonthOpen] = useState(false);
+
+  const [noteModal, setNoteModal] = useState<{ open: boolean; pulse: number; initialText: string }>({
     open: false,
     pulse: 0,
     initialText: "",
   });
-  const [dayDetail, setDD] = useState<HarmonicDayInfo | null>(null);
 
-  /* ── motion ── */
+  const [dayDetail, setDayDetail] = useState<HarmonicDayInfo | null>(null);
+
+  /* ── motion progress (external → ok in effect) ── */
   const mv = useMotionValue(0);
   const prog = useSpring(mv, { stiffness: 40, damping: 16, mass: 0.28 });
 
-  /* External sync: Spiral hue → CSS vars */
   useEffect(() => {
     applySpiralHue(data.SpiralArc);
   }, [data.SpiralArc]);
 
-  /* External sync: progress spring value */
   useEffect(() => {
     mv.set(Math.min(localKai.pulsesIntoDay / DAY_PULSES, 1));
   }, [mv, localKai.pulsesIntoDay]);
 
-  /* ── μpulse-aligned scheduler (NO setState in effect body) ── */
-  type TimeoutHandle = ReturnType<typeof window.setTimeout>; // ✅ DOM timer handle (number)
-  const timeoutRef = useRef<TimeoutHandle | null>(null);
-  const targetBoundaryRef = useRef<number>(0);
+  /* ── μpulse-aligned scheduler (NO NodeJS.Timeout) ── */
+  const timeoutRef = useRef<number | null>(null);
 
   const epochNow = () => performance.timeOrigin + performance.now();
 
@@ -447,21 +411,30 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
     }
   }, []);
 
+  const armAlignedTimerRef = useRef<(() => void) | null>(null);
+
   const armAlignedTimer = useCallback(() => {
     clearAlignedTimer();
 
-    // schedule first boundary in the future
-    targetBoundaryRef.current = computeNextBoundary(epochNow());
+    const now = epochNow();
+    const target = computeNextBoundary(now);
+    const delay = Math.max(0, target - now);
 
+    timeoutRef.current = window.setTimeout(() => {
+      setNowMs(Date.now());
+      armAlignedTimerRef.current?.();
+    }, delay);
   }, [clearAlignedTimer]);
 
   useEffect(() => {
-    // effect body only wires external system (timers + listeners)
+    armAlignedTimerRef.current = armAlignedTimer;
+  }, [armAlignedTimer]);
+
+  useEffect(() => {
     armAlignedTimer();
 
     const onVis = () => {
       if (document.visibilityState === "visible") {
-        // callback from external event: allowed to setState
         setNowMs(Date.now());
         armAlignedTimer();
       }
@@ -474,77 +447,82 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
     };
   }, [armAlignedTimer, clearAlignedTimer]);
 
-  /* ── notes persistence ── */
-  const persistNotes = (ns: SavedNote[]) => {
-    setNotes(ns);
+  /* ── notes persistence (functional updates = no stale closures) ── */
+  const addNote = useCallback((note: EnrichedNote) => {
+    setNotes((prev) => {
+      const saved: SavedNote = { ...note, createdAt: Date.now() };
+      const next = [...prev, saved];
+      try {
+        localStorage.setItem(NOTES_KEY, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+
+  const persistHiddenIds = useCallback((next: Set<string>) => {
+    setHiddenIds(next);
     try {
-      localStorage.setItem(NOTES_KEY, JSON.stringify(ns));
-    } catch (err) {
-      void err;
+      localStorage.setItem(HIDDEN_IDS_KEY, JSON.stringify([...next]));
+    } catch {
+      // ignore
     }
-  };
+  }, []);
 
-  const addNote = (note: EnrichedNote) => {
-    const saved: SavedNote = { ...note, createdAt: Date.now() };
-    persistNotes([...notes, saved]);
-  };
+  /* ── derived day helpers (BigInt exact; no float dayStart) ── */
+  const dayStartPulse = useCallback(
+    (idx: number): number => {
+      const curIdx = DAYS.indexOf(localKai.harmonicDay);
+      const delta = idx - curIdx;
+      const targetDayIndex = localKai.dayIndex + BigInt(delta);
+      return Number(floorDiv(targetDayIndex * N_DAY_MICRO, ONE_PULSE_MICRO));
+    },
+    [localKai.dayIndex, localKai.harmonicDay],
+  );
 
-  const persistHiddenIds = (set: Set<string>) => {
-    setHiddenIds(set);
-    try {
-      localStorage.setItem(HIDDEN_IDS_KEY, JSON.stringify([...set]));
-    } catch (err) {
-      void err;
-    }
-  };
+  const selectedDM = useCallback(
+    (idx: number): { dayOfMonth: number; monthIndex1: number } => {
+      const curIdx = DAYS.indexOf(localKai.harmonicDay);
+      const delta = idx - curIdx;
+      const targetDayIndex = localKai.dayIndex + BigInt(delta);
+      const dayOfMonth = Number(imod(targetDayIndex, 42n)) + 1;
+      const monthIndex1 = Number(imod(floorDiv(targetDayIndex, 42n), 8n)) + 1;
+      return { dayOfMonth, monthIndex1 };
+    },
+    [localKai.dayIndex, localKai.harmonicDay],
+  );
 
-  /* ── day mapping helpers ── */
-  const dayStartPulse = (idx: number): number => {
-    const todayZero = Math.floor(data.eternalKaiPulseToday / DAY_PULSES) * DAY_PULSES;
-    const curIdx = DAYS.indexOf(data.harmonicDay);
-    return todayZero + (idx - curIdx) * DAY_PULSES;
-  };
-
-  const selectedDM = (idx: number): { dayOfMonth: number; monthIndex1: number } => {
-    const baseDM = localKai.dayOfMonth ?? parseSealDM(data.kairos_seal_day_month || "")?.d ?? 1;
-    const baseM = localKai.monthIndex1 ?? parseSealDM(data.kairos_seal_day_month || "")?.m ?? 1;
-
-    const curIdx = DAYS.indexOf((localKai.harmonicDay ?? data.harmonicDay) || "Solhara");
-    const delta = idx - curIdx;
-    return addDaysWithinMonth(baseDM, baseM, delta);
-  };
-
-  /* ── PERSISTENT memories list (no time-based filtering) ── */
+  /* ── visible memories (panel-only hides) ── */
   const visibleMemories = useMemo(
     () => notes.filter((n) => !hiddenIds.has(n.id)).sort((a, b) => a.pulse - b.pulse),
     [notes, hiddenIds],
   );
 
-  /* ── EXPORT actions ── */
-  const exportJSON = () => {
+  /* ── export ── */
+  const exportJSON = useCallback(() => {
     if (notes.length === 0) return;
     const rows = notes.map(augmentForExport);
     const kaiTag = `P${Math.round(data.eternalKaiPulseToday)}`;
     downloadBlob(`kairos-notes-${kaiTag}.json`, "application/json", JSON.stringify(rows, null, 2));
-  };
+  }, [notes, data.eternalKaiPulseToday]);
 
-  const exportCSV = () => {
+  const exportCSV = useCallback(() => {
     if (notes.length === 0) return;
     const rows = notes.map(augmentForExport);
     const csv = toCSV(rows);
     const kaiTag = `P${Math.round(data.eternalKaiPulseToday)}`;
     downloadBlob(`kairos-notes-${kaiTag}.csv`, "text/csv;charset=utf-8", csv);
-  };
+  }, [notes, data.eternalKaiPulseToday]);
 
-  /* ── CLEAR (panel-only) ── */
-  const clearPanelNotes = () => {
+  const clearPanelNotes = useCallback(() => {
     if (visibleMemories.length === 0) return;
     const next = new Set(hiddenIds);
     for (const n of visibleMemories) next.add(n.id);
     persistHiddenIds(next);
-  };
+  }, [visibleMemories, hiddenIds, persistHiddenIds]);
 
-  /* ── body scroll lock while modal is open ── */
+  /* ── body scroll lock ── */
   useEffect(() => {
     const prev = document.body.style.overflow;
     const prevTB = document.body.style.touchAction;
@@ -556,13 +534,41 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
     };
   }, []);
 
-  /* ── focus ✕ on mount ── */
+  /* ── focus close on mount ── */
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     closeBtnRef.current?.focus();
   }, []);
 
-  /* ── precompute ring geometry ── */
+  /* ── topmost-first close behavior (ESC + backdrop tap) ── */
+  const closeTopmost = useCallback(() => {
+    if (dayDetail) {
+      setDayDetail(null);
+      return;
+    }
+    if (noteModal.open) {
+      setNoteModal((p) => ({ ...p, open: false }));
+      return;
+    }
+    if (monthOpen) {
+      setMonthOpen(false);
+      return;
+    }
+    onClose();
+  }, [dayDetail, noteModal.open, monthOpen, onClose]);
+
+  useEffect(() => {
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeTopmost();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, { passive: false });
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [closeTopmost]);
+
+  /* ── ring geometry ── */
   const rings = useMemo(
     () =>
       DAYS.map((d, i) => ({
@@ -570,37 +576,45 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
         idx: i,
         size: 90 - i * 10,
         colour: DAY_COLOR[d],
-        delay: ((i * PHI) % 1) * (PULSE_MS / 1000),
+        delay: reduceMotion ? 0 : ((i * PHI) % 1) * (PULSE_MS_SOFT / 1000),
       })),
-    [],
+    [reduceMotion],
   );
 
-  /* ── render ── */
+  /* ── unique ids (no collisions) ── */
+  const rid = useId().replace(/:/g, "");
+  const glowId = `wk-neon-glow-${rid}`;
+  const gradXId = `wk-grad-x-${rid}`;
+
   const root = container ?? document.body;
+
+  /* SSR safety (rare, but makes TS happy in mixed builds) */
+  if (typeof document === "undefined") return null;
 
   return createPortal(
     <>
-      {/* WEEK modal backdrop */}
       <AnimatePresence>
         <motion.div
           key="wk-modal"
           className="wk-backdrop"
           initial={{ opacity: 0 }}
-          animate={{ opacity: monthOpen ? 0.25 : 0.96 }}
+          animate={{ opacity: monthOpen ? 0.28 : 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.26 }}
           style={{ zIndex: Z_INDEX }}
-          onPointerDown={stopBubble}
-          onClick={stopBubble}
+          onPointerDown={(e) => {
+            // tap outside closes (topmost-first)
+            if (e.target === e.currentTarget) closeTopmost();
+          }}
           aria-hidden={false}
         >
           <div
             className="wk-container"
             role="dialog"
             aria-modal="true"
-            onPointerDown={stopBubble}
-            onClick={stopBubble}
-            style={{ zIndex: dayDetail || noteModal.open ? Z_INDEX + 6 : undefined }}
+            onPointerDown={stop}
+            onClick={stop}
+            data-month-open={monthOpen ? "1" : "0"}
           >
             {/* ✕ close button */}
             <button
@@ -608,17 +622,17 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
               type="button"
               className="wk-close god-x"
               aria-label="Close"
-              onClick={onClose}
+              onClick={closeTopmost}
             >
               <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
                 <defs>
-                  <linearGradient id="grad-x" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <linearGradient id={gradXId} x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop offset="0%" stopColor="#00eaff" />
                     <stop offset="100%" stopColor="#ff1559" />
                   </linearGradient>
                 </defs>
-                <line x1="4" y1="4" x2="20" y2="20" stroke="url(#grad-x)" strokeWidth="2" />
-                <line x1="20" y1="4" x2="4" y2="20" stroke="url(#grad-x)" strokeWidth="2" />
+                <line x1="4" y1="4" x2="20" y2="20" stroke={`url(#${gradXId})`} strokeWidth="2" />
+                <line x1="20" y1="4" x2="4" y2="20" stroke={`url(#${gradXId})`} strokeWidth="2" />
               </svg>
             </button>
 
@@ -631,8 +645,8 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
                   aria-selected={!monthOpen}
                   className={!monthOpen ? "active" : ""}
                   onClick={() => {
-                    setMO(false);
-                    setDD(null);
+                    setMonthOpen(false);
+                    setDayDetail(null);
                   }}
                 >
                   Week
@@ -643,8 +657,8 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
                   aria-selected={monthOpen}
                   className={monthOpen ? "active" : ""}
                   onClick={() => {
-                    setDD(null);
-                    setMO(true);
+                    setDayDetail(null);
+                    setMonthOpen(true);
                   }}
                 >
                   Month
@@ -652,282 +666,236 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
               </div>
             </div>
 
-            {/* WEEK view */}
-            <>
-              {/* μpulse-accurate seal above kalendar */}
-              <div className="wk-seal">
-                <code>
-                  {squashSeal(
-                    `${localKai.chakraStepString} — D${localKai.dayOfMonth}/M${localKai.monthIndex1}`,
-                  )}
-                </code>
-              </div>
+            {/* Seal chip */}
+            <div className="wk-seal" aria-hidden="true">
+              <code>
+                {squashSeal(`${localKai.chakraStepString} — D${localKai.dayOfMonth}/M${localKai.monthIndex1}`)}
+              </code>
+            </div>
 
-              <svg
-                className="wk-stage"
-                viewBox="-50 -50 100 100"
-                preserveAspectRatio="xMidYMid meet"
-                aria-label="Week Rings"
-              >
-                {/* neon filter defs */}
-                <defs>
-                  <filter
-                    id="neon-glow"
-                    x="-50%"
-                    y="-50%"
-                    width="200%"
-                    height="200%"
-                    filterUnits="userSpaceOnUse"
-                  >
-                    <feGaussianBlur stdDeviation="1.8" result="blur" />
-                    <feMerge>
-                      <feMergeNode in="blur" />
-                      <feMergeNode in="blur" />
-                      <feMergeNode in="SourceGraphic" />
-                    </feMerge>
-                  </filter>
-                </defs>
+            {/* WEEK rings (disabled behind Month overlay via CSS data attr) */}
+            <svg
+              className="wk-stage"
+              viewBox="-50 -50 100 100"
+              preserveAspectRatio="xMidYMid meet"
+              aria-label="Week Rings"
+            >
+              <defs>
+                <filter
+                  id={glowId}
+                  x="-50%"
+                  y="-50%"
+                  width="200%"
+                  height="200%"
+                  filterUnits="userSpaceOnUse"
+                >
+                  <feGaussianBlur stdDeviation="1.8" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
 
-                {rings.map(({ day, idx, size, colour, delay }) => {
-                  const isToday = (localKai.harmonicDay ?? data.harmonicDay) === day;
-                  const w = size;
-                  const h = size * 0.7;
-                  const r = 10;
-                  const d = `M ${-w / 2 + r} ${-h / 2} H ${w / 2 - r}
-                             Q ${w / 2} ${-h / 2} ${w / 2} ${-h / 2 + r}
-                             V ${h / 2 - r} Q ${w / 2} ${h / 2} ${w / 2 - r} ${h / 2}
-                             H ${-w / 2 + r} Q ${-w / 2} ${h / 2} ${-w / 2} ${h / 2 - r}
-                             V ${-h / 2 + r} Q ${-w / 2} ${-h / 2} ${-w / 2 + r} ${-h / 2} Z`;
+              {rings.map(({ day, idx, size, colour, delay }) => {
+                const isToday = localKai.harmonicDay === day;
 
-                  const { dayOfMonth, monthIndex1 } = selectedDM(idx);
+                const w = size;
+                const h = size * 0.7;
+                const r = 10;
 
-                  const openDay = () => {
-                    const beatStep = localKai.chakraStepString ?? "0:00";
-                    const kaiTimestamp = squashSeal(`${beatStep} — D${dayOfMonth}/M${monthIndex1}`);
-                    const payload: HarmonicDayInfo = {
-                      name: day,
-                      kaiTimestamp,
-                      startPulse: dayStartPulse(idx),
-                    };
-                    setDD(payload);
+                const d = `M ${-w / 2 + r} ${-h / 2} H ${w / 2 - r}
+                           Q ${w / 2} ${-h / 2} ${w / 2} ${-h / 2 + r}
+                           V ${h / 2 - r} Q ${w / 2} ${h / 2} ${w / 2 - r} ${h / 2}
+                           H ${-w / 2 + r} Q ${-w / 2} ${h / 2} ${-w / 2} ${h / 2 - r}
+                           V ${-h / 2 + r} Q ${-w / 2} ${-h / 2} ${-w / 2 + r} ${-h / 2} Z`;
+
+                const { dayOfMonth, monthIndex1 } = selectedDM(idx);
+
+                const openDay = () => {
+                  const kaiTimestamp = squashSeal(`${localKai.chakraStepString} — D${dayOfMonth}/M${monthIndex1}`);
+                  const payload: HarmonicDayInfo = {
+                    name: day,
+                    kaiTimestamp,
+                    startPulse: dayStartPulse(idx),
                   };
+                  setDayDetail(payload);
+                };
 
-                  return (
-                    <g key={day} style={{ cursor: "pointer" }} onClick={openDay}>
-                      <motion.path
-                        d={d}
-                        fill="none"
-                        stroke={colour}
-                        strokeLinecap="round"
-                        strokeWidth={isToday ? 3.2 : 1.7}
-                        style={{ pathLength: isToday ? prog : 1, filter: "url(#neon-glow)" }}
-                        animate={{
-                          opacity: isToday ? [0.82, 1, 0.82] : [0.45, 0.7, 0.45],
-                          strokeWidth: isToday ? [3.2, 3.6, 3.2] : [1.7, 2.0, 1.7],
-                        }}
-                        transition={{
-                          opacity: {
-                            duration: PULSE_MS / 1000,
-                            repeat: Infinity,
-                            ease: "easeInOut",
-                            delay,
-                          },
-                          strokeWidth: {
-                            duration: PULSE_MS / 1000,
-                            repeat: Infinity,
-                            ease: "easeInOut",
-                            delay,
-                          },
-                        }}
-                      />
-                      <text
-                        x="0"
-                        y={-(h / 2) + 2}
-                        fill={colour}
-                        fontSize="4"
-                        textAnchor="middle"
-                        fontFamily="Inter, system-ui, sans-serif"
-                        style={{ filter: "url(#neon-glow)" }}
-                      >
-                        {day}
-                      </text>
-                    </g>
-                  );
-                })}
-              </svg>
+                const onKey = (e: KeyboardEvent<SVGGElement>) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openDay();
+                  }
+                };
 
-              {/* add note btn */}
-              <button
-                type="button"
-                className="wk-add-note-btn"
-                aria-label="Add note"
-                onClick={() =>
-                  setNM({
-                    open: true,
-                    pulse: localKai.pulsesIntoDay ?? data.eternalKaiPulseToday,
-                    initialText: "",
-                  })
-                }
-              >
-                ＋
-              </button>
-            </>
+                return (
+                  <g
+                    key={day}
+                    className="wk-day"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open ${day} — D${dayOfMonth}/M${monthIndex1}`}
+                    onClick={openDay}
+                    onKeyDown={onKey}
+                  >
+                    <motion.path
+                      className={isToday ? "is-today-ring" : ""}
+                      d={d}
+                      fill="none"
+                      stroke={colour}
+                      strokeLinecap="round"
+                      strokeWidth={isToday ? 3.2 : 1.7}
+                      style={{ pathLength: isToday ? prog : 1, filter: `url(#${glowId})` }}
+                      animate={
+                        reduceMotion
+                          ? undefined
+                          : {
+                              opacity: isToday ? [0.82, 1, 0.82] : [0.45, 0.7, 0.45],
+                              strokeWidth: isToday ? [3.2, 3.6, 3.2] : [1.7, 2.0, 1.7],
+                            }
+                      }
+                      transition={
+                        reduceMotion
+                          ? undefined
+                          : {
+                              opacity: { duration: PULSE_MS_SOFT / 1000, repeat: Infinity, ease: "easeInOut", delay },
+                              strokeWidth: { duration: PULSE_MS_SOFT / 1000, repeat: Infinity, ease: "easeInOut", delay },
+                            }
+                      }
+                    />
+
+                    <text
+                      className={isToday ? "is-today-label" : ""}
+                      x="0"
+                      y={-(h / 2) + 2}
+                      fill={colour}
+                      fontSize="4"
+                      textAnchor="middle"
+                      fontFamily="Inter, system-ui, sans-serif"
+                      style={{ filter: `url(#${glowId})` }}
+                    >
+                      {day}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+
+            {/* add note btn — fixed bottom-center (CSS owns placement) */}
+            <button
+              type="button"
+              className="wk-add-note-btn"
+              aria-label="Add memory"
+              onPointerDown={stop}
+              onClick={() =>
+                setNoteModal({
+                  open: true,
+                  pulse: data.eternalKaiPulseToday, // absolute pulse
+                  initialText: "",
+                })
+              }
+            >
+              ＋
+            </button>
 
             {/* Day Detail overlay — TOPMOST */}
             {dayDetail && (
-              <div
-                className="wk-daydetail-overlay"
-                style={{
-                  position: "fixed",
-                  inset: 0,
-                  zIndex: Z_INDEX + 5,
-                  display: "grid",
-                  placeItems: "center",
-                  pointerEvents: "auto",
-                }}
-                onClick={stopBubble}
-              >
-                <DayDetailModal day={dayDetail} onClose={() => setDD(null)} />
+              <div className="wk-daydetail-overlay" onPointerDown={stop} onClick={stop}>
+                <DayDetailModal day={dayDetail} onClose={() => setDayDetail(null)} />
               </div>
             )}
 
-            {/* NoteModal overlay — BELOW Day, ABOVE Memories */}
+            {/* NoteModal overlay — below Day, above dock */}
             {noteModal.open && (
-              <div
-                className="wk-notemodal-overlay"
-                style={{
-                  position: "fixed",
-                  inset: 0,
-                  zIndex: Z_INDEX + 4,
-                  display: "grid",
-                  placeItems: "center",
-                  pointerEvents: "auto",
-                }}
-                onPointerDown={stopBubble}
-                onClick={stopBubble}
-              >
+              <div className="wk-notemodal-overlay" onPointerDown={stop} onClick={stop}>
                 <NoteModal
                   pulse={noteModal.pulse}
                   initialText={noteModal.initialText}
                   onSave={(note) => {
                     addNote(note);
-                    setNM((prev) => ({ ...prev, open: false }));
+                    setNoteModal((prev) => ({ ...prev, open: false }));
                   }}
-                  onClose={() => setNM((prev) => ({ ...prev, open: false }))}
+                  onClose={() => setNoteModal((prev) => ({ ...prev, open: false }))}
                 />
               </div>
             )}
-          </div>
 
-          {/* Persistent Notes Dock — ALWAYS BELOW BOTH MODALS */}
-          <aside
-            className="wk-notes-dock"
-            style={{
-              position: "fixed",
-              right: "clamp(8px, 2vw, 16px)",
-              bottom: "clamp(8px, 2vh, 16px)",
-              width: "min(440px, 86vw)",
-              maxHeight: "48vh",
-              zIndex: Z_INDEX + 3,
-              pointerEvents: "auto",
-            }}
-            onPointerDown={stopBubble}
-            onClick={stopBubble}
-          >
-            <div
-              className="wk-notes-list"
-              style={{
-                background: "rgba(0,0,0,0.35)",
-                backdropFilter: "blur(6px)",
-                WebkitBackdropFilter: "blur(6px)",
-                borderRadius: "14px",
-                boxShadow: "0 10px 24px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.12)",
-                padding: "10px 12px",
-                overflowY: "auto",
-                maxHeight: "min(40vh, 240px)",
-              }}
-            >
-              <div className="wk-notes-header" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Memories</h3>
-                <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-                  {visibleMemories.length > 0 && (
-                    <button
-                      type="button"
-                      className="wk-chip wk-clear-btn"
-                      title="Clear panel notes (does not delete)"
-                      onClick={clearPanelNotes}
-                    >
-                      Clear
-                    </button>
-                  )}
-                  {notes.length > 0 && (
-                    <>
+            {/* Persistent Notes Dock */}
+            <aside className="wk-notes-dock" onPointerDown={stop} onClick={stop}>
+              <div className="wk-notes-list">
+                <div className="wk-notes-header">
+                  <h3>Memories</h3>
+
+                  <div className="wk-notes-actions">
+                    {visibleMemories.length > 0 && (
                       <button
                         type="button"
-                        className="wk-export-btn"
-                        title="Download all notes (JSON, Kairos-only)"
-                        onClick={exportJSON}
+                        className="wk-chip wk-clear-btn"
+                        title="Clear panel notes (does not delete)"
+                        onClick={clearPanelNotes}
                       >
-                        ⤓ JSON
+                        Clear
                       </button>
-                      <button
-                        type="button"
-                        className="wk-export-btn"
-                        title="Download all notes (CSV, Kairos-only)"
-                        onClick={exportCSV}
-                      >
-                        ⤓ CSV
-                      </button>
-                    </>
-                  )}
+                    )}
+
+                    {notes.length > 0 && (
+                      <div className="wk-export-group" aria-label="Export memories">
+                        <button type="button" className="wk-export-btn" title="Download JSON" onClick={exportJSON}>
+                          ⤓ JSON
+                        </button>
+                        <span className="wk-divider" aria-hidden="true" />
+                        <button type="button" className="wk-export-btn" title="Download CSV" onClick={exportCSV}>
+                          ⤓ CSV
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {visibleMemories.length > 0 ? (
-                <ul style={{ margin: "8px 0 0", padding: 0, listStyle: "none" }}>
-                  {visibleMemories.map((n) => (
-                    <li key={n.id} style={{ padding: "6px 4px" }}>
-                      <strong>
-                        {Math.round(n.pulse)} · {n.beat}:{pad2(n.step)}
-                      </strong>
-                      {" : "}
-                      {n.text}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="wk-notes-empty" style={{ margin: "8px 0 0", opacity: 0.8 }}>
-                  No memories yet.
-                </p>
-              )}
-            </div>
-          </aside>
+                {visibleMemories.length > 0 ? (
+                  <ul className="wk-mem-ul" aria-label="Memories list">
+                    {visibleMemories.map((n) => (
+                      <li key={n.id} className="wk-mem-li">
+                        <strong className="wk-mem-kai">
+                          {Math.round(n.pulse)} · {n.beat}:{pad2(n.step)}
+                        </strong>
+                        <span className="wk-mem-text"> {n.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="wk-notes-empty">No memories yet.</p>
+                )}
+              </div>
+            </aside>
+          </div>
         </motion.div>
       </AnimatePresence>
 
       {/* MONTH radial modal */}
-   {monthOpen && (
-  <MonthKalendarModal
-    container={root}
-    DAYS={DAYS}
-    notes={notes}
-    initialData={data}
-    onSelectDay={() => {}}
-    onAddNote={(idx) =>
-      setNM({
-        open: true,
-        pulse: idx * DAY_PULSES,
-        initialText:
-          notes.find((n) => Math.floor(n.pulse / DAY_PULSES) === idx)?.text || "",
-      })
-    }
-    onClose={() => {
-      setMO(false);
-      setDD(null);
-    }}
-  />
-)}
-
+      {monthOpen && (
+        <MonthKalendarModal
+          container={root}
+          DAYS={DAYS}
+          notes={notes}
+          initialData={data}
+          onSelectDay={() => {}}
+          onAddNote={(idx) =>
+            setNoteModal({
+              open: true,
+              // idx is treated as dayIndex in your existing month logic
+              pulse: Number(floorDiv(BigInt(idx) * N_DAY_MICRO, ONE_PULSE_MICRO)),
+              initialText: notes.find((n) => Math.floor(n.pulse / DAY_PULSES) === idx)?.text || "",
+            })
+          }
+          onClose={() => {
+            setMonthOpen(false);
+            setDayDetail(null);
+          }}
+        />
+      )}
     </>,
     root,
   );

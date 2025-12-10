@@ -1007,14 +1007,26 @@ function AppChrome(): React.JSX.Element {
                   </div>
                 </div>
 
-                <footer className="panel-foot" aria-label="Footer">
-                  <div className="panel-foot__left">
-                    <span className="mono">ΦNet</span> • Sovereign Gate
-                  </div>
-                  <div className="panel-foot__right">
-                    <span className="mono">V</span> <span className="mono">25.8</span>
-                  </div>
-                </footer>
+              <footer className="panel-foot" aria-label="Footer">
+  <div className="panel-foot__left">
+    <span className="mono">ΦNet</span> • Sovereign Gate
+  </div>
+
+  <div className="panel-foot__right">
+    <span className="mono">V</span>{" "}
+    <a
+      className="mono"
+      href="https://github.com/kojibai/verify.kai"
+      target="_blank"
+      rel="noreferrer"
+      aria-label="Version 25.8 (opens GitHub)"
+      title="Open GitHub"
+    >
+      25.9
+    </a>
+  </div>
+</footer>
+
               </section>
             </div>
           </div>
