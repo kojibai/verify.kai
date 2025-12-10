@@ -1,11 +1,8 @@
 /* src/pages/sigilstream/status/KaiStatus.css
-   KaiStatus — Atlantean μpulse Bar (v3.2)
-   Single-line • zero-overlap • krystal-frost super-tech.
+   KaiStatus — Atlantean μpulse Bar (v3.3)
+   Single-line • zero-overlap • krystal-frost.
    ✅ ALWAYS SHOWS: Day + Chakra + Pulse (no hiding, no ellipsis, no abbreviations)
-   ✅ Responsive by density: data-layout="full|compact|micro" from TSX
-   ✅ TSX drives --kai-progress (0..1) and --kai-ui-scale (1..~0.86)
-   - Phase-lock: --pulse-dur / --pulse-offset
-   - Progress:  --kai-progress
+   ✅ TRUE layout scaling: uses --kai-ui-scale to shrink font/padding/gaps (no transforms)
 */
 
 .kai-feed-status{
@@ -15,12 +12,15 @@
   --kai-progress: 0;
   --kai-ui-scale: 1;
 
+  /* local alias */
+  --s: var(--kai-ui-scale);
+
   /* ───────── geometry ───────── */
   --r: 18px;
   --padX: 12px;
   --padY: 10px;
 
-  /* density knobs (tighten on compact/micro) */
+  /* base gaps */
   --gap: 10px;
   --gapR: 10px;
 
@@ -30,20 +30,19 @@
 
   /* ───────── glass ───────── */
   --ring: rgba(255,255,255,0.14);
-  --ring2: rgba(255,255,255,0.08);
   --shadow: 0 18px 54px rgba(0,0,0,0.48);
   --inner: inset 0 1px 0 rgba(255,255,255,0.10);
 
   /* ───────── aurora accents ───────── */
   --a1: rgba(120,190,255,0.14);
   --a2: rgba(255,180,245,0.12);
-  --a3: rgba(170,230,255,0.10);
 
-  /* ───────── layout ───────── */
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+
+  gap: 10px;
 
   height: 56px;
   padding: var(--padY) var(--padX);
@@ -52,7 +51,6 @@
   border-radius: var(--r);
   border: 1px solid var(--ring);
 
-  /* krystal frost stack */
   background:
     radial-gradient(120% 180% at 10% -30%,
       var(--a1),
@@ -76,17 +74,8 @@
   overflow: hidden;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-
-  /* stable under rapid updates */
   contain: layout paint;
-
-  /* single-source scaling (TSX sets --kai-ui-scale) */
-  transform: translateZ(0);
 }
-
-/* ─────────────────────────────────────────────────────────────
-   KRYSTAL EDGE / SHIMMER
-   ───────────────────────────────────────────────────────────── */
 
 /* outer krystal edge highlight */
 .kai-feed-status::after{
@@ -95,7 +84,6 @@
   inset: 0;
   pointer-events:none;
   border-radius: inherit;
-
   background:
     linear-gradient(180deg,
       rgba(255,255,255,0.18),
@@ -104,7 +92,6 @@
     radial-gradient(140% 180% at 50% 0%,
       rgba(255,255,255,0.16),
       rgba(255,255,255,0.00) 60%);
-
   mix-blend-mode: overlay;
   opacity: 0.55;
 }
@@ -115,7 +102,6 @@
   position:absolute;
   inset:-2px;
   pointer-events:none;
-
   background:
     linear-gradient(115deg,
       rgba(255,255,255,0.00) 0%,
@@ -129,21 +115,18 @@
     radial-gradient(circle at 70% 60%,
       rgba(255,180,245,0.10),
       rgba(255,255,255,0.00) 62%);
-
   opacity: 0.42;
   transform: translate3d(-34%, 0, 0);
   mix-blend-mode: overlay;
-
   animation: kai-status-shimmer var(--pulse-dur) linear infinite;
   animation-delay: calc(-1 * var(--pulse-offset));
 }
-
 @keyframes kai-status-shimmer{
   0%   { transform: translate3d(-38%, 0, 0); }
   100% { transform: translate3d( 38%, 0, 0); }
 }
 
-/* boundary flash (pulse edge) */
+/* boundary flash */
 .kai-feed-status--flash{
   animation: kai-status-flash 200ms ease-out;
 }
@@ -153,53 +136,52 @@
   100% { filter: brightness(1); }
 }
 
-/* ─────────────────────────────────────────────────────────────
-   CONTENT ROWS
-   ───────────────────────────────────────────────────────────── */
-
-/* LEFT: single-row, shrink-safe container */
+/* LEFT */
 .kai-feed-status__left{
   display: flex;
   align-items: center;
-  gap: var(--gap);
+  gap: calc(var(--gap) * var(--s));
   min-width: 0;
   overflow: hidden;
-
-  /* scaling for tight widths without hiding anything */
-  transform: scale(var(--kai-ui-scale));
-  transform-origin: left center;
 }
 
-/* label */
+/* RIGHT */
+.kai-feed-status__right{
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--gapR) * var(--s));
+  flex: 0 0 auto;
+  margin-left: auto; /* <- pushes right side, no space-between weirdness */
+  min-width: 0;
+}
+
+/* labels */
 .kai-feed-status__kLabel{
   color: var(--muted);
-  font-size: 11px;
+  font-size: clamp(9px, calc(11px * var(--s)), 11px);
   letter-spacing: 0.22em;
   text-transform: uppercase;
   opacity: 0.92;
-
   flex: 0 0 auto;
 }
 
-/* beat:step */
 .kai-feed-status__bsi{
   color: var(--ink);
-  font-size: 18px;
+  font-size: clamp(14px, calc(18px * var(--s)), 18px);
   font-weight: 860;
   letter-spacing: 0.02em;
   text-shadow: 0 1px 0 rgba(0,0,0,0.25);
-
   flex: 0 0 auto;
 }
 
-/* Pills: krystal micro-chip */
+/* pills */
 .kai-pill{
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: calc(6px * var(--s));
 
-  height: 26px;
-  padding: 0 10px;
+  height: clamp(22px, calc(26px * var(--s)), 26px);
+  padding: 0 clamp(6px, calc(10px * var(--s)), 10px);
   border-radius: 999px;
 
   border: 1px solid rgba(255,255,255,0.12);
@@ -210,9 +192,9 @@
     linear-gradient(180deg,
       rgba(255,255,255,0.085),
       rgba(255,255,255,0.022));
-  color: rgba(236,244,255,0.92);
 
-  font-size: 12px;
+  color: rgba(236,244,255,0.92);
+  font-size: clamp(9.8px, calc(12px * var(--s)), 12px);
   line-height: 1;
 
   box-shadow:
@@ -222,16 +204,16 @@
   flex: 0 0 auto;
 }
 
-/* ✅ NEVER truncate day/chakra text (Kaelith must be fully visible) */
+/* NEVER truncate day/chakra/pulse text */
 .kai-pill--day,
-.kai-pill--chakra{
+.kai-pill--chakra,
+.kai-pill--pulse{
   max-width: none;
   overflow: visible;
   text-overflow: clip;
   white-space: nowrap;
 }
 
-/* pulse pill accent */
 .kai-pill--pulse{
   border-color: rgba(255,255,255,0.14);
   background:
@@ -251,50 +233,31 @@
   letter-spacing: 0.01em;
 }
 
-/* RIGHT: countdown block */
-.kai-feed-status__right{
-  display: flex;
-  align-items: baseline;
-  gap: var(--gapR);
-  flex: 0 0 auto;
-  margin-left: 10px;
-
-  /* scale too, but keep right-aligned */
-  transform: scale(var(--kai-ui-scale));
-  transform-origin: right center;
-}
-
+/* countdown */
 .kai-feed-status__nLabel{
   color: var(--muted);
-  font-size: 11px;
+  font-size: clamp(9px, calc(11px * var(--s)), 11px);
   letter-spacing: 0.22em;
   text-transform: uppercase;
   opacity: 0.90;
-
-  flex: 0 0 auto;
 }
 
 .kai-feed-status__nVal{
   color: var(--ink);
-  font-size: 18px;
+  font-size: clamp(14px, calc(18px * var(--s)), 18px);
   font-weight: 880;
   letter-spacing: 0.01em;
   text-shadow: 0 1px 0 rgba(0,0,0,0.25);
-
-  flex: 0 0 auto;
 }
 
 .kai-feed-status__nUnit{
-  margin-left: 4px;
+  margin-left: clamp(2px, calc(4px * var(--s)), 4px);
   color: rgba(210,224,245,0.90);
-  font-size: 12px;
+  font-size: clamp(10px, calc(12px * var(--s)), 12px);
   letter-spacing: 0.10em;
 }
 
-/* ─────────────────────────────────────────────────────────────
-   PROGRESS LINE (inside the bar)
-   ───────────────────────────────────────────────────────────── */
-
+/* progress bar */
 .kai-feed-status__bar{
   position: absolute;
   left: var(--padX);
@@ -311,7 +274,6 @@
     radial-gradient(140% 240% at 50% 50%,
       rgba(255,255,255,0.06),
       rgba(255,255,255,0.00) 60%);
-
   pointer-events: none;
 }
 
@@ -321,7 +283,6 @@
   transform-origin: left center;
   transform: scaleX(var(--kai-progress));
   will-change: transform;
-
   background:
     radial-gradient(140% 220% at 18% 0%,
       rgba(170,230,255,0.56),
@@ -334,7 +295,6 @@
       rgba(255,255,255,0.04));
 }
 
-/* phase-locked spark sweep */
 .kai-feed-status__barSpark{
   position:absolute;
   top: -16px;
@@ -356,98 +316,24 @@
   animation: kai-bar-spark var(--pulse-dur) linear infinite;
   animation-delay: calc(-1 * var(--pulse-offset));
 }
-
 @keyframes kai-bar-spark{
   0%   { transform: translateX(0);     opacity: 0.0; }
   10%  { opacity: 0.85; }
   100% { transform: translateX(560%); opacity: 0.0; }
 }
 
-/* ─────────────────────────────────────────────────────────────
-   DENSITY MODES (NO HIDING)
-   We only tighten gaps, padding, and allow TSX scale to do the rest.
-   ───────────────────────────────────────────────────────────── */
+/* density modes: labels optional, data always */
+.kai-feed-status[data-layout="compact"]{ height: 54px; }
+.kai-feed-status[data-layout="micro"]{ height: 52px; --padX: 10px; }
 
-.kai-feed-status[data-layout="compact"]{
-  height: 54px;
-  --gap: 9px;
-  --gapR: 9px;
-}
-
-.kai-feed-status[data-layout="compact"] .kai-feed-status__kLabel{
-  display: none; /* optional label drop is OK; data stays */
-}
-
-.kai-feed-status[data-layout="compact"] .kai-feed-status__nLabel{
-  display: none; /* optional label drop is OK; data stays */
-}
-
-.kai-feed-status[data-layout="compact"] .kai-pill{
-  height: 25px;
-  padding: 0 9px;
-  font-size: 11.5px;
-}
-
-.kai-feed-status[data-layout="micro"]{
-  height: 52px;
-  --padX: 10px;
-  --gap: 7px;
-  --gapR: 7px;
-}
-
-.kai-feed-status[data-layout="micro"] .kai-feed-status__kLabel{
-  display: none; /* label is least critical */
-}
-
+.kai-feed-status[data-layout="compact"] .kai-feed-status__kLabel,
+.kai-feed-status[data-layout="compact"] .kai-feed-status__nLabel,
+.kai-feed-status[data-layout="micro"] .kai-feed-status__kLabel,
 .kai-feed-status[data-layout="micro"] .kai-feed-status__nLabel{
-  display: none; /* label is least critical */
+  display: none;
 }
 
-.kai-feed-status[data-layout="micro"] .kai-pill{
-  height: 24px;
-  padding: 0 7px;
-  font-size: 11px;
-}
-
-.kai-feed-status[data-layout="micro"] .kai-feed-status__bsi{
-  font-size: 16px;
-}
-
-.kai-feed-status[data-layout="micro"] .kai-feed-status__nVal{
-  font-size: 16px;
-}
-
-.kai-feed-status[data-layout="micro"] .kai-feed-status__nUnit{
-  margin-left: 3px;
-  font-size: 11px;
-}
-
-.kai-feed-status[data-layout="micro"] .kai-feed-status__bar{
-  bottom: 8px;
-}
-
-/* ─────────────────────────────────────────────────────────────
-   Media fallback (if data-layout isn’t present)
-   Keep behavior similar: do NOT hide day/chakra; only tighten.
-   ───────────────────────────────────────────────────────────── */
-
-@media (max-width: 520px){
-  .kai-feed-status{ height: 54px; --padX: 10px; --gap: 8px; --gapR: 8px; }
-  .kai-feed-status__kLabel{ display:none; }
-  .kai-feed-status__nLabel{ display:none; }
-}
-
-@media (max-width: 420px){
-  .kai-feed-status{ height: 52px; --padX: 10px; --gap: 7px; --gapR: 7px; }
-  .kai-feed-status__bsi{ font-size: 16px; }
-  .kai-feed-status__nVal{ font-size: 16px; }
-  .kai-pill{ height: 24px; padding: 0 7px; font-size: 11px; }
-}
-
-/* ─────────────────────────────────────────────────────────────
-   Motion safety
-   ───────────────────────────────────────────────────────────── */
-
+/* motion safety */
 @media (prefers-reduced-motion: reduce){
   .kai-feed-status::before,
   .kai-feed-status__barSpark{
@@ -458,10 +344,7 @@
   }
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Backdrop fallback
-   ───────────────────────────────────────────────────────────── */
-
+/* backdrop fallback */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))){
   .kai-feed-status{
     background:
