@@ -1,6 +1,15 @@
 // src/pages/sigilstream/status/KaiStatus.tsx
 "use client";
 
+/**
+ * KaiStatus — Atlantean μpulse Bar
+ * v3.2 — ALWAYS-SHOW MODE
+ * - Day + Chakra ALWAYS render (no hiding at any size)
+ * - No abbreviations (Kaelith stays Kaelith; Solar Plexus stays Solar Plexus)
+ * - Layout driven by measured width: adjusts density + text scaling, never drops data
+ * - Countdown display: fixed to 3 decimals (x.xxx)
+ */
+
 import * as React from "react";
 import { useAlignedKaiTicker, useKaiPulseCountdown } from "../core/ticker";
 import { pad2 } from "../core/utils";
@@ -62,9 +71,10 @@ function readPulseDurSeconds(el: HTMLElement | null): number {
   return Number.isFinite(v) && v > 0 ? v : DEFAULT_PULSE_DUR_S;
 }
 
+/** Always-show modes: we never hide pills; we only tighten spacing + scale text. */
 type LayoutMode = "full" | "compact" | "micro";
 
-/** Responsive layout mode based on *actual* rendered width (no overlap on tiny devices). */
+/** Responsive layout mode based on *actual* rendered width (prevents overlap). */
 function useStatusLayout(ref: React.RefObject<HTMLElement | null>): LayoutMode {
   const [width, setWidth] = React.useState<number>(0);
 
@@ -73,7 +83,6 @@ function useStatusLayout(ref: React.RefObject<HTMLElement | null>): LayoutMode {
     if (!el) return;
 
     const setFromEl = (): void => {
-      // getBoundingClientRect is stable + precise for layout decisions
       const w = Math.round(el.getBoundingClientRect().width);
       setWidth(w);
     };
@@ -86,48 +95,34 @@ function useStatusLayout(ref: React.RefObject<HTMLElement | null>): LayoutMode {
       return () => ro.disconnect();
     }
 
-    // Fallback (very old browsers)
     const onResize = (): void => setFromEl();
     window.addEventListener("resize", onResize, { passive: true });
     return () => window.removeEventListener("resize", onResize);
   }, [ref]);
 
-  // “Collapse sooner” thresholds (tune once; the markup will never overlap).
-  // - compact kicks in earlier than typical breakpoints
-  // - micro strips non-essentials to guarantee single-line clarity
+  // Collapse sooner than media queries to ensure no collisions.
   if (width > 0 && width < 520) return "micro";
   if (width > 0 && width < 760) return "compact";
   return "full";
 }
 
-function shortDayLabel(day: string, mode: LayoutMode): string {
-  if (mode === "full") return day;
-  // keep it readable but compact (e.g. "Harmonization" -> "HARM")
-  if (day.length <= 6) return day.toUpperCase();
-  return day.slice(0, 4).toUpperCase();
-}
-
-function shortChakraLabel(chakra: string, mode: LayoutMode): string {
-  if (mode === "full") return chakra;
-
-  // compact: prefer strong, consistent abbreviations
-  const c = chakra.trim();
-  switch (c) {
-    case "Solar Plexus":
-      return "SOLAR";
-    case "Third Eye":
-      return "3RD";
-    default: {
-      // first word is usually enough ("Root", "Heart", "Throat", "Crown", "Sacral")
-      const first = c.split(/\s+/)[0] ?? c;
-      return first.toUpperCase();
-    }
-  }
-}
-
 type KaiStatusVars = React.CSSProperties & {
   ["--kai-progress"]?: number;
+  ["--kai-ui-scale"]?: number; // applied by CSS to scale text/pills (1..~0.86)
 };
+
+function uiScaleFor(layout: LayoutMode): number {
+  // Tuned to keep ALL labels visible without abbreviations.
+  // CSS will apply this via transform/typography sizing.
+  switch (layout) {
+    case "micro":
+      return 0.86;
+    case "compact":
+      return 0.92;
+    default:
+      return 1.0;
+  }
+}
 
 export function KaiStatus(): React.JSX.Element {
   const kaiNow = useAlignedKaiTicker();
@@ -146,6 +141,7 @@ export function KaiStatus(): React.JSX.Element {
   // Boundary flash when anchor wraps (0 → dur).
   const [flash, setFlash] = React.useState<boolean>(false);
   const prevAnchorRef = React.useRef<number | null>(null);
+
   React.useEffect(() => {
     const prev = prevAnchorRef.current;
     prevAnchorRef.current = secsLeftAnchor;
@@ -165,20 +161,20 @@ export function KaiStatus(): React.JSX.Element {
     return clamp01(1 - secsLeft / pulseDur);
   }, [secsLeft, pulseDur]);
 
-  // ✅ Full precision internally (for progress + correctness), compact display for UI.
+  // Full precision for a11y/title; 3 decimals for display.
   const secsTextFull = secsLeft !== null ? secsLeft.toFixed(6) : "—";
   const secsText = secsLeft !== null ? secsLeft.toFixed(3) : "—";
 
-  const styleVars: KaiStatusVars = React.useMemo(() => {
-    return { "--kai-progress": progress };
-  }, [progress]);
-
-  // Labels (responsive, never overlap)
+  // Labels: ALWAYS FULL (no abbreviations).
   const harmonicDayFull = String(kaiNow.harmonicDay);
   const chakraDayFull = String(kaiNow.chakraDay);
 
-  const harmonicDayDisp = shortDayLabel(harmonicDayFull, layout);
-  const chakraDayDisp = shortChakraLabel(chakraDayFull, layout);
+  const styleVars: KaiStatusVars = React.useMemo(() => {
+    return {
+      "--kai-progress": progress,
+      "--kai-ui-scale": uiScaleFor(layout),
+    };
+  }, [progress, layout]);
 
   return (
     <div
@@ -193,32 +189,34 @@ export function KaiStatus(): React.JSX.Element {
       data-kai-pulse={kaiNow.pulse}
       style={styleVars}
     >
-      {/* single slim row */}
       <div className="kai-feed-status__left">
         <span className="kai-feed-status__kLabel" aria-label="Kairos">
-          {layout === "micro" ? "KAI" : "KAIROS"}
+          KAIROS
         </span>
 
         <span className="kai-feed-status__bsi" aria-label={`Beat step ${beatStepDisp}`}>
           {beatStepDisp}
         </span>
 
-        {/* On micro widths, strip non-essentials to guarantee zero overlap */}
-       <span
-  className="kai-pill kai-pill--day"
-  title={harmonicDayFull}
-  aria-label={`Harmonic day ${harmonicDayFull}`}
->
-  {harmonicDayDisp}
-</span>
+        {/* ✅ ALWAYS show Day (full) */}
+        <span
+          className="kai-pill kai-pill--day"
+          title={harmonicDayFull}
+          aria-label={`Harmonic day ${harmonicDayFull}`}
+        >
+          {harmonicDayFull}
+        </span>
 
+        {/* ✅ ALWAYS show Chakra (full) */}
+        <span
+          className="kai-pill kai-pill--chakra"
+          title={chakraDayFull}
+          aria-label={`Spiral day ${chakraDayFull}`}
+        >
+          {chakraDayFull}
+        </span>
 
-        {layout === "full" || layout === "compact" ? (
-          <span className="kai-pill kai-pill--chakra" title={chakraDayFull} aria-label={`Spiral day ${chakraDayFull}`}>
-            {chakraDayDisp}
-          </span>
-        ) : null}
-
+        {/* ✅ ALWAYS show Pulse */}
         <span
           className="kai-pill kai-pill--pulse"
           title={`Absolute pulse ${kaiNow.pulse}`}
@@ -230,13 +228,16 @@ export function KaiStatus(): React.JSX.Element {
 
       <div className="kai-feed-status__right" aria-label="Countdown to next pulse">
         <span className="kai-feed-status__nLabel">NEXT</span>
-        <span className="kai-feed-status__nVal" title={secsTextFull} aria-label={`Next pulse in ${secsTextFull} seconds`}>
+        <span
+          className="kai-feed-status__nVal"
+          title={secsTextFull}
+          aria-label={`Next pulse in ${secsTextFull} seconds`}
+        >
           {secsText}
           <span className="kai-feed-status__nUnit">s</span>
         </span>
       </div>
 
-      {/* thin progress line (doesn't stack; lives inside the same bar) */}
       <div className="kai-feed-status__bar" aria-hidden="true">
         <div className="kai-feed-status__barFill" />
         <div className="kai-feed-status__barSpark" />
