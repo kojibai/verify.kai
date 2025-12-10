@@ -1354,7 +1354,7 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
       <h3 className="attachments-title">Seals</h3>
 
       <div className="composer">
-        <label className="composer-label">Record a memory</label>
+        <label className="composer-label">Seal a memory</label>
         <div className="story-actions">
           <button
             type="button"
