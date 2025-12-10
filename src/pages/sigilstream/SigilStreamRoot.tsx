@@ -595,6 +595,31 @@ function readNumberLoose(obj: unknown, key: string): number | null {
 function clamp255(n: number): number {
   return Math.max(0, Math.min(255, Math.round(n)));
 }
+const KKS_ARKS_PER_DAY = 6;
+const KKS_BEATS_PER_ARK = KKS_BEATS_PER_DAY / KKS_ARKS_PER_DAY; // 6
+
+const ARKS: readonly string[] = [
+  "Ignite",
+  "Integrate",
+  "Harmonize",
+  "Reflekt",
+  "Purify",
+  "Dream",
+] as const;
+
+
+
+function pulseToArkIndex(pulse: number): number {
+  const { beat } = pulseToBeatStep(pulse); // 0..35
+  const idx = Math.floor(beat / KKS_BEATS_PER_ARK); // 0..5
+  if (idx < 0) return 0;
+  if (idx >= ARKS.length) return ARKS.length - 1;
+  return idx;
+}
+
+function pulseToArkName(pulse: number): string {
+  return ARKS[pulseToArkIndex(pulse)] ?? "Dream";
+}
 
 /* ────────────────────────────────────────────────────────────────
    Private (Sealed) unseal bridge (dynamic import)
@@ -794,6 +819,8 @@ function PayloadCard(props: {
   const { d, m, y } = pulseToDMY(pulse);
   const monthName = pulseToMonthName(pulse);
   const weekday = normalizeWeekdayLabel(pulseToWeekday(pulse));
+ const ark = pulseToArkName(pulse);
+
 
 
   const phiKey =
@@ -854,7 +881,7 @@ function PayloadCard(props: {
 </span>
 
         <span className="sf-muted"> · </span>
-        <span className="sf-kai-label">{monthName} </span>
+        <span className="sf-kai-label">{ark} · {monthName} </span>
 <span className="sf-kai-label">
  
 </span>

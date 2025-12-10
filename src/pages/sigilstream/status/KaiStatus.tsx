@@ -142,9 +142,9 @@ function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
 ───────────────────────────────────────────────────────────── */
 
 const ARK_NAMES = [
-  "Ignition",
-  "Integration",
-  "Harmonization",
+  "Ignite",
+  "Integrate",
+  "Harmonize",
   "Reflekt",
   "Purify",
   "Dream",
@@ -264,9 +264,9 @@ function monthNameFromIndex(month: number): string {
 
 /** Ark → Chakra color mapping (Ignition MUST be Root/red). */
 const ARK_CHAKRA: Readonly<Record<ArkName, ChakraName>> = {
-  Ignition: "Root",
-  Integration: "Sacral",
-  Harmonization: "Solar Plexus",
+  Ignite: "Root",
+  Integrate: "Sacral",
+  Harmonize: "Solar Plexus",
   Reflekt: "Heart",
   Purify: "Throat",
   Dream: "Third Eye",
