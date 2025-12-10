@@ -889,9 +889,12 @@ function AppChrome(): React.JSX.Element {
         >
           <span className="live-orb" aria-hidden="true" />
           <div className="live-text">
-            <div className="live-title" style={neonTextStyle}>
-              ☤KAI
-            </div>
+  {/* ✅ KAI uses the SAME wrapper as pulse, so it matches pulse size */}
+  <div className="live-meta">
+    <span className="mono" style={neonTextStyle}>
+      ☤KAI
+    </span>
+  </div>
 
             <div className="live-meta">
               <span className="mono" style={neonTextStyle}>
