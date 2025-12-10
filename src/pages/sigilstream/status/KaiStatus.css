@@ -645,3 +645,51 @@
         rgba(20,26,40,0.72));
   }
 }
+/* ─────────────────────────────────────────────────────────────
+   v4.8.x — MOBILE SLIM LIFT
+   Goal: keep layout identical, but reduce vertical bulk on mobile by:
+   - slightly smaller inner padding
+   - slimmer progress bar
+   - lift Pulse + NEXT closer to the Day/timeline
+   (no transforms, no truncation, no wrapping changes)
+   ───────────────────────────────────────────────────────────── */
+
+@media (max-width: 520px){
+  /* global mobile tighten (applies regardless of data-layout) */
+  .kai-feed-status{
+    /* shave overall height */
+    min-height: 44px;
+
+    /* tighten inner padding + bar footprint */
+    --padY: 7px;
+    --gapBottom: 8px;
+
+    /* slimmer bar + less reserved space at bottom */
+    --barH: 4px;
+    --barBottom: 6px;
+  }
+
+  /* bring Pulse/NEXT up closer to the timeline */
+  .kai-feed-status .kai-status__bottom{
+    margin-top: 0; /* was 2px*scale */
+  }
+
+  /* tiny: a bit tighter */
+  .kai-feed-status[data-layout="tiny"]{
+    --padY: 6px;
+    --gapBottom: 7px;
+    --barH: 4px;
+    --barBottom: 5px;
+  }
+
+  /* nano: tightest + a tiny lift */
+  .kai-feed-status[data-layout="nano"]{
+    --padY: 6px;
+    --gapBottom: 6px;
+    --barH: 3px;
+    --barBottom: 5px;
+  }
+  .kai-feed-status[data-layout="nano"] .kai-status__bottom{
+    margin-top: -1px;
+  }
+}

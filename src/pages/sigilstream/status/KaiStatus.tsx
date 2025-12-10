@@ -320,7 +320,7 @@ export function KaiStatus(): React.JSX.Element {
   }, [secsLeft, pulseDur]);
 
   const secsTextFull = secsLeft !== null ? secsLeft.toFixed(6) : "—";
-  const secsText = secsLeft !== null ? secsLeft.toFixed(3) : "—";
+  const secsText = secsLeft !== null ? secsLeft.toFixed(6) : "—";
 
   const dayNameFull = String(kaiNow.harmonicDay);
 
