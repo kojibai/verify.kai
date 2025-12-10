@@ -1,57 +1,100 @@
 /* src/pages/sigilstream/status/KaiStatus.css
-   KaiStatus — Slim μpulse Bar (v2.0)
-   Single-line, refined, no stacking.
-   - Shimmer/spark phase-lock: --pulse-dur / --pulse-offset
-   - Progress fill: --kai-progress (0..1) from TSX
+   KaiStatus — Atlantean μpulse Bar (v3.0)
+   Single-line, zero-overlap, glass-frost krystal tech.
+   - Phase-lock: --pulse-dur / --pulse-offset
+   - Progress:  --kai-progress (0..1) from TSX
+   - Layout:    data-layout="full|compact|micro" (set by TSX; collapses sooner than media queries)
 */
 
 .kai-feed-status{
+  /* -------- phase / progress -------- */
   --pulse-dur: 5.2360679s;
   --pulse-offset: 0s;
   --kai-progress: 0;
 
-  --r: 16px;
-  --ring: rgba(255,255,255,0.14);
+  /* -------- geometry -------- */
+  --r: 18px;
+  --padX: 12px;
+  --padY: 10px;
+
+  /* -------- ink -------- */
   --ink: rgba(240,246,255,0.96);
   --muted: rgba(198,212,235,0.82);
+
+  /* -------- glass -------- */
+  --ring: rgba(255,255,255,0.14);
+  --ring2: rgba(255,255,255,0.08);
+  --shadow: 0 18px 54px rgba(0,0,0,0.48);
+  --inner: inset 0 1px 0 rgba(255,255,255,0.10);
+
+  /* -------- aurora accents (can be overridden by parent theme) -------- */
+  --a1: rgba(120,190,255,0.14);
+  --a2: rgba(255,180,245,0.12);
+  --a3: rgba(170,230,255,0.10);
 
   position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
 
-  height: 56px;                 /* slim bar height */
-  padding: 10px 12px;
+  height: 56px;
+  padding: var(--padY) var(--padX);
   margin: 8px 12px 10px;
 
   border-radius: var(--r);
   border: 1px solid var(--ring);
 
+  /* krystal frost stack */
   background:
-    radial-gradient(120% 180% at 12% -20%,
-      rgba(120,190,255,0.12),
+    radial-gradient(120% 180% at 10% -30%,
+      var(--a1),
       rgba(255,255,255,0.00) 55%),
-    radial-gradient(140% 220% at 92% 120%,
-      rgba(255,180,245,0.10),
+    radial-gradient(150% 220% at 92% 130%,
+      var(--a2),
       rgba(255,255,255,0.00) 62%),
+    radial-gradient(140% 200% at 50% 40%,
+      rgba(255,255,255,0.08),
+      rgba(255,255,255,0.00) 58%),
     linear-gradient(135deg,
-      rgba(255,255,255,0.075),
-      rgba(255,255,255,0.030)),
+      rgba(255,255,255,0.090),
+      rgba(255,255,255,0.028)),
     rgba(255,255,255,0.040);
 
-  box-shadow:
-    0 14px 44px rgba(0,0,0,0.42),
-    inset 0 1px 0 rgba(255,255,255,0.10);
+  box-shadow: var(--shadow), var(--inner);
 
-  backdrop-filter: blur(14px) saturate(1.18);
-  -webkit-backdrop-filter: blur(14px) saturate(1.18);
+  backdrop-filter: blur(16px) saturate(1.22);
+  -webkit-backdrop-filter: blur(16px) saturate(1.22);
 
   overflow: hidden;
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+
+  /* keep layout stable under rapid updates */
+  contain: layout paint;
 }
 
-/* subtle phase-locked shimmer */
+/* outer krystal edge highlight */
+.kai-feed-status::after{
+  content:"";
+  position:absolute;
+  inset: 0;
+  pointer-events:none;
+  border-radius: inherit;
+
+  background:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.18),
+      rgba(255,255,255,0.02) 34%,
+      rgba(0,0,0,0.00) 72%),
+    radial-gradient(140% 180% at 50% 0%,
+      rgba(255,255,255,0.16),
+      rgba(255,255,255,0.00) 60%);
+
+  mix-blend-mode: overlay;
+  opacity: 0.55;
+}
+
+/* phase-locked aurora shimmer */
 .kai-feed-status::before{
   content:"";
   position:absolute;
@@ -61,11 +104,18 @@
   background:
     linear-gradient(115deg,
       rgba(255,255,255,0.00) 0%,
-      rgba(255,255,255,0.10) 22%,
-      rgba(255,255,255,0.00) 44%,
-      rgba(255,255,255,0.08) 66%,
-      rgba(255,255,255,0.00) 88%);
-  opacity: 0.45;
+      rgba(255,255,255,0.12) 20%,
+      rgba(255,255,255,0.00) 42%,
+      rgba(255,255,255,0.10) 64%,
+      rgba(255,255,255,0.00) 88%),
+    radial-gradient(circle at 30% 40%,
+      rgba(170,230,255,0.12),
+      rgba(255,255,255,0.00) 60%),
+    radial-gradient(circle at 70% 60%,
+      rgba(255,180,245,0.10),
+      rgba(255,255,255,0.00) 62%);
+
+  opacity: 0.42;
   transform: translate3d(-34%, 0, 0);
   mix-blend-mode: overlay;
 
@@ -74,28 +124,27 @@
 }
 
 @keyframes kai-status-shimmer{
-  0%   { transform: translate3d(-36%, 0, 0); }
-  100% { transform: translate3d( 36%, 0, 0); }
+  0%   { transform: translate3d(-38%, 0, 0); }
+  100% { transform: translate3d( 38%, 0, 0); }
 }
 
-/* boundary flash */
+/* boundary flash (pulse edge) */
 .kai-feed-status--flash{
   animation: kai-status-flash 200ms ease-out;
 }
 @keyframes kai-status-flash{
   0%   { filter: brightness(1); }
-  35%  { filter: brightness(1.08); }
+  35%  { filter: brightness(1.10); }
   100% { filter: brightness(1); }
 }
 
-/* LEFT: all inline, no stacking */
+/* ====== LEFT: inline, overflow-safe ====== */
 .kai-feed-status__left{
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .kai-feed-status__kLabel{
@@ -109,12 +158,13 @@
 .kai-feed-status__bsi{
   color: var(--ink);
   font-size: 18px;
-  font-weight: 820;
+  font-weight: 860;
   letter-spacing: 0.02em;
+
   text-shadow: 0 1px 0 rgba(0,0,0,0.25);
 }
 
-/* Pills: compact + thin */
+/* ====== Pills: krystal micro-chip ====== */
 .kai-pill{
   display: inline-flex;
   align-items: center;
@@ -125,35 +175,52 @@
   border-radius: 999px;
 
   border: 1px solid rgba(255,255,255,0.12);
-  background: linear-gradient(180deg, rgba(255,255,255,0.085), rgba(255,255,255,0.025));
+  background:
+    radial-gradient(120% 180% at 30% 0%,
+      rgba(255,255,255,0.10),
+      rgba(255,255,255,0.00) 62%),
+    linear-gradient(180deg,
+      rgba(255,255,255,0.085),
+      rgba(255,255,255,0.022));
   color: rgba(236,244,255,0.92);
 
   font-size: 12px;
   line-height: 1;
+
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.10),
     0 10px 22px rgba(0,0,0,0.18);
+
+  /* prevent squeeze artifacts */
+  flex: 0 0 auto;
 }
 
 .kai-pill--pulse{
+  border-color: rgba(255,255,255,0.14);
   background:
-    radial-gradient(120% 180% at 18% 0%,
-      rgba(180,230,255,0.12),
-      rgba(255,255,255,0.02) 70%),
-    linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+    radial-gradient(140% 220% at 18% 0%,
+      rgba(170,230,255,0.22),
+      rgba(255,255,255,0.00) 60%),
+    radial-gradient(140% 220% at 85% 120%,
+      rgba(255,180,245,0.16),
+      rgba(255,255,255,0.00) 62%),
+    linear-gradient(180deg,
+      rgba(255,255,255,0.09),
+      rgba(255,255,255,0.03));
 }
 
 .kai-pill__num{
-  font-weight: 850;
+  font-weight: 900;
   letter-spacing: 0.01em;
 }
 
-/* RIGHT: inline, no stacking */
+/* ====== RIGHT: inline, no wrap ====== */
 .kai-feed-status__right{
   display: flex;
   align-items: baseline;
   gap: 10px;
   flex: 0 0 auto;
+  margin-left: 10px;
 }
 
 .kai-feed-status__nLabel{
@@ -161,29 +228,29 @@
   font-size: 11px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  opacity: 0.9;
+  opacity: 0.90;
 }
 
 .kai-feed-status__nVal{
   color: var(--ink);
   font-size: 18px;
-  font-weight: 850;
+  font-weight: 880;
   letter-spacing: 0.01em;
   text-shadow: 0 1px 0 rgba(0,0,0,0.25);
 }
 
 .kai-feed-status__nUnit{
   margin-left: 4px;
-  color: rgba(210,224,245,0.9);
+  color: rgba(210,224,245,0.90);
   font-size: 12px;
   letter-spacing: 0.10em;
 }
 
-/* Thin progress line pinned to the bottom INSIDE the bar */
+/* ====== Progress line: pinned inside bar ====== */
 .kai-feed-status__bar{
   position: absolute;
-  left: 12px;
-  right: 12px;
+  left: var(--padX);
+  right: var(--padX);
   bottom: 9px;
 
   height: 6px;
@@ -191,7 +258,12 @@
   overflow: hidden;
 
   border: 1px solid rgba(255,255,255,0.12);
-  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015));
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.065), rgba(255,255,255,0.012)),
+    radial-gradient(140% 240% at 50% 50%,
+      rgba(255,255,255,0.06),
+      rgba(255,255,255,0.00) 60%);
+
   pointer-events: none;
 }
 
@@ -200,57 +272,123 @@
   inset: 0;
   transform-origin: left center;
   transform: scaleX(var(--kai-progress));
+  will-change: transform;
 
   background:
-    radial-gradient(140% 220% at 20% 0%,
-      rgba(170,230,255,0.52),
+    radial-gradient(140% 220% at 18% 0%,
+      rgba(170,230,255,0.56),
       rgba(255,255,255,0.00) 60%),
+    radial-gradient(140% 220% at 82% 120%,
+      rgba(255,180,245,0.42),
+      rgba(255,255,255,0.00) 62%),
     linear-gradient(90deg,
-      rgba(255,255,255,0.16),
+      rgba(255,255,255,0.18),
       rgba(255,255,255,0.04));
-  will-change: transform;
 }
 
-/* phase-locked spark (subtle) */
+/* phase-locked spark sweep */
 .kai-feed-status__barSpark{
   position:absolute;
   top: -16px;
-  left: -30%;
-  width: 26%;
+  left: -34%;
+  width: 28%;
   height: 38px;
 
-  background: radial-gradient(circle at 50% 50%,
-    rgba(255,255,255,0.18),
-    rgba(255,255,255,0.00) 60%);
+  background:
+    radial-gradient(circle at 50% 50%,
+      rgba(255,255,255,0.20),
+      rgba(255,255,255,0.00) 62%),
+    radial-gradient(circle at 35% 50%,
+      rgba(170,230,255,0.12),
+      rgba(255,255,255,0.00) 64%);
 
   mix-blend-mode: screen;
-  opacity: 0.75;
+  opacity: 0.72;
 
   animation: kai-bar-spark var(--pulse-dur) linear infinite;
   animation-delay: calc(-1 * var(--pulse-offset));
 }
 
 @keyframes kai-bar-spark{
-  0%   { transform: translateX(0);   opacity: 0.0; }
-  10%  { opacity: 0.8; }
-  100% { transform: translateX(520%); opacity: 0.0; }
+  0%   { transform: translateX(0);     opacity: 0.0; }
+  10%  { opacity: 0.85; }
+  100% { transform: translateX(560%); opacity: 0.0; }
 }
 
-/* Small screens: keep single bar by hiding least-critical labels */
+.kai-feed-status[data-layout="micro"]{
+  height: 52px;
+  --padX: 10px;
+}
+
+.kai-feed-status[data-layout="micro"] .kai-feed-status__kLabel{
+  display: none;
+}
+
+.kai-feed-status[data-layout="micro"] .kai-feed-status__nLabel{
+  display: none;
+}
+
+/* tighter spacing so Day + Pulse always fit */
+.kai-feed-status[data-layout="micro"] .kai-feed-status__left{
+  gap: 8px;
+}
+
+/* micro-chip sizing */
+.kai-feed-status[data-layout="micro"] .kai-pill{
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+/* ✅ keep Day visible on mobile */
+.kai-feed-status[data-layout="micro"] .kai-pill--day{
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* hide least critical first */
+.kai-feed-status[data-layout="micro"] .kai-pill--chakra{
+  display: none;
+}
+
+.kai-feed-status[data-layout="micro"] .kai-feed-status__right{
+  gap: 8px;
+}
+
+.kai-feed-status[data-layout="micro"] .kai-feed-status__bsi{
+  font-size: 17px;
+}
+
+.kai-feed-status[data-layout="micro"] .kai-feed-status__nVal{
+  font-size: 17px;
+}
+
+.kai-feed-status[data-layout="micro"] .kai-feed-status__bar{
+  bottom: 8px;
+}
+
+
+/* ====== Media fallback (in case data-layout isn’t present) ====== */
 @media (max-width: 520px){
   .kai-feed-status{ height: 54px; }
   .kai-feed-status__kLabel{ display:none; }
   .kai-feed-status__nLabel{ display:none; }
   .kai-pill--chakra{ display:none; }
 }
-
 @media (max-width: 420px){
-  .kai-pill--day{ display:none; }
+  .kai-pill--chakra{ display:none; }
   .kai-feed-status__bsi{ font-size: 17px; }
   .kai-feed-status__nVal{ font-size: 17px; }
+  .kai-pill{
+    height: 24px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
 }
 
-/* Motion safety */
+
+/* ====== Motion safety ====== */
 @media (prefers-reduced-motion: reduce){
   .kai-feed-status::before,
   .kai-feed-status__barSpark{
@@ -261,9 +399,18 @@
   }
 }
 
-/* Backdrop fallback */
+/* ====== Backdrop fallback ====== */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))){
   .kai-feed-status{
-    background: linear-gradient(135deg, rgba(40,52,78,0.70), rgba(20,26,40,0.65));
+    background:
+      radial-gradient(120% 180% at 10% -30%,
+        rgba(120,190,255,0.10),
+        rgba(255,255,255,0.00) 55%),
+      radial-gradient(150% 220% at 92% 130%,
+        rgba(255,180,245,0.08),
+        rgba(255,255,255,0.00) 62%),
+      linear-gradient(135deg,
+        rgba(40,52,78,0.78),
+        rgba(20,26,40,0.72));
   }
 }

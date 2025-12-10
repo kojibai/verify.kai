@@ -83,7 +83,7 @@ export function PayloadBanner({
           <span className="sf-pill sf-pill--author">{payload.author}</span>
         )}
         {hasSigilId(payload) && (
-          <span className="sf-pill sf-pill--sigil">Sigil {payload.sigilId}</span>
+          <span className="sf-pill sf-pill--sigil">Sigil-Glyph {payload.sigilId}</span>
         )}
         {payload.phiKey && (
           <span className="sf-pill sf-pill--phikey">ΦKey {payload.phiKey}</span>
