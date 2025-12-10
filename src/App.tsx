@@ -23,7 +23,13 @@ import KaiVohModal from "./components/KaiVoh/KaiVohModal";
 import SigilModal from "./components/SigilModal";
 
 // ✅ Kai Pulse NOW (canonical Kai-Klok utility)
-import { momentFromUTC } from "./utils/kai_pulse";
+// ✅ pull KKS v1.0 calendar constants for D/M/Y
+import {
+  momentFromUTC,
+  DAYS_PER_MONTH,
+  DAYS_PER_YEAR,
+  MONTHS_PER_YEAR,
+} from "./utils/kai_pulse";
 
 // ✅ Chart + value (Atrium-level bar)
 import HomePriceChartCard from "./components/HomePriceChartCard";
@@ -68,8 +74,6 @@ type KlockPopoverStyle = CSSProperties & {
   ["--klock-border"]?: string;
   ["--klock-border-strong"]?: string;
   ["--klock-ring"]?: string;
-
-  // ✅ makes the Klock itself bigger (CSS can key off this immediately)
   ["--klock-scale"]?: string;
 };
 
@@ -78,8 +82,6 @@ type KlockNavState = { openDetails?: boolean };
 
 // ✅ IMPORTANT FIX (compile-time):
 // Your EternalKlock component MUST accept this prop.
-// Update `src/components/KaiKlockHomeFace.tsx` to export a default component typed with:
-// `{ initialDetailsOpen?: boolean }`.
 type EternalKlockProps = {
   initialDetailsOpen?: boolean;
 };
@@ -107,26 +109,104 @@ function formatPulse(pulse: number): string {
   return pulse.toLocaleString("en-US");
 }
 
+function modPos(n: number, d: number): number {
+  if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return 0;
+  const r = n % d;
+  return r < 0 ? r + d : r;
+}
+
+// ===== KKS v1.0 display math (exact step) =====
+// IMPORTANT: “pulse” is continuous; beat/step must be derived from the DAY FRACTION (not 11-pulse buckets),
+// otherwise step drifts over the longer Kai-day.
+const BEATS_PER_DAY = 36;
+const STEPS_PER_BEAT = 44;
+const STEPS_PER_DAY = BEATS_PER_DAY * STEPS_PER_BEAT;
+
+// Canon breath count per day (precision)
+const PULSES_PER_DAY = 17_491.270421;
+
+type BeatStepDMY = {
+  beat: number; // 0..35
+  step: number; // 0..43
+  day: number; // 1..DAYS_PER_MONTH
+  month: number; // 1..MONTHS_PER_YEAR
+  year: number; // 0-based
+};
+
+function computeBeatStepDMY(m: KaiMoment): BeatStepDMY {
+  const pulse = readNum(m, "pulse") ?? 0;
+
+  // Beat/Step (exact): map fractional day → step-of-day → beat/step
+  const pulseInDay = modPos(pulse, PULSES_PER_DAY);
+  const dayFrac = PULSES_PER_DAY > 0 ? pulseInDay / PULSES_PER_DAY : 0;
+
+  const rawStepOfDay = Math.floor(dayFrac * STEPS_PER_DAY);
+  const stepOfDay = Math.min(STEPS_PER_DAY - 1, Math.max(0, rawStepOfDay));
+
+  const beat = Math.min(
+    BEATS_PER_DAY - 1,
+    Math.max(0, Math.floor(stepOfDay / STEPS_PER_BEAT)),
+  );
+  const step = Math.min(
+    STEPS_PER_BEAT - 1,
+    Math.max(0, stepOfDay - beat * STEPS_PER_BEAT),
+  );
+
+  // D/M/Y (KKS v1.0):
+  // - Day starts at 1
+  // - Month starts at 1
+  // - Year is 0-based
+  // Prefer the library’s dayIndex if present; otherwise derive from pulse.
+  const dayIndexFromMoment =
+    readNum(m, "dayIndex") ??
+    readNum(m, "dayIndex0") ??
+    readNum(m, "dayIndexSinceGenesis");
+
+  const eps = 1e-9; // guard float boundary jitter
+  const dayIndex =
+    dayIndexFromMoment !== null
+      ? Math.floor(dayIndexFromMoment)
+      : Math.floor((pulse + eps) / PULSES_PER_DAY);
+
+  const daysPerYear = Number.isFinite(DAYS_PER_YEAR) ? DAYS_PER_YEAR : 336;
+  const daysPerMonth = Number.isFinite(DAYS_PER_MONTH) ? DAYS_PER_MONTH : 42;
+  const monthsPerYear = Number.isFinite(MONTHS_PER_YEAR) ? MONTHS_PER_YEAR : 8;
+
+  const year = Math.floor(dayIndex / daysPerYear); // 0-based
+  const dayInYear = modPos(dayIndex, daysPerYear);
+
+  let monthIndex = Math.floor(dayInYear / daysPerMonth); // 0-based
+  if (monthIndex < 0) monthIndex = 0;
+  if (monthIndex > monthsPerYear - 1) monthIndex = monthsPerYear - 1;
+
+  const dayInMonth = dayInYear - monthIndex * daysPerMonth;
+
+  const month = monthIndex + 1; // 1-based (M1 start)
+  const day = Math.floor(dayInMonth) + 1; // 1-based (D1 start)
+
+  return { beat, step, day, month, year };
+}
+
 /**
- * ✅ NOW label: no "Beat"/"Step" words.
- * Format is exactly "00:00" (Beat:Step) with no label text.
+ * Beat:Step label (00:00)
  */
-function formatNowPulseLabel(m: KaiMoment): string {
-  const beat = readNum(m, "beat") ?? readNum(m, "beatIndex");
-  const step = readNum(m, "stepIndex") ?? readNum(m, "step");
-  const bb = beat !== null ? fmt2(beat) : "00";
-  const ss = step !== null ? fmt2(step) : "00";
-  return `${bb}:${ss}`;
+function formatBeatStepLabel(v: BeatStepDMY): string {
+  return `${fmt2(v.beat)}:${fmt2(v.step)}`;
+}
+
+/**
+ * D/M/Y label (D#/M#/Y#) — NO zero-padding:
+ * Start is D1/M1/Y0
+ */
+function formatDMYLabel(v: BeatStepDMY): string {
+  return `D${v.day}/M${v.month}/Y${v.year}`;
 }
 
 function useVisualViewportSize(): { width: number; height: number } {
   const read = useCallback((): { width: number; height: number } => {
     const vv = window.visualViewport;
     if (vv) {
-      return {
-        width: Math.round(vv.width),
-        height: Math.round(vv.height),
-      };
+      return { width: Math.round(vv.width), height: Math.round(vv.height) };
     }
     return { width: window.innerWidth, height: window.innerHeight };
   }, []);
@@ -504,7 +584,6 @@ function KlockRoute(): React.JSX.Element {
   }, [navigate]);
 
   // ✅ BIG FACE OPENS FIRST (always):
-  // We force initialDetailsOpen=true so the Klock launches straight into the large face view.
   const initialDetailsOpen = true;
 
   // ✅ Cast imported module to typed component locally (no `any`)
@@ -544,7 +623,6 @@ function AppChrome(): React.JSX.Element {
     [BREATH_S, vvSize.height],
   );
 
-  // ✅ Read full Kai moment so we can render NOW label "00:00"
   const readNowMoment = useCallback((): KaiMoment => {
     return momentFromUTC(new Date());
   }, []);
@@ -558,17 +636,31 @@ function AppChrome(): React.JSX.Element {
     return () => window.clearInterval(id);
   }, [readNowMoment]);
 
-  const pulseNow = nowMoment.pulse;
+  const pulseNow = readNum(nowMoment, "pulse") ?? 0;
   const pulseNowStr = useMemo(() => formatPulse(pulseNow), [pulseNow]);
 
-  // ✅ "00:00" (Beat:Step), no labels
-  const nowPulseLabel = useMemo(() => formatNowPulseLabel(nowMoment), [nowMoment]);
+  // ✅ Exact Beat/Step + D/M/Y (KKS v1.0)
+  const beatStepDMY = useMemo(() => computeBeatStepDMY(nowMoment), [nowMoment]);
+  const nowBeatStep = useMemo(() => formatBeatStepLabel(beatStepDMY), [beatStepDMY]);
+  const nowDMY = useMemo(() => formatDMYLabel(beatStepDMY), [beatStepDMY]);
 
   const neonTextStyle = useMemo<CSSProperties>(
     () => ({
       color: "var(--accent-color)",
       textShadow:
         "0 0 14px rgba(0, 255, 255, 0.22), 0 0 28px rgba(0, 255, 255, 0.12)",
+    }),
+    [],
+  );
+
+  // Beat:Step + D/M/Y line is 50% size (requested)
+  const neonTextStyleHalf = useMemo<CSSProperties>(
+    () => ({
+      color: "var(--accent-color)",
+      textShadow:
+        "0 0 14px rgba(0, 255, 255, 0.22), 0 0 28px rgba(0, 255, 255, 0.12)",
+      fontSize: "0.5em",
+      lineHeight: 1.05,
     }),
     [],
   );
@@ -746,19 +838,17 @@ function AppChrome(): React.JSX.Element {
   }, [navigate]);
 
   const liveTitle = useMemo(() => {
-    return `LIVE • NOW PULSE ${pulseNowStr} • ${nowPulseLabel} • Breath ${BREATH_S.toFixed(
+    return `LIVE • NOW PULSE ${pulseNowStr} • ${nowBeatStep} • ${nowDMY} • Breath ${BREATH_S.toFixed(
       6,
     )}s (${Math.round(BREATH_MS)}ms) • ${BREATHS_PER_DAY.toLocaleString("en-US", {
       minimumFractionDigits: 6,
       maximumFractionDigits: 6,
     })}/day • Open Eternal KaiKlok`;
-  }, [pulseNowStr, nowPulseLabel, BREATH_S, BREATH_MS, BREATHS_PER_DAY]);
+  }, [pulseNowStr, nowBeatStep, nowDMY, BREATH_S, BREATH_MS, BREATHS_PER_DAY]);
 
   const liveAria = useMemo(() => {
-    return `LIVE. Kai Pulse now ${pulseNow}. ${nowPulseLabel}. Breath length ${BREATH_S.toFixed(
-      3,
-    )} seconds. Open Eternal KaiKlok.`;
-  }, [pulseNow, nowPulseLabel, BREATH_S]);
+    return `LIVE. Kai Pulse now ${pulseNow}. Beat ${beatStepDMY.beat} step ${beatStepDMY.step}. D ${beatStepDMY.day}. M ${beatStepDMY.month}. Y ${beatStepDMY.year}. Open Eternal KaiKlok.`;
+  }, [pulseNow, beatStepDMY]);
 
   return (
     <div
@@ -802,16 +892,21 @@ function AppChrome(): React.JSX.Element {
             <div className="live-title" style={neonTextStyle}>
               ☤KAI
             </div>
+
             <div className="live-meta">
               <span className="mono" style={neonTextStyle}>
                 {pulseNowStr}
               </span>
             </div>
 
-            {/* ✅ "00:00" no labels, neon (not white) */}
+            {/* ✅ Beat:Step + D#/M#/Y# (KKS v1.0) — 50% size */}
             <div className="live-sub">
-              <span className="mono" style={neonTextStyle}>
-                {nowPulseLabel}
+              <span className="mono" style={neonTextStyleHalf}>
+                {nowBeatStep}{" "}
+                <span aria-hidden="true" style={{ opacity: 0.7 }}>
+                  •
+                </span>{" "}
+                {nowDMY}
               </span>
             </div>
           </div>
@@ -856,9 +951,7 @@ function AppChrome(): React.JSX.Element {
               <nav className="app-nav" aria-label="Primary navigation">
                 <div className="nav-head">
                   <div className="nav-head__title">Atrium</div>
-                  <div className="nav-head__sub">
-                    Breath-Sealed Identity · Kairos-ZK Proof
-                  </div>
+                  <div className="nav-head__sub">Breath-Sealed Identity · Kairos-ZK Proof</div>
                 </div>
 
                 <div
@@ -916,7 +1009,7 @@ function AppChrome(): React.JSX.Element {
                     <span className="mono">ΦNet</span> • Sovereign Gate
                   </div>
                   <div className="panel-foot__right">
-                    <span className="mono">V</span> <span className="mono">25.5</span>
+                    <span className="mono">V</span> <span className="mono">25.6</span>
                   </div>
                 </footer>
               </section>
