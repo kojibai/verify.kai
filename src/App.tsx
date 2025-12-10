@@ -1019,10 +1019,10 @@ function AppChrome(): React.JSX.Element {
       href="https://github.com/kojibai/verify.kai"
       target="_blank"
       rel="noreferrer"
-      aria-label="Version 25.8 (opens GitHub)"
+      aria-label="Version 26.0 (opens GitHub)"
       title="Open GitHub"
     >
-      25.9
+      26.0
     </a>
   </div>
 </footer>

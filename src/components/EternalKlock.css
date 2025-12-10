@@ -1,1429 +1,877 @@
 /* ================================================================
-   EternalKlock.css  —  Atlantean Lumitech UI (No-Drift Edition)
+   EternalKlock.css — Atlantean Lumitech UI (No-Drift / Clean Edition)
    ----------------------------------------------------------------
-   • Fix: gradient overlay on the right toolbar button no longer moves
-   • Text wrapping: never overflows horizontally on small screens
-   • Visual parity kept; performance hints for mobile Safari
+   ✅ No “open” animations (no fade/pop delays)
+   ✅ No drifting toolbar overlay (pseudo-layer is element-anchored)
+   ✅ No horizontal overflow on small screens (wrap + clamp guards)
+   ✅ Coherent tokens: Ark/Chakra + Month palette (attribute-driven)
+   ✅ Reduced unnecessary transitions / duplicate rules
 ================================================================ */
 
 /* --------------------------------------------------
-   Container & General Layout
+   Root Tokens
 -------------------------------------------------- */
-:root {
-  --primary-color: #aefbff;
-  --secondary-color: #8cfbff;
-  --accent-color: #00ffff;
+:root{
+  --primary-color:#aefbff;
+  --secondary-color:#8cfbff;
+  --accent-color:#00ffff;
+
+  /* Kai breath (used for subtle rhythm only) */
+  --breath:5.236s;
+
+  /* Canon arcs (0-based): 0 Ignition, 1 Integration, 2 Harmonization,
+     3 Reflection, 4 Purification, 5 Dream */
+  --ark0:#ff3b3b;
+  --ark1:#ff9226;
+  --ark2:#ffc600;
+  --ark3:#32cc32;
+  --ark4:#3aa1ff;
+  --ark5:#9b52ff;
+
+  --ark0-grad:linear-gradient(90deg,#ffd1d1,#ff7a7a 45%,#ff3b3b,#c81414);
+  --ark1-grad:linear-gradient(90deg,#ffe5c6,#ffbd66 45%,#ff9226,#cc6b00);
+  --ark2-grad:linear-gradient(90deg,#fff7c2,#ffe25c 45%,#ffc600,#e3a800);
+  --ark3-grad:linear-gradient(90deg,#d6ffd6,#86ff86 45%,#32cc32,#0e990e);
+  --ark4-grad:linear-gradient(90deg,#cfe8ff,#79c2ff 45%,#3aa1ff,#0f6fd3);
+  --ark5-grad:linear-gradient(90deg,#ebd6ff,#c99aff 45%,#9b52ff,#6c1fd3);
+
+  /* Defaults (overridden by [data-ark]) */
+  --chakra:var(--ark3);
+  --chakra-grad:var(--ark3-grad);
+
+  /* Month palette (1–8): Red → Orange → Yellow → Green → Blue → Purple → Violet → White */
+  --month-1:var(--ark0-grad);
+  --month-2:var(--ark1-grad);
+  --month-3:var(--ark2-grad);
+  --month-4:var(--ark3-grad);
+  --month-5:var(--ark4-grad);
+  --month-6:var(--ark5-grad);
+  --month-7:linear-gradient(90deg,#f3d6ff,#e29aff 45%,#c452ff,#8e1fd3);
+  --month-8:linear-gradient(90deg,#ffffff,#f2f2f2 45%,#e5e5e5,#d9d9d9);
+
+  /* Default lock (Month 3 = Yellow) */
+  --month-current:var(--month-3);
+  --month-glow:rgba(255,226,92,.65);
+  --month-inner:rgba(255,226,92,.45);
 }
 
-/* ===== Kai-Klok Chakra / Arc Source of Truth =====
-   Canon arcs (0-based): 
-   0 Ignition→Red, 1 Integration→Orange, 2 Harmonization→Yellow,
-   3 Reflection→Green, 4 Purification→Blue, 5 Dream→Purple
-*/
+/* Ark → Chakra mapping */
+[data-ark="0"]{--chakra:var(--ark0);--chakra-grad:var(--ark0-grad);}
+[data-ark="1"]{--chakra:var(--ark1);--chakra-grad:var(--ark1-grad);}
+[data-ark="2"]{--chakra:var(--ark2);--chakra-grad:var(--ark2-grad);}
+[data-ark="3"]{--chakra:var(--ark3);--chakra-grad:var(--ark3-grad);}
+[data-ark="4"]{--chakra:var(--ark4);--chakra-grad:var(--ark4-grad);}
+[data-ark="5"]{--chakra:var(--ark5);--chakra-grad:var(--ark5-grad);}
 
-:root {
-  /* solid hues */
-  --ark0: #ff3b3b;
-  --ark1: #ff9226;
-  --ark2: #ffc600;
-  --ark3: #32cc32;
-  --ark4: #3aa1ff;
-  --ark5: #9b52ff;
+/* Month switching (optional) */
+[data-month="1"]{--month-current:var(--month-1);--month-glow:rgba(255,122,122,.65);--month-inner:rgba(255,122,122,.45);}
+[data-month="2"]{--month-current:var(--month-2);--month-glow:rgba(255,189,102,.65);--month-inner:rgba(255,189,102,.45);}
+[data-month="3"]{--month-current:var(--month-3);--month-glow:rgba(255,226,92,.65); --month-inner:rgba(255,226,92,.45);}
+[data-month="4"]{--month-current:var(--month-4);--month-glow:rgba(134,255,134,.60);--month-inner:rgba(134,255,134,.42);}
+[data-month="5"]{--month-current:var(--month-5);--month-glow:rgba(121,194,255,.65);--month-inner:rgba(121,194,255,.42);}
+[data-month="6"]{--month-current:var(--month-6);--month-glow:rgba(201,154,255,.65);--month-inner:rgba(201,154,255,.42);}
+[data-month="7"]{--month-current:var(--month-7);--month-glow:rgba(226,154,255,.65);--month-inner:rgba(226,154,255,.42);}
+[data-month="8"]{--month-current:var(--month-8);--month-glow:rgba(230,230,230,.70);--month-inner:rgba(240,240,240,.48);}
 
-  /* matching smooth gradients (left→right flow) */
-  --ark0-grad: linear-gradient(90deg, #ffd1d1, #ff7a7a 45%, #ff3b3b, #c81414);
-  --ark1-grad: linear-gradient(90deg, #ffe5c6, #ffbd66 45%, #ff9226, #cc6b00);
-  --ark2-grad: linear-gradient(90deg, #fff7c2, #ffe25c 45%, #ffc600, #e3a800);
-  --ark3-grad: linear-gradient(90deg, #d6ffd6, #86ff86 45%, #32cc32, #0e990e);
-  --ark4-grad: linear-gradient(90deg, #cfe8ff, #79c2ff 45%, #3aa1ff, #0f6fd3);
-  --ark5-grad: linear-gradient(90deg, #ebd6ff, #c99aff 45%, #9b52ff, #6c1fd3);
-
-  /* defaults (will be overridden by [data-ark]) */
-  --chakra: var(--ark3);          /* green as safe default */
-  --chakra-grad: var(--ark3-grad);
-  --breath: 5.236s;               /* already used in your CSS */
-}
-
-/* Map the current arc → chakra variables */
-[data-ark="0"] { --chakra: var(--ark0); --chakra-grad: var(--ark0-grad); }
-[data-ark="1"] { --chakra: var(--ark1); --chakra-grad: var(--ark1-grad); }
-[data-ark="2"] { --chakra: var(--ark2); --chakra-grad: var(--ark2-grad); }
-[data-ark="3"] { --chakra: var(--ark3); --chakra-grad: var(--ark3-grad); }
-[data-ark="4"] { --chakra: var(--ark4); --chakra-grad: var(--ark4-grad); }
-[data-ark="5"] { --chakra: var(--ark5); --chakra-grad: var(--ark5-grad); }
-
-
+/* --------------------------------------------------
+   Base / Safety
+-------------------------------------------------- */
 *,
 *::before,
-*::after {
-  box-sizing: border-box;
+*::after{ box-sizing:border-box; }
+
+html,body{
+  min-height:100dvh;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
 }
 
-.eternal-klock-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  font-family: 'Courier New', monospace;
-  color: var(--primary-color);
-  margin-bottom: 1.25rem;
-  position: relative;
-  z-index: 10;
-  max-width: 100%;
+.eternal-klock-container{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  position:relative;
+  z-index:10;
+  max-width:100%;
+  color:var(--primary-color);
+  font-family:"Courier New", monospace;
+  margin-bottom:1.25rem;
+
+  /* hard guard: no horizontal bleed */
+  overflow-x:clip;
 }
 
-/* Prevent any horizontal scroll from descendants */
-.eternal-klock-container,
-.eternal-klock-container * {
-  max-inline-size: 100%;
-  overflow-wrap: anywhere; /* safe wrapping for long tokens */
-}
-
-.eternal-klock-header {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  flex-wrap: wrap;
+.eternal-klock-container *{
+  max-inline-size:100%;
+  overflow-wrap:anywhere;
+  word-break:break-word;
 }
 
 /* --------------------------------------------------
-   Horizontal Harmonic Strip (The "Mini" bar)
+   Header
 -------------------------------------------------- */
-.eternal-klock-mini {
-  background: rgba(0, 255, 255, 0.08);
-  padding: 0.65rem 1.5rem;
-  border-radius: 9999px;
-  border: 1px solid rgba(0, 255, 255, 0.18);
-  box-shadow:
-    0 0 6px rgba(0, 255, 255, 0.1),
-    0 0 12px rgba(0, 255, 255, 0.08) inset;
-  cursor: pointer;
-  display: flex;
-  gap: 0.85rem;
-  align-items: center;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(20px) saturate(1.3);
-  font-size: 1rem;
-  white-space: nowrap;
-  position: relative;
-
-  /* Keep inside viewport on mobile */
-  max-width: calc(100vw - 24px);
-  overflow: hidden;
-  text-overflow: ellipsis;
+.eternal-klock-header{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:1rem;
+  flex-wrap:wrap;
 }
 
-/* Slight hover effect on desktop */
-@media (hover: hover) and (pointer: fine) {
-  .eternal-klock-mini:hover {
-    background: rgba(0, 255, 255, 0.12);
+/* --------------------------------------------------
+   Mini Harmonic Strip
+-------------------------------------------------- */
+.eternal-klock-mini{
+  position:relative;
+  display:flex;
+  align-items:center;
+  gap:.85rem;
+
+  padding:.65rem 1.5rem;
+  border-radius:9999px;
+  cursor:pointer;
+
+  background:rgba(0,255,255,.08);
+  border:1px solid rgba(0,255,255,.18);
+  box-shadow:
+    0 0 6px rgba(0,255,255,.10),
+    0 0 12px rgba(0,255,255,.08) inset;
+
+  backdrop-filter:blur(18px) saturate(1.25);
+
+  white-space:nowrap;
+  max-width:calc(100vw - 24px);
+  overflow:hidden;
+  text-overflow:ellipsis;
+
+  /* no “slow feel” */
+  transition:background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+@media (hover:hover) and (pointer:fine){
+  .eternal-klock-mini:hover{
+    background:rgba(0,255,255,.12);
     box-shadow:
-      0 0 12px rgba(0, 255, 255, 0.3),
-      0 0 24px rgba(0, 255, 255, 0.15) inset;
-    transform: scale(1.025);
+      0 0 12px rgba(0,255,255,.28),
+      0 0 20px rgba(0,255,255,.12) inset;
+    transform:translateY(-1px);
+  }
+
+  .eternal-klock-mini[title]:hover::after{
+    content:attr(title);
+    position:absolute;
+    left:50%;
+    bottom:-2.2rem;
+    translate:-50% 0;
+
+    background:rgba(0,0,0,.78);
+    color:var(--accent-color);
+    font-size:.8rem;
+    padding:.4rem .75rem;
+    border-radius:8px;
+    white-space:nowrap;
+    box-shadow:0 0 8px rgba(0,255,255,.35);
+    z-index:50;
   }
 }
 
-/* Tooltip on hover - only on desktop (hover devices) */
-@media (hover: hover) and (pointer: fine) {
-  .eternal-klock-mini[title]:hover::after {
-    content: attr(title);
-    position: absolute;
-    bottom: -2.2rem;
-    background: rgba(0, 0, 0, 0.75);
-    color: var(--accent-color);
-    font-size: 0.8rem;
-    padding: 0.4rem 0.75rem;
-    border-radius: 8px;
-    white-space: nowrap;
-    box-shadow: 0 0 8px rgba(0, 255, 255, 0.4);
-    z-index: 50;
-    transform: translateY(6px);
-    animation: fadeInUp 0.3s ease-out;
-  }
-}
+.klock-divider{ color:rgba(0,255,255,.45); }
 
-/* Divider dots within the mini bar */
-.klock-divider {
-  color: rgba(0, 255, 255, 0.45);
-}
-
-/* Optional glow on Kai Pulse text */
+/* Pulse glow (chakra-colored, not teal-forced) */
 .klock-pulse.glow,
-.glow-pulse .klock-pulse {
-  position: relative;
-  color: #00ffff;
-  font-weight: bold;
-  animation: kaiPulseGlow 5.236s infinite ease-in-out;
-}
-
-@keyframes kaiPulseGlow {
-  0%, 100% { text-shadow: 0 0 6px rgba(0, 255, 255, 0.5); }
-  50%      { text-shadow: 0 0 14px rgba(0, 255, 255, 0.9); }
+.glow-pulse .klock-pulse{
+  color:var(--chakra);
+  font-weight:700;
+  text-shadow:0 0 6px rgba(0,0,0,.1), 0 0 10px rgba(0,255,255,.0);
 }
 
 /* --------------------------------------------------
-   Spiral & Geometry
+   Spiral & Geometry (no forced rotation)
 -------------------------------------------------- */
-.eternal-spiral-wrapper {
-  position: relative;
-  width: 64px;
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: eternalSpiral 5.236s linear infinite; /* remove if undesired */
-  transform-origin: center center;
+.eternal-spiral-wrapper{
+  position:relative;
+  width:64px;
+  height:64px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
 }
 
-.eternal-spiral-svg {
-  width: 64px;
-  height: 64px;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  fill: none;
-  transform-box: fill-box;
-  transform-origin: 50% 50%;
+.eternal-spiral-svg{
+  width:64px;
+  height:64px;
+  fill:none;
+  stroke-linecap:round;
+  stroke-linejoin:round;
 }
 
-/* The spiral track behind the rotating tip */
-.spiral-track {
-  stroke: rgba(0, 255, 255, 0.12);
-  stroke-width: 2;
-  fill: none;
-  filter: drop-shadow(0 0 4px rgba(0, 255, 255, 0.05));
+.spiral-track{
+  stroke:rgba(0,255,255,.12);
+  stroke-width:2;
+  filter:drop-shadow(0 0 4px rgba(0,255,255,.05));
 }
 
-/* The orbital "tip" that rotates around the spiral track */
-.spiral-tip {
-  r: 4;
-  fill: var(--chakra);
-  color: var(--chakra);
+.spiral-tip{
+  r:4;
+  fill:var(--chakra);
+  filter:drop-shadow(0 0 3px rgba(0,0,0,.15)) drop-shadow(0 0 8px rgba(0,0,0,.0));
+}
+
+.eternal-sacred-geometry{
+  position:absolute;
+  top:50%;
+  left:50%;
+  translate:-50% -50%;
+  pointer-events:none;
+  z-index:1;
   filter:
-    drop-shadow(0 0 3px var(--chakra))
-    drop-shadow(0 0 8px color-mix(in oklab, var(--chakra) 70%, transparent));
-  transition: fill 0.3s ease, filter 0.3s ease;
-  animation: glowArc var(--breath) infinite ease-in-out;
+    drop-shadow(0 0 8px rgba(0,0,0,.12))
+    drop-shadow(0 0 16px rgba(0,0,0,.10));
 }
 
-
-/* Infinite rotation of wrapper (optional) */
-@keyframes eternalSpiral {
-  0%   { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-@keyframes glowArc {
-  0%, 100% {
-    filter: drop-shadow(0 0 4px currentColor)
-            drop-shadow(0 0 8px currentColor);
-  }
-  50% {
-    filter: drop-shadow(0 0 10px currentColor)
-            drop-shadow(0 0 20px currentColor);
-  }
+.sacred-geometry-object{
+  width:160px;
+  height:160px;
+  pointer-events:none;
 }
 
 /* --------------------------------------------------
-   Sacred Geometry (overlay)
+   Detail Panel (no open animation)
 -------------------------------------------------- */
-.eternal-sacred-geometry {
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  animation: fadeIn 1s ease-out;
-  z-index: 1;
-  filter:
-    drop-shadow(0 0 8px color-mix(in oklab, var(--chakra) 45%, transparent))
-    drop-shadow(0 0 18px color-mix(in oklab, var(--chakra) 25%, transparent));
-}
-.klock-pulse.glow,
-.glow-pulse .klock-pulse {
-  position: relative;
-  color: var(--chakra);
-  font-weight: 700;
-  text-shadow: 0 0 6px color-mix(in oklab, var(--chakra) 60%, transparent);
-  animation: kaiPulseGlow var(--breath) infinite ease-in-out;
-}
+.eternal-klock-detail{
+  margin-top:1rem;
+  padding:1.2rem 1.5rem;
+  width:100%;
+  max-width:420px;
 
-
-.sacred-geometry-object {
-  width: 160px;
-  height: 160px;
-  pointer-events: none;
-  animation: spinSacred 5.236s linear infinite;
-}
-
-@keyframes spinSacred {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-
-/* --------------------------------------------------
-   Expandable Details
--------------------------------------------------- */
-.eternal-klock-detail {
-  margin-top: 1rem;
-  padding: 1.2rem 1.5rem;
-  border-radius: 20px;
-  border: 2px solid rgba(0, 255, 255, 0.15);
-  background: radial-gradient(circle at top, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.95));
+  border-radius:20px;
+  border:2px solid rgba(0,255,255,.15);
+  background:radial-gradient(circle at top, rgba(0,0,0,.68), rgba(0,0,0,.92));
   box-shadow:
-    0 0 15px rgba(0, 255, 255, 0.2),
-    0 0 50px rgba(0, 255, 255, 0.08) inset;
-  width: 100%;
-  max-width: 420px;
-  animation: fadeInUp 0.45s ease-out;
-  position: relative;
-  z-index: 20;
+    0 0 15px rgba(0,255,255,.18),
+    0 0 50px rgba(0,255,255,.06) inset;
 
-  /* Scrollable if content is tall */
-  max-height: 70vh;
-  overflow-y: auto;
+  position:relative;
+  z-index:20;
 
-  /* Wrap & clamp long tokens/inline code safely */
-  word-break: break-word;
+  max-height:70vh;
+  overflow-y:auto;
+  overflow-x:clip;
+
+  scrollbar-gutter:stable both-edges;
 }
 
-.eternal-klock-title {
-  font-size: 1.4rem;
-  color: var(--secondary-color);
-  text-shadow: 0 0 12px rgba(0, 255, 255, 0.5);
-  margin-top: 0;
-  text-align: center;
-  margin-bottom: 0.75rem;
+.eternal-klock-title{
+  margin:0 0 .75rem;
+  text-align:center;
+  font-size:1.4rem;
+  color:var(--secondary-color);
+  text-shadow:0 0 10px rgba(0,255,255,.35);
 }
 
-.eternal-klock-detail div {
-  margin: 0.45rem 0;
-  color: rgba(255, 255, 255, 0.95);
-  font-size: 1rem;
-  text-align: left;
-  line-height: 1.4;
+.eternal-klock-detail div{
+  margin:.45rem 0;
+  color:rgba(255,255,255,.95);
+  font-size:1rem;
+  line-height:1.4;
+  text-align:left;
 }
 
-.eternal-klock-detail strong {
-  color: var(--primary-color);
-  margin-right: 0.4rem;
-  font-weight: 600;
+.eternal-klock-detail strong{
+  color:var(--primary-color);
+  margin-right:.4rem;
+  font-weight:600;
 }
 
-.eternal-klock-detail em {
-  color: var(--accent-color);
-  font-style: italic;
-  font-weight: bold;
+.eternal-klock-detail em{
+  color:var(--accent-color);
+  font-style:italic;
+  font-weight:700;
 }
 
-/* keep inline code from blasting layout; allow wraps */
+/* Inline code safety */
 .eternal-klock-detail code,
 .eternal-klock-detail kbd,
-.eternal-klock-detail samp {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 0.95em;
-  background: rgba(0,255,255,0.08);
-  border: 1px solid rgba(0,255,255,0.18);
-  padding: 0.05rem 0.35rem;
-  border-radius: 6px;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+.eternal-klock-detail samp{
+  font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size:.95em;
+  background:rgba(0,255,255,.08);
+  border:1px solid rgba(0,255,255,.18);
+  padding:.05rem .35rem;
+  border-radius:6px;
+  overflow-wrap:anywhere;
 }
 
-.eternal-klock-timestamp {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
-  margin-top: 1.2rem;
-  padding-top: 0.6rem;
-  border-top: 1px solid rgba(0, 255, 255, 0.1);
-  text-align: center;
-  font-style: italic;
+.eternal-klock-section-title{
+  color:var(--secondary-color);
+  margin:1rem 0 .5rem;
+  font-size:1.1rem;
+  text-shadow:0 0 6px rgba(0,255,255,.25);
+  border-bottom:1px dashed rgba(0,255,255,.2);
+  padding-bottom:.4rem;
 }
 
-/* --------------------------------------------------
-   Section Title for the detail panel
--------------------------------------------------- */
-.eternal-klock-section-title {
-  color: var(--secondary-color);
-  margin: 1rem 0 0.5rem;
-  font-size: 1.1rem;
-  text-shadow: 0 0 6px rgba(0, 255, 255, 0.3);
-  border-bottom: 1px dashed rgba(0, 255, 255, 0.2);
-  padding-bottom: 0.4rem;
+.eternal-klock-timestamp{
+  font-size:1.05rem;
+  font-weight:600;
+  color:#e0f7fa;
+  margin:.9rem 0 .3rem;
+  letter-spacing:.5px;
+  text-shadow:0 0 4px rgba(0,255,224,.35);
 }
 
 /* --------------------------------------------------
-   Keyframes
+   Progress Bars (fast, no sluggish easing)
 -------------------------------------------------- */
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(-8px); }
-  to   { opacity: 1; transform: translateY(0); }
+.spiral-progress-bar{
+  height:10px;
+  background:#111;
+  border-radius:5px;
+  overflow:hidden;
+  margin:6px 0 10px;
+  box-shadow:0 0 6px rgba(0,255,204,.18) inset;
+}
+.spiral-progress-fill{
+  height:100%;
+  border-radius:5px;
+  background:linear-gradient(90deg,#00ffcc,#00d4ff);
+  transition:width 160ms linear;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+.day-progress-bar{
+  width:100%;
+  height:10px;
+  background-color:rgba(255,255,255,.08);
+  border-radius:6px;
+  margin:6px 0 12px;
+  overflow:hidden;
+  box-shadow:0 0 4px rgba(255,255,255,.08) inset;
 }
-
-/* --------------------------------------------------
-   Spiral Level Progress Bar
--------------------------------------------------- */
-.spiral-progress-bar {
-  height: 10px;
-  background: #111;
-  border-radius: 5px;
-  overflow: hidden;
-  margin-top: 6px;
-  margin-bottom: 10px;
-  box-shadow: 0 0 6px rgba(0, 255, 204, 0.2) inset;
-}
-
-.spiral-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #00ffcc, #00d4ff);
-  transition: width 0.5s ease-in-out;
-  border-radius: 5px;
+.day-progress-fill{
+  height:100%;
+  width:var(--day-progress,0%);
+  border-radius:6px 0 0 6px;
+  background-image:var(--chakra-grad);
+  transition:width 160ms linear;
   box-shadow:
-    0 0 8px rgba(0, 255, 255, 0.25),
-    0 0 12px rgba(0, 255, 255, 0.15) inset;
+    0 0 8px rgba(0,0,0,.08),
+    inset 0 0 10px rgba(0,0,0,.06);
 }
 
-/* --------------------------------------------------
-   Day Progress (chakra colored)
--------------------------------------------------- */
-.day-progress-bar {
-  width: 100%;
-  height: 10px;
-  background-color: rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  margin: 6px 0 12px;
-  overflow: hidden;
-  box-shadow: 0 0 4px rgba(255, 255, 255, 0.1) inset;
-}
-
-.day-progress-fill {
-  height: 100%;
-  width: var(--day-progress, 0%); /* (optional) allow inline style to drive width */
-  background-image: var(--chakra-grad);
-  transition: width var(--breath) ease-in-out, background-image 0.25s ease-in-out, background-color 0.25s ease-in-out;
-  border-radius: 6px 0 0 6px;
+/* Shared track */
+.month-progress-bar,
+.year-progress-bar,
+.week-progress-bar{
+  width:100%;
+  height:clamp(.5rem, 1.1vw + .35rem, .75rem);
+  margin-block:clamp(.4rem, 1vw, .7rem) clamp(.8rem, 2vw, 1.1rem);
+  border-radius:9999px;
+  overflow:hidden;
   box-shadow:
-    0 0 8px color-mix(in oklab, var(--chakra) 30%, transparent),
-    inset 0 0 10px color-mix(in oklab, var(--chakra) 22%, transparent);
+    0 0 max(4px,.25rem) rgba(0,0,0,.65) inset,
+    0 max(1px,.06rem) max(4px,.25rem) rgba(0,0,0,.75);
 }
 
-
-@keyframes syncPulse {
-  0%   { filter: brightness(2.3) drop-shadow(0 0 0.35em currentColor); }
-  60%  { filter: brightness(1.05) drop-shadow(0 0 0.15em currentColor); }
-  100% { filter: brightness(1) drop-shadow(0 0 0 currentColor); }
-}
-.sync-pulse { animation: syncPulse 1.3s ease-out; }
-
-/* --------------------------------------------------
-   Month & Year Progress Bars (teal / gold)
--------------------------------------------------- */
-/* ─────────────────────────────────────────────
-   Month palette (1–8): Red → Orange → Yellow → Green → Blue → Purple → Violet → White
-   Default locked to Month 3 (Yellow) via fallback in --month-current.
-   To switch dynamically, add data-month="N" to a parent element (or :root).
-   ───────────────────────────────────────────── */
-   :root {
-    --month-1: linear-gradient(90deg, #ffd1d1, #ff7a7a 45%, #ff3b3b, #c81414); /* Red */
-    --month-2: linear-gradient(90deg, #ffe5c6, #ffbd66 45%, #ff9226, #cc6b00); /* Orange */
-    --month-3: linear-gradient(90deg, #fff7c2, #ffe25c 45%, #ffc600, #e3a800); /* Yellow */
-    --month-4: linear-gradient(90deg, #d6ffd6, #86ff86 45%, #32cc32, #0e990e); /* Green */
-    --month-5: linear-gradient(90deg, #cfe8ff, #79c2ff 45%, #3aa1ff, #0f6fd3); /* Blue */
-    --month-6: linear-gradient(90deg, #ebd6ff, #c99aff 45%, #9b52ff, #6c1fd3); /* Purple */
-    --month-7: linear-gradient(90deg, #f3d6ff, #e29aff 45%, #c452ff, #8e1fd3); /* Violet */
-    --month-8: linear-gradient(90deg, #ffffff, #f2f2f2 45%, #e5e5e5, #d9d9d9); /* White */
-  
-    /* Default (locks to Month 3 = Yellow) */
-    --month-current: var(--month-3);
-  
-    /* Glow/shadow tints per month (used if you toggle via data-month below) */
-    --m1-glow:  rgba(255, 122, 122, .65); --m1-inner:  rgba(255, 122, 122, .45);
-    --m2-glow:  rgba(255, 189, 102, .65); --m2-inner:  rgba(255, 189, 102, .45);
-    --m3-glow:  rgba(255, 226, 92,  .65); --m3-inner:  rgba(255, 226, 92,  .45);
-    --m4-glow:  rgba(134, 255, 134, .60); --m4-inner:  rgba(134, 255, 134, .42);
-    --m5-glow:  rgba(121, 194, 255, .65); --m5-inner:  rgba(121, 194, 255, .42);
-    --m6-glow:  rgba(201, 154, 255, .65); --m6-inner:  rgba(201, 154, 255, .42);
-    --m7-glow:  rgba(226, 154, 255, .65); --m7-inner:  rgba(226, 154, 255, .42);
-    --m8-glow:  rgba(230, 230, 230, .70); --m8-inner:  rgba(240, 240, 240, .48);
-  
-    /* Default month glow = Month 3 (Yellow) */
-    --month-glow:  var(--m3-glow);
-    --month-inner: var(--m3-inner);
-  }
-  
-  /* Optional: flip the gradient & glow by attribute (data-month="N") on a parent (e.g., body) */
-  [data-month="1"] { --month-current: var(--month-1); --month-glow: var(--m1-glow); --month-inner: var(--m1-inner); }
-  [data-month="2"] { --month-current: var(--month-2); --month-glow: var(--m2-glow); --month-inner: var(--m2-inner); }
-  [data-month="3"] { --month-current: var(--month-3); --month-glow: var(--m3-glow); --month-inner: var(--m3-inner); }
-  [data-month="4"] { --month-current: var(--month-4); --month-glow: var(--m4-glow); --month-inner: var(--m4-inner); }
-  [data-month="5"] { --month-current: var(--month-5); --month-glow: var(--m5-glow); --month-inner: var(--m5-inner); }
-  [data-month="6"] { --month-current: var(--month-6); --month-glow: var(--m6-glow); --month-inner: var(--m6-inner); }
-  [data-month="7"] { --month-current: var(--month-7); --month-glow: var(--m7-glow); --month-inner: var(--m7-inner); }
-  [data-month="8"] { --month-current: var(--month-8); --month-glow: var(--m8-glow); --month-inner: var(--m8-inner); }
-  
-  /* ─────────────────────────────────────────────
-     Shared track (Month + Year) — unchanged feel
-     ───────────────────────────────────────────── */
-  .month-progress-bar,
-  .year-progress-bar {
-    --track-bg: rgba(0, 40, 40, 0.45);
-    --grid-bg: repeating-linear-gradient(
-                 45deg,
-                 transparent 0 4px,
-                 rgba(255,255,255,0.04) 4px 8px
-               );
-    width: 100%;
-    height: clamp(0.5rem, 1.1vw + 0.35rem, 0.75rem);
-    margin-block: clamp(0.4rem, 1vw, 0.7rem) clamp(0.8rem, 2vw, 1.1rem);
-    background: var(--grid-bg), var(--track-bg);
-    border: max(1px, 0.075rem) solid rgba(0,200,180,0.25);
-    border-radius: 9999px;
-    overflow: hidden;
-    box-shadow:
-      0 0 max(4px, 0.25rem) rgba(0,0,0,0.65) inset,
-      0 max(1px, 0.06rem) max(4px, 0.25rem) rgba(0,0,0,0.75);
-  }
-  
-  /* Fills (base) */
-  .month-progress-fill,
-  .year-progress-fill {
-    height: 100%;
-    border-radius: inherit;
-    position: relative;
-    transition: width 0.9s cubic-bezier(.4,0,.2,1);
-    background-size: 200% 100%;
-    will-change: width;
-  }
-  
-  /* ─────────────────────────────────────────────
-     MONTH = locked to Month 3 (Yellow), but ready to switch
-     ───────────────────────────────────────────── */
-  .month-progress-fill {
-    background-image: var(--month-current);    /* defaults to Month 3 (Yellow) */
-    box-shadow:
-      0 0 max(8px, 0.5rem) 2px var(--month-glow),
-      inset 0 0 max(6px, 0.38rem) var(--month-inner);
-    animation: flowMonth 8s linear infinite;
-  }
-  @keyframes flowMonth { to { background-position: -200% 0; } }
-  
-  /* ─────────────────────────────────────────────
-     YEAR = your existing gold flow (unchanged)
-     ───────────────────────────────────────────── */
-  .year-progress-fill {
-    --start:#fff7c2; --mid:#ffd65c; --end:#ff9400;
-    background-image: linear-gradient(90deg,var(--start),var(--mid) 45%,var(--end));
-    box-shadow:
-      0 0 max(10px,0.6rem) 2px rgba(255,225,116,.65),
-      inset 0 0 max(6px,0.38rem) rgba(255,225,116,.4);
-    animation: flowGold 8s linear infinite reverse;
-  }
-  @keyframes flowGold { to { background-position:200% 0; } }
-  
-  /* Diamond indicator & tail (shared) */
-  .month-progress-fill::after,
-  .year-progress-fill::after {
-    content:"";
-    position:absolute; top:50%; translate:0 -50% rotate(45deg);
-    right:clamp(-6px, -1vw, -4px);
-    inline-size:clamp(10px,1.3vw,14px);
-    block-size:clamp(10px,1.3vw,14px);
-    background:radial-gradient(circle at 30% 30%,#fff 0%,#dfe8ff 40%,#b4c9ff 100%);
-    box-shadow:0 0 max(6px,0.38rem) rgba(255,255,255,.95);
-    border-radius:3px;
-    z-index:2;
-  }
-  .month-progress-fill::before,
-  .year-progress-fill::before{
-    content:"";
-    position:absolute; top:50%; translate:0 -50%;
-    right:clamp(4px, 0.8vw, 6px);
-    inline-size:clamp(22px,3vw,32px);
-    block-size:clamp(5px,0.7vw,8px);
-    background:radial-gradient(ellipse at left,rgba(255,255,255,.55)0%,transparent 70%);
-    filter:blur(4px);
-    pointer-events:none;
-  }
-  
-  /* Reduced motion */
-  @media (prefers-reduced-motion: reduce) {
-    .month-progress-fill,
-    .year-progress-fill { animation: none !important; transition: none !important; }
-  }
-  
-
-/* --------------------------------------------------
-   Week Progress Bar (purple)
--------------------------------------------------- */
-:root {
-  /* Day color gradients */
-  --week-day-1: linear-gradient(90deg, #ffcccc, #ff6666 45%, #ff3333, #cc0000); /* Red */
-  --week-day-2: linear-gradient(90deg, #ffe0b3, #ffcc66 45%, #ff9933, #cc6600); /* Orange */
-  --week-day-3: linear-gradient(90deg, #ccffcc, #66ff66 45%, #33cc33, #009900); /* Green */
-  --week-day-4: linear-gradient(90deg, #ccffcc, #66ff66 45%, #33cc33, #009900); /* Green */
-  --week-day-5: linear-gradient(90deg, #a3d4ff, #66b8ff 45%, #3399ff, #0066cc); /* Blue */
-  --week-day-6: linear-gradient(90deg, #e0ccff, #cc99ff 45%, #9933ff, #6600cc); /* Purple */
-}
-
-.week-progress-bar {
-  width: 100%;
-  height: clamp(0.5rem, 1.1vw + 0.35rem, 0.75rem);
-  margin-block: clamp(0.4rem, 1vw, 0.7rem) clamp(0.8rem, 2vw, 1.1rem);
+.month-progress-bar,
+.year-progress-bar{
   background:
-    repeating-linear-gradient(45deg, transparent 0 4px, rgba(255,255,255,0.035) 4px 8px),
-    rgba(48, 0, 84, 0.48);
-  border: max(1px, 0.075rem) solid rgba(200, 100, 255, 0.3);
-  border-radius: 9999px;
-  overflow: hidden;
-  box-shadow:
-    0 0 max(4px, 0.25rem) rgba(0, 0, 0, 0.65) inset,
-    0 max(1px, 0.06rem) max(4px, 0.25rem) rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(10px) saturate(1.4);
+    repeating-linear-gradient(45deg, transparent 0 4px, rgba(255,255,255,.04) 4px 8px),
+    rgba(0,40,40,.45);
+  border:max(1px,.075rem) solid rgba(0,200,180,.25);
 }
 
-.week-progress-fill {
-  height: 100%;
-  border-radius: inherit;
-  position: relative;
-  transition: width 0.9s cubic-bezier(.4, 0, .2, 1);
-  background-size: 200% 100%;
-  /* LOCKED to 5th day (blue) */
-  background-image: var(--chakra-grad);
-  box-shadow:
-    0 0 max(10px, 0.6rem) 2px rgba(100, 180, 255, 0.65),
-    inset 0 0 max(6px, 0.38rem) rgba(80, 160, 255, 0.35);
-  animation: flowWeek var(--breath, 5.236s) linear infinite;
-  will-change: width;
-}
-
-@keyframes flowWeek {
-  to { background-position: -200% 0; }
-}
-
-.week-progress-fill::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  translate: 0 -50% rotate(45deg);
-  right: clamp(-6px, -1vw, -4px);
-  inline-size: clamp(10px, 1.3vw, 14px);
-  block-size: clamp(10px, 1.3vw, 14px);
-  background: radial-gradient(circle at 30% 30%, #ffffff 0%, #f5eaff 40%, #dabfff 100%);
-  box-shadow: 0 0 max(6px, 0.38rem) rgba(255, 255, 255, 0.95);
-  border-radius: 3px;
-  z-index: 2;
-}
-
-.week-progress-fill::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  translate: 0 -50%;
-  right: clamp(4px, 0.8vw, 6px);
-  inline-size: clamp(22px, 3vw, 32px);
-  block-size: clamp(5px, 0.7vw, 8px);
-  background: radial-gradient(ellipse at left, rgba(255, 255, 255, 0.55) 0%, transparent 70%);
-  filter: blur(4px);
-  pointer-events: none;
-}
-
-.week-progress-fill[data-complete="true"] {
-  animation: weekExplode 0.8s ease-in-out forwards, flowWeek var(--breath, 5.236s) linear infinite;
-  box-shadow:
-    0 0 12px rgba(255, 255, 255, 0.75),
-    0 0 28px rgba(170, 100, 255, 0.45),
-    inset 0 0 18px rgba(200, 100, 255, 0.5);
-}
-
-.week-progress-fill.burst {
-  animation: weekExplode 0.85s ease-in-out both, flowWeek 5.236s linear infinite;
-  box-shadow:
-    0 0 12px rgba(255, 255, 255, 0.85),
-    0 0 24px rgba(180, 100, 255, 0.55),
-    inset 0 0 18px rgba(200, 100, 255, 0.5);
-}
-
-@keyframes weekExplode {
-  0%   { transform: scale(1);   filter: brightness(1.2); }
-  40%  { transform: scale(1.05); filter: brightness(2.5) saturate(2.2); }
-  100% { transform: scale(1);   filter: brightness(1); }
-}
-
-/* --------------------------------------------------
-   Embodied title & descriptions
--------------------------------------------------- */
-.embodied-section-title {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 1rem 0 0.5rem;
-  padding-bottom: 0.4rem;
-  border-bottom: 1px dashed rgba(0, 255, 255, 0.2);
-}
-
-.embodied-section-icon {
-  width: auto;
-  max-width: 280px;
-  height: auto;
-  max-height: 48px;
-  object-fit: contain;
-  filter: drop-shadow(0 0 6px rgba(0, 255, 255, 0.5));
-  animation: fadeIn 0.7s ease-out;
-}
-
-.eternal-description {
-  margin-top: 0.25rem;
-  font-style: italic;
-  color: #d9ebff;
-  font-size: 0.95rem;
-  line-height: 1.5;
-  margin-bottom: 1.25rem;
-  background: linear-gradient(90deg, rgba(0,255,204,0.1) 0%, rgba(0,204,255,0.1) 100%);
-  border-left: 3px solid #00ffe0;
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
-  box-shadow: 0 0 8px rgba(0,255,255,0.2);
-  transition: all 0.3s ease-in-out;
-}
-
-.eternal-description em {
-  font-style: italic;
-  color: #ffffff;
-  text-shadow: 0 0 3px #3cfaff;
-}
-
-.eternal-klock-timestamp {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #e0f7fa;
-  margin-bottom: 0.3rem;
-  letter-spacing: 0.5px;
-  text-shadow: 0 0 4px #00ffe0, 0 0 6px #00b3b3;
-}
-
-/* --------------------------------------------------
-   Modal
--------------------------------------------------- */
-.modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(10, 10, 10, 0.85);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 999;
-}
-.modal-content {
-  background: #111;
-  padding: 24px;
-  border-radius: 12px;
-  color: white;
-  width: 90%;
-  max-width: 420px;
-  text-align: center;
-}
-
-/* --------------------------------------------------
-   Atlantean Lumitech · Hyper-Neon Toolbar Button
-   (No-Drift overlay: ::after is static & element-anchored)
--------------------------------------------------- */
-.eternal-klock-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.85rem;
-  margin-block: 0.75rem 1rem;
-
-  /* Ensure overlays are clipped to toolbar box */
-  position: relative;
-  isolation: isolate;
-}
-
-.eternal-klock-toolbar > * {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 2.5rem;
-  min-height: 2.5rem;
-}
-
-.toolbar-btn {
-  all: unset;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.45rem 0.9rem;
-  gap: 0.4rem;
-  min-height: 2.5rem;
-  cursor: pointer;
-
-  font: 700 0.95rem/1.1 "Inter", sans-serif;
-  letter-spacing: 0.02em;
-  color: #e6faff;
-  text-shadow: 0 0 4px rgba(0, 255, 255, 0.8);
-
-  border-radius: 9999px;
-  background: linear-gradient(135deg,
-              rgba(0, 255, 255, 0.12) 0%,
-              rgba(0, 234, 255, 0.06) 40%,
-              rgba(0, 188, 255, 0.04) 100%);
-  box-shadow:
-    inset 0 0 0 1px rgba(0, 255, 255, 0.25),
-    0 2px 6px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(6px) saturate(180%);
-  transition: background 240ms ease, box-shadow 240ms ease, transform 180ms ease;
-
-  /* Performance & containment */
-  contain: paint;
-  transform: translateZ(0);
-  will-change: transform;
-}
-
-/* Glow ring */
-.toolbar-btn::before {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  padding: 2px;
+.week-progress-bar{
   background:
-    conic-gradient(from 0deg,
-      #00eaff 0deg 90deg,
-      #5c5cff 90deg 180deg,
-      #ff4dd2 180deg 270deg,
-      #00ff9e 270deg 360deg);
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-          mask-composite: exclude;
-  opacity: 0;
-  filter: blur(4px);
-  transition: opacity 300ms linear; /* (fixed invalid transition value) */
+    repeating-linear-gradient(45deg, transparent 0 4px, rgba(255,255,255,.035) 4px 8px),
+    rgba(48,0,84,.48);
+  border:max(1px,.075rem) solid rgba(200,100,255,.3);
+  backdrop-filter:blur(10px) saturate(1.35);
 }
 
-/* Iridescent overlay — STATIC (no-drift) */
-.toolbar-btn::after {
-  content: "";
-  position: absolute;
-  inset: 1px;                 /* sits just inside */
-  border-radius: inherit;
-  pointer-events: none;
-  mix-blend-mode: screen;
+.month-progress-fill,
+.year-progress-fill,
+.week-progress-fill{
+  height:100%;
+  border-radius:inherit;
+  position:relative;
+  transition:width 160ms linear;
+  will-change:width;
+}
 
-  /* Anchor backgrounds to the element (not viewport), no animation */
-  background-attachment: local;
-  background-origin: border-box;
-  background-repeat: no-repeat;
-  background-position: 50% 30%, 50% 70%;
-  background-size: 160% 160%, 160% 160%;
+/* Month (locked to Month 3 unless you set data-month) */
+.month-progress-fill{
+  background-image:var(--month-current);
+  background-size:200% 100%;
+  box-shadow:
+    0 0 max(8px,.5rem) 2px var(--month-glow),
+    inset 0 0 max(6px,.38rem) var(--month-inner);
+}
+
+/* Year (gold) */
+.year-progress-fill{
+  background-image:linear-gradient(90deg,#fff7c2,#ffd65c 45%,#ff9400);
+  background-size:200% 100%;
+  box-shadow:
+    0 0 max(10px,.6rem) 2px rgba(255,225,116,.55),
+    inset 0 0 max(6px,.38rem) rgba(255,225,116,.35);
+}
+
+/* Week (chakra) */
+.week-progress-fill{
+  background-image:var(--chakra-grad);
+  background-size:200% 100%;
+  box-shadow:
+    0 0 max(10px,.6rem) 2px rgba(100,180,255,.45),
+    inset 0 0 max(6px,.38rem) rgba(80,160,255,.28);
+}
+
+/* shared indicator (diamond + tail) */
+.month-progress-fill::after,
+.year-progress-fill::after,
+.week-progress-fill::after{
+  content:"";
+  position:absolute;
+  top:50%;
+  right:clamp(-6px,-1vw,-4px);
+  inline-size:clamp(10px,1.3vw,14px);
+  block-size:clamp(10px,1.3vw,14px);
+  translate:0 -50%;
+  rotate:45deg;
+  border-radius:3px;
+  background:radial-gradient(circle at 30% 30%, #fff 0%, #dfe8ff 40%, #b4c9ff 100%);
+  box-shadow:0 0 max(6px,.38rem) rgba(255,255,255,.85);
+  z-index:2;
+}
+
+.month-progress-fill::before,
+.year-progress-fill::before,
+.week-progress-fill::before{
+  content:"";
+  position:absolute;
+  top:50%;
+  right:clamp(4px,.8vw,6px);
+  inline-size:clamp(22px,3vw,32px);
+  block-size:clamp(5px,.7vw,8px);
+  translate:0 -50%;
+  background:radial-gradient(ellipse at left, rgba(255,255,255,.45) 0%, transparent 70%);
+  filter:blur(4px);
+  pointer-events:none;
+}
+
+/* --------------------------------------------------
+   Embodied title & description
+-------------------------------------------------- */
+.embodied-section-title{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  margin:1rem 0 .5rem;
+  padding-bottom:.4rem;
+  border-bottom:1px dashed rgba(0,255,255,.2);
+}
+
+.embodied-section-icon{
+  max-width:280px;
+  max-height:48px;
+  object-fit:contain;
+  filter:drop-shadow(0 0 6px rgba(0,255,255,.35));
+}
+
+.eternal-description{
+  margin:.25rem 0 1.25rem;
+  font-style:italic;
+  color:#d9ebff;
+  font-size:.95rem;
+  line-height:1.5;
+  background:linear-gradient(90deg, rgba(0,255,204,.10) 0%, rgba(0,204,255,.10) 100%);
+  border-left:3px solid #00ffe0;
+  padding:.75rem 1rem;
+  border-radius:.5rem;
+  box-shadow:0 0 8px rgba(0,255,255,.16);
+}
+
+.eternal-description em{
+  color:#ffffff;
+  text-shadow:0 0 3px rgba(60,250,255,.35);
+}
+
+/* --------------------------------------------------
+   Toolbar Button (No-Drift Overlay)
+-------------------------------------------------- */
+.eternal-klock-toolbar{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:.85rem;
+  margin-block:.75rem 1rem;
+  position:relative;
+  isolation:isolate;
+}
+
+.eternal-klock-toolbar > *{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:2.5rem;
+  min-height:2.5rem;
+}
+
+.toolbar-btn{
+  all:unset;
+  position:relative;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:.4rem;
+
+  padding:.45rem .9rem;
+  min-height:2.5rem;
+  cursor:pointer;
+
+  font:700 .95rem/1.1 "Inter", system-ui, -apple-system, Segoe UI, sans-serif;
+  letter-spacing:.02em;
+  color:#e6faff;
+  text-shadow:0 0 4px rgba(0,255,255,.55);
+
+  border-radius:9999px;
+  background:linear-gradient(135deg,
+    rgba(0,255,255,.12) 0%,
+    rgba(0,234,255,.06) 40%,
+    rgba(0,188,255,.04) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(0,255,255,.25),
+    0 2px 6px rgba(0,0,0,.35);
+
+  backdrop-filter:blur(6px) saturate(1.75);
+
+  /* keep it snappy */
+  transition:background 120ms ease, box-shadow 120ms ease, transform 90ms ease;
+
+  /* clip pseudo layers */
+  contain:paint;
+  transform:translateZ(0);
+}
+
+/* Glow ring (only appears on hover/focus, no “loading”) */
+.toolbar-btn::before{
+  content:"";
+  position:absolute;
+  inset:-2px;
+  border-radius:inherit;
+  padding:2px;
+  background:conic-gradient(from 0deg,
+    #00eaff 0 90deg,
+    #5c5cff 90deg 180deg,
+    #ff4dd2 180deg 270deg,
+    #00ff9e 270deg 360deg);
+  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+          mask-composite:exclude;
+  opacity:0;
+  filter:blur(4px);
+  transition:opacity 120ms linear;
+}
+
+/* Iridescent overlay — STATIC & element-anchored (no drift) */
+.toolbar-btn::after{
+  content:"";
+  position:absolute;
+  inset:1px;
+  border-radius:inherit;
+  pointer-events:none;
+  mix-blend-mode:screen;
+
+  background-repeat:no-repeat;
+  background-position:50% 30%, 50% 70%;
+  background-size:160% 160%, 160% 160%;
   background-image:
-    radial-gradient(ellipse at top left, rgba(0, 255, 255, 0.25), rgba(0, 255, 255, 0) 60%),
-    radial-gradient(ellipse at bottom right, rgba(255, 0, 234, 0.25), rgba(255, 0, 234, 0) 60%);
-  opacity: 0.55;
+    radial-gradient(ellipse at top left, rgba(0,255,255,.22), rgba(0,255,255,0) 60%),
+    radial-gradient(ellipse at bottom right, rgba(255,0,234,.22), rgba(255,0,234,0) 60%);
 
-  /* Kill any inherited animation to prevent sliding */
-  animation: none !important;
-  transform: translateZ(0);
+  opacity:.55;
+  animation:none !important; /* hard kill any inherited motion */
 }
 
-.toolbar-icon {
-  width: 1.6rem;
-  height: 1.6rem;
-  filter: drop-shadow(0 0 4px rgba(0, 234, 255, 0.35));
-  transition: transform 180ms ease;
-  pointer-events: none;
+.toolbar-icon{
+  width:1.6rem;
+  height:1.6rem;
+  pointer-events:none;
+  filter:drop-shadow(0 0 4px rgba(0,234,255,.28));
+  transition:transform 90ms ease;
 }
 
 .toolbar-btn:hover,
-.toolbar-btn:focus-visible {
-  background: linear-gradient(135deg,
-              rgba(0, 255, 255, 0.24) 0%,
-              rgba(0, 234, 255, 0.12) 40%,
-              rgba(0, 188, 255, 0.10) 100%);
+.toolbar-btn:focus-visible{
+  background:linear-gradient(135deg,
+    rgba(0,255,255,.22) 0%,
+    rgba(0,234,255,.12) 40%,
+    rgba(0,188,255,.10) 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(0, 255, 255, 0.55),
-    0 4px 14px rgba(0, 255, 255, 0.25),
-    0 2px 6px rgba(0, 0, 0, 0.45);
-  transform: translateY(-1px);
+    inset 0 0 0 1px rgba(0,255,255,.55),
+    0 4px 14px rgba(0,255,255,.20),
+    0 2px 6px rgba(0,0,0,.45);
+  transform:translateY(-1px);
 }
 .toolbar-btn:hover::before,
-.toolbar-btn:focus-visible::before { opacity: 1; }
-
-.toolbar-btn:active {
-  transform: translateY(0);
-  box-shadow:
-    inset 0 0 6px rgba(0, 255, 255, 0.65),
-    0 1px 3px rgba(0, 0, 0, 0.5);
-}
+.toolbar-btn:focus-visible::before{ opacity:1; }
 .toolbar-btn:hover .toolbar-icon,
-.toolbar-btn:focus-visible .toolbar-icon { transform: scale(1.15); }
+.toolbar-btn:focus-visible .toolbar-icon{ transform:scale(1.12); }
 
-/* Accessibility: high contrast preference */
-@media (prefers-contrast: more) {
-  .toolbar-btn { text-shadow: none; }
-}
-.seal-container {
-  font-family: 'Cinzel', serif;
-  color: #dff9ff;
-  text-shadow: 0 0 6px rgba(0,255,255,0.6);
-}
-
-.seal-code {
-  display: inline-block;
-  font-family: 'Fira Code', monospace;
-  padding: 0.2rem 0.5rem;
-  margin-left: 0.25rem;
-  border-radius: 8px;
-  background: linear-gradient(90deg, #00fff7, #00c6ff, #0066ff);
-  background-size: 200% 100%;
-  color: #fff;
-  cursor: pointer;
-  user-select: all;
-  transition: background-position 0.6s ease, box-shadow 0.3s ease;
+.toolbar-btn:active{
+  transform:translateY(0);
   box-shadow:
-    0 0 6px rgba(0,255,255,0.5),
-    inset 0 0 8px rgba(255,255,255,0.1);
+    inset 0 0 6px rgba(0,255,255,.55),
+    0 1px 3px rgba(0,0,0,.5);
 }
 
-.seal-code:hover {
-  background-position: 100% 0;
-  box-shadow:
-    0 0 12px rgba(0,255,255,0.75),
-    inset 0 0 10px rgba(255,255,255,0.2);
+@media (prefers-contrast:more){
+  .toolbar-btn{ text-shadow:none; }
 }
-
-.seal-code.copied {
-  animation: pulseCopied 1.2s ease forwards;
-}
-
-@keyframes pulseCopied {
-  0% {
-    box-shadow: 0 0 12px rgba(0,255,255,0.9), inset 0 0 12px rgba(255,255,255,0.3);
-    background: linear-gradient(90deg, #ffe600, #ffbb00, #ff8800);
-    color: #fffbe6;
-  }
-  50% {
-    box-shadow: 0 0 20px rgba(255,215,0,1), inset 0 0 20px rgba(255,255,200,0.6);
-    background: linear-gradient(90deg, #ffdd00, #ff8800, #ff3300);
-    color: #fff9d6;
-  }
-  100% {
-    box-shadow: 0 0 6px rgba(0,255,255,0.5), inset 0 0 8px rgba(255,255,255,0.1);
-    background: linear-gradient(90deg, #00fff7, #00c6ff, #0066ff);
-    color: #fff;
-  }
-}
-
-/* Container: frosted, subtle neon rim */
-.seal-container {
-  --glass-bg: rgba(10, 24, 36, 0.35);
-  --glass-brd: rgba(140, 240, 255, 0.35);
-  --glow: rgba(0, 255, 240, 0.35);
-  --chip-start: #00fff7;
-  --chip-mid:   #00c6ff;
-  --chip-end:   #0066ff;
-  --chip-shadow: 0 6px 18px rgba(0, 180, 255, 0.18), inset 0 0 10px rgba(255,255,255,0.08);
-
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: clamp(8px, 1.2vw, 12px) clamp(10px, 1.6vw, 16px);
-  border-radius: 16px;
-  background:
-    radial-gradient(120% 120% at 0% 0%, rgba(0,255,255,0.06) 0%, transparent 60%),
-    var(--glass-bg);
-  border: 1px solid var(--glass-brd);
-  backdrop-filter: blur(10px) saturate(1.35);
-  -webkit-backdrop-filter: blur(10px) saturate(1.35);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.07),
-    0 10px 24px rgba(0,0,0,0.35),
-    0 0 0 1px rgba(0, 200, 255, 0.06);
-  position: relative;
-}
-
-
-/* The glossy, clickable chip */
-.seal-chip {
-  --padY: 0.35rem;
-  --padX: 0.6rem;
-
-  appearance: none;
-  border: 0;
-  outline: none;
-  cursor: pointer;
-
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  padding: var(--padY) var(--padX);
-
-  font-family: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: clamp(12px, 1.2vw, 14px);
-  line-height: 1.15;
-
-  color: #f7fdff;
-  border-radius: 10px;
-  background-image: linear-gradient(90deg, var(--chip-start), var(--chip-mid) 45%, var(--chip-end));
-  background-size: 220% 100%;
-  transition:
-    background-position 0.7s cubic-bezier(.2,.8,.2,1),
-    transform 0.12s ease-out,
-    box-shadow 0.25s ease-out,
-    filter 0.25s ease-out;
-  box-shadow: var(--chip-shadow);
-  user-select: all;
-}
-
-/* Blue neon rim + inner glass */
-.seal-chip::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  pointer-events: none;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0) 40%),
-    radial-gradient(80% 140% at 80% 0%, rgba(255,255,255,0.18) 0%, transparent 70%);
-  mix-blend-mode: screen;
-  opacity: 0.9;
-}
-
-/* Moving highlight sheen */
-.seal-gloss {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: linear-gradient(
-    120deg,
-    transparent 0%,
-    rgba(255,255,255,0.28) 18%,
-    rgba(255,255,255,0.06) 32%,
-    transparent 50%
-  );
-  transform: translateX(-140%);
-  animation: sheen 3.2s ease-in-out infinite;
-}
-
-@keyframes sheen {
-  0%   { transform: translateX(-140%); }
-  40%  { transform: translateX(0%); }
-  60%  { transform: translateX(20%); }
-  100% { transform: translateX(140%); }
-}
-
-/* Hover / active feel */
-.seal-chip:hover { background-position: 100% 0; filter: saturate(1.08) brightness(1.06); }
-.seal-chip:active { transform: translateY(1px) scale(0.995); }
-
-/* Seal monospace text */
-.seal-text {
-  white-space: nowrap;
-  max-width: min(68vw, 620px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  letter-spacing: 0.02em;
-}
-
-/* “Copied!” toast */
-.seal-toast {
-  position: absolute;
-  right: clamp(10px, 2vw, 18px);
-  bottom: calc(100% + 6px);
-  transform: translateY(6px);
-  opacity: 0;
-  pointer-events: none;
-
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-
-  font-size: 12px;
-  font-weight: 600;
-  color: #07231f;
-  padding: 0.25rem 0.55rem;
-  border-radius: 999px;
-
-  background: linear-gradient(180deg, #eafff7, #c8fff1);
-  box-shadow:
-    0 6px 22px rgba(0,0,0,0.25),
-    0 0 0 1px rgba(0, 230, 180, 0.35),
-    inset 0 1px 0 rgba(255,255,255,0.85);
-  border: 1px solid rgba(0, 210, 180, 0.35);
-  backdrop-filter: blur(6px) saturate(1.4);
-  -webkit-backdrop-filter: blur(6px) saturate(1.4);
-
-  transition: opacity .35s ease, transform .35s ease;
-}
-
-.seal-toast .toast-icon {
-  display: inline-grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #00ffcc, #00d6a8 70%, #00a97f);
-  color: #00221b;
-  font-weight: 900;
-  line-height: 1;
-}
-
-/* Show toast when copied */
-.seal-toast.show {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* Copied state: flip to auric gold + check flash */
-.seal-chip.copied {
-  --chip-start: #fff7c2;
-  --chip-mid:   #ffd65c;
-  --chip-end:   #ff9400;
-  box-shadow:
-    0 10px 26px rgba(255, 193, 7, 0.25),
-    inset 0 0 12px rgba(255,255,255,0.25);
-  animation: sealPulse 0.85s ease both;
-}
-
-.seal-chip.copied::after {
-  content: "✓";
-  position: absolute;
-  right: -10px;
-  top: -10px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-weight: 900;
-  color: #1c1200;
-  background: radial-gradient(circle at 30% 30%, #ffe38a, #ffc107 75%, #ff9800);
-  box-shadow: 0 6px 18px rgba(255, 193, 7, 0.55);
-  transform: scale(0.6);
-  opacity: 0;
-  animation: checkPop .6s ease .06s forwards;
-}
-
-@keyframes checkPop {
-  0% { transform: scale(0.6); opacity: 0; filter: blur(3px); }
-  55%{ transform: scale(1.15); opacity: 1; filter: blur(0); }
-  100%{ transform: scale(1); opacity: 1; }
-}
-
-@keyframes sealPulse {
-  0%   { filter: brightness(1.15) saturate(1.25); }
-  50%  { filter: brightness(1.35) saturate(1.35); }
-  100% { filter: brightness(1.0)  saturate(1.0);  }
-}
-
-/* Reduced motion respect */
-@media (prefers-reduced-motion: reduce) {
-  .seal-chip,
-  .seal-gloss,
-  .seal-toast,
-  .seal-chip.copied::after {
-    animation: none !important;
-    transition: none !important;
-  }
-}
-/* Layout refinements */
-.seal-container {
-  display: grid;              /* stack header above chip */
-  grid-auto-rows: min-content;
-  width: 100%;
-}
-
-
-
-/* Move the toast into the header area;
-   still uses your existing visual styles */
-.seal-toast {
-  position: static;           /* no absolute; live inline on the right */
-  transform: none;
-  opacity: 0;
-  pointer-events: none;
-  margin-left: auto;
-}
-
-.seal-toast.show {
-  opacity: 1;
-}
-
-/* Chip spans full width, clean single line */
-.seal-chip {
-  display: flex;
-  align-items: center;
-  width: 100%;                /* full-bleed inside the container */
-  min-height: 36px;
-  text-align: left;
-}
-
-.seal-text {
-  flex: 1 1 auto;             /* take remaining width */
-  min-width: 0;               /* allow ellipsis to kick in */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Small screens: keep things tidy */
-@media (max-width: 420px) {
-  .seal-header { gap: .5rem; }
-  .seal-toast { font-size: 11px; }
-  .seal-chip { min-height: 34px; }
-}
-
 
 /* --------------------------------------------------
-   Responsive
+   Seal Chip (single, coherent implementation)
 -------------------------------------------------- */
-@media (max-width: 600px) {
-  .eternal-klock-mini {
-    font-size: 0.7rem;
-    padding: 0.45rem 0.9rem;
-    max-width: calc(100vw - 16px);
-  }
+.seal-container{
+  --glass-bg:rgba(10,24,36,.35);
+  --glass-brd:rgba(140,240,255,.35);
 
-  .eternal-klock-detail {
-    padding: 1rem;
-    max-width: 90%;
-  }
+  --chip-start:#00fff7;
+  --chip-mid:#00c6ff;
+  --chip-end:#0066ff;
 
-  .eternal-klock-title {
-    font-size: 1.2rem;
-  }
+  display:grid;
+  grid-auto-rows:min-content;
+  gap:.5rem;
+  width:100%;
 
-  .eternal-klock-header {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  /* Compact spiral on mobile */
-  .eternal-spiral-wrapper { width: 22px; height: 22px; }
-  .eternal-spiral-svg     { width: 44px; height: 44px; }
-
-  .sacred-geometry-object { width: 120px; height: 120px; }
-}
-/* Centered card inside the full-screen EternalOverlay */
-.eternal-modal-card{
-  background: rgba(4, 18, 24, 0.72);
-  border: 1px solid color-mix(in srgb, var(--core, #00eaff) 28%, transparent);
-  border-radius: 20px;
-  box-shadow:
-    0 0 10px rgba(0,255,255,0.10) inset,
-    0 0 22px rgba(0,255,255,0.14),
-    0 0 60px rgba(0,255,255,0.10);
-  padding: clamp(14px, 3vmin, 28px);
-  max-height: 90vh;          /* scroll within card */
-  overflow: auto;            /* content scrolls */
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Optional: make headings glow a touch more in the modal */
-.eternal-modal-card .eternal-klock-title{
-  text-shadow: 0 0 6px color-mix(in srgb, var(--core, #00eaff) 60%, transparent);
-}
-/* ===== Eternal Klock Popover (centered) ===== */
-.eternal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  /* same glassy atmosphere as the app */
-  background: radial-gradient(1200px 1200px at 50% 50%, rgba(0,14,18,0.86) 0%, rgba(0,0,0,0.78) 55%, rgba(0,0,0,0.9) 100%);
-  backdrop-filter: blur(12px) saturate(1.15);
-
-  animation: overlayFade 180ms ease-out;
-}
-
-@keyframes overlayFade {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-/* keep body from scrolling behind the modal */
-body.eternal-overlay-open { overflow: hidden; }
-
-/* Center card that holds your existing detail panel */
-.eternal-modal-card {
-  /* you already defined these; we just ensure pop-in */
-  animation: popIn 240ms cubic-bezier(.22,.61,.36,1);
-  transform-origin: center;
-}
-
-@keyframes popIn {
-  0%   { opacity: 0; transform: translateY(6px) scale(0.96); }
-  60%  { opacity: 1; transform: translateY(0)   scale(1.015); }
-  100% { opacity: 1; transform: translateY(0)   scale(1); }
-}
-
-/* Optional: slightly dim the world behind when modal is open */
-.eternal-overlay::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+  padding:clamp(8px,1.2vw,12px) clamp(10px,1.6vw,16px);
+  border-radius:16px;
   background:
-    radial-gradient(600px 600px at 50% 50%, rgba(0,255,255,0.06), transparent 70%),
-    radial-gradient(900px 900px at 50% 50%, rgba(0,128,255,0.04), transparent 70%);
-  mix-blend-mode: screen;
-  opacity: .6;
-}
-/* Keep the centered modal card perfectly within the viewport width */
-.eternal-modal-card {
-  max-width: min(94vw, 560px);
-  width: min(94vw, 560px);
-  overflow-x: hidden; /* clamp any rogue child */
-}
-/* prevent outer-page scroll/overscroll from closing while typing */
-.eternal-overlay,
-.eternal-modal-card {
-  overscroll-behavior: contain;
-  touch-action: manipulation; /* reduces double-tap zoom quirks */
-}
-/* ───────────────── MOBILE-FIRST PERFORMANCE OVERRIDES (append at end) ───────────────── */
+    radial-gradient(120% 120% at 0% 0%, rgba(0,255,255,.06) 0%, transparent 60%),
+    var(--glass-bg);
+  border:1px solid var(--glass-brd);
+  backdrop-filter:blur(10px) saturate(1.35);
+  -webkit-backdrop-filter:blur(10px) saturate(1.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.07),
+    0 10px 24px rgba(0,0,0,.35),
+    0 0 0 1px rgba(0,200,255,.06);
 
-/* 1) Viewport ergonomics & text rendering */
-html, body {
-  min-height: 100dvh;               /* handles iOS dynamic bars */
-  touch-action: pan-y;              /* smooth vertical scroll only */
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  color:#dff9ff;
+  text-shadow:0 0 6px rgba(0,255,255,.40);
 }
 
-/* 2) Global overflow guards (keep everything inside the screen) */
-:where(.eternal-klock-container, .eternal-klock-detail, .eternal-overlay, .eternal-modal-card){
-  max-width: 100%;
-  overflow-x: clip;
+.seal-chip{
+  appearance:none;
+  border:0;
+  outline:none;
+  cursor:pointer;
+
+  position:relative;
+  display:flex;
+  align-items:center;
+  gap:.55rem;
+
+  width:100%;
+  min-height:36px;
+  padding:.35rem .6rem;
+
+  font-family:"Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size:clamp(12px,1.2vw,14px);
+  line-height:1.15;
+
+  color:#f7fdff;
+  border-radius:10px;
+
+  background-image:linear-gradient(90deg, var(--chip-start), var(--chip-mid) 45%, var(--chip-end));
+  background-size:220% 100%;
+
+  box-shadow:0 6px 18px rgba(0,180,255,.16), inset 0 0 10px rgba(255,255,255,.08);
+
+  transition:background-position 220ms ease, transform 90ms ease, filter 120ms ease;
+  user-select:all;
 }
 
-/* 3) One-tap, no-delay interactions everywhere tappable */
-:where(.toolbar-btn, .seal-chip, .eternal-klock-mini, button, [role="button"], a) {
-  -webkit-tap-highlight-color: transparent;
-  -webkit-touch-callout: none;
-  user-select: none;
-  -webkit-user-select: none;
-  touch-action: manipulation;
+.seal-chip::before{
+  content:"";
+  position:absolute;
+  inset:-1px;
+  border-radius:inherit;
+  pointer-events:none;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,0) 40%),
+    radial-gradient(80% 140% at 80% 0%, rgba(255,255,255,.14) 0%, transparent 70%);
+  mix-blend-mode:screen;
+  opacity:.9;
 }
 
-/* 4) Hit-target guarantees on touch */
-@media (hover: none) and (pointer: coarse) {
-  :where(.toolbar-btn, .seal-chip, .eternal-klock-mini) {
-    min-height: 44px;
-    min-width: 44px;
-  }
+.seal-chip:hover{ background-position:100% 0; filter:saturate(1.06) brightness(1.04); }
+.seal-chip:active{ transform:translateY(1px) scale(.995); }
+
+.seal-text{
+  flex:1 1 auto;
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  letter-spacing:.02em;
 }
 
-/* 5) Paint/scroll isolation for heavy regions (skip offscreen work) */
-:where(.eternal-klock-container, .eternal-klock-detail, .eternal-overlay, .eternal-modal-card){
-  content-visibility: auto;
-  contain: layout paint style;
-  contain-intrinsic-size: 720px 640px;   /* stable size hint */
-}
-.eternal-klock-detail { scrollbar-gutter: stable both-edges; }
+/* Toast (inline, no absolute positioning) */
+.seal-toast{
+  margin-left:auto;
+  opacity:0;
+  pointer-events:none;
 
-/* 6) Keep body from scrolling when overlay is open (no bounce behind) */
-body.eternal-overlay-open {
-  overflow: hidden;
-  overscroll-behavior: none;
-}
+  display:inline-flex;
+  align-items:center;
+  gap:.4rem;
 
-/* 7) Static, element-anchored iridescent overlay (no gradient drift) */
-.toolbar-btn {
-  contain: paint;                  /* clip pseudo layers to the button */
-  will-change: transform, box-shadow, filter;
-  backface-visibility: hidden;
-  transform: translateZ(0);
-}
-.toolbar-btn::after {
-  /* re-affirm anchoring to element, never viewport */
-  background-attachment: local !important;
-  background-origin: padding-box !important;
-  background-repeat: no-repeat !important;
-  background-position: 50% 30%, 50% 70% !important;
-  background-size: 160% 160%, 160% 160% !important;
-  animation: none !important;      /* kill any inherited drift */
-  transform: translateZ(0);
-  will-change: transform;
-}
-.toolbar-btn::before { will-change: opacity; }
+  font-size:12px;
+  font-weight:600;
+  color:#07231f;
+  padding:.25rem .55rem;
+  border-radius:999px;
 
-/* 8) Spiral/geometry animations: promote to their own layers */
-:where(.eternal-spiral-wrapper, .spiral-tip, .sacred-geometry-object) {
-  will-change: transform, filter;
-  backface-visibility: hidden;
-  transform: translateZ(0);
+  background:linear-gradient(180deg,#eafff7,#c8fff1);
+  border:1px solid rgba(0,210,180,.35);
+  box-shadow:
+    0 6px 22px rgba(0,0,0,.25),
+    inset 0 1px 0 rgba(255,255,255,.85);
+  backdrop-filter:blur(6px) saturate(1.35);
+
+  transition:opacity 120ms ease;
 }
 
-/* 9) Bars/flows: cheap width transitions, no layout thrash */
-:where(.month-progress-fill, .year-progress-fill, .week-progress-fill, .day-progress-fill, .spiral-progress-fill){
-  will-change: width, background-position, filter;
-  backface-visibility: hidden;
-  transform: translateZ(0);
+.seal-toast .toast-icon{
+  display:inline-grid;
+  place-items:center;
+  width:16px;
+  height:16px;
+  border-radius:50%;
+  background:radial-gradient(circle at 30% 30%, #00ffcc, #00d6a8 70%, #00a97f);
+  color:#00221b;
+  font-weight:900;
+  line-height:1;
 }
 
-/* 10) Text & long tokens: never overflow on tiny screens */
-:where(.eternal-klock-container, .eternal-klock-detail, .seal-container){
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-:where(.eternal-klock-detail code, .eternal-klock-detail kbd, .eternal-klock-detail samp){
-  max-inline-size: 100%;
+.seal-toast.show{ opacity:1; }
+
+/* Copied state (fast, no long animation) */
+.seal-chip.copied{
+  --chip-start:#fff7c2;
+  --chip-mid:#ffd65c;
+  --chip-end:#ff9400;
+  box-shadow:0 10px 26px rgba(255,193,7,.22), inset 0 0 12px rgba(255,255,255,.22);
 }
 
-/* 11) Mobile GPU savings without visual change */
-@media (max-width: 480px) {
-  .eternal-klock-mini { backdrop-filter: blur(10px) saturate(1.2); } /* was 20px/1.3 */
-  .eternal-modal-card { box-shadow:
-      0 0 8px rgba(0,255,255,0.10) inset,
-      0 0 18px rgba(0,255,255,0.14),
-      0 0 36px rgba(0,255,255,0.10); } /* slightly lighter */
-}
+/* --------------------------------------------------
+   Centered Popover Overlay (no open animation)
+-------------------------------------------------- */
+.eternal-overlay{
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  display:flex;
+  align-items:center;
+  justify-content:center;
 
-/* 12) Instant press feedback (no layout shift) */
-:where(.toolbar-btn, .seal-chip):active {
-  transform: translateY(1px) scale(.995);
-  transition: transform .08s ease;
-}
-
-/* 13) Smooth, contained scrolling in cards and overlays */
-.eternal-klock-detail,
-.eternal-modal-card {
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-}
-
-/* 14) Overlay sizing & safe areas */
-.eternal-overlay {
-  min-height: 100dvh;
   padding:
     max(12px, env(safe-area-inset-top))
     max(12px, env(safe-area-inset-right))
     max(12px, env(safe-area-inset-bottom))
     max(12px, env(safe-area-inset-left));
+
+  background:radial-gradient(1200px 1200px at 50% 50%,
+    rgba(0,14,18,.86) 0%,
+    rgba(0,0,0,.78) 55%,
+    rgba(0,0,0,.90) 100%);
+
+  backdrop-filter:blur(12px) saturate(1.12);
+  overflow-x:clip;
 }
 
-/* 15) iOS “no zoom on focus” safety if inputs appear in popovers */
-@media (hover: none) and (pointer: coarse) {
-  input, select, textarea { font-size: 16px; }
+body.eternal-overlay-open{
+  overflow:hidden;
+  overscroll-behavior:none;
 }
 
-/* 16) Respect reduced motion while keeping layout snappy */
-@media (prefers-reduced-motion: reduce) {
-  * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition: none !important; }
+.eternal-modal-card{
+  width:min(94vw, 560px);
+  max-width:min(94vw, 560px);
+  max-height:90vh;
+
+  overflow:auto;
+  overflow-x:clip;
+  -webkit-overflow-scrolling:touch;
+
+  background:rgba(4,18,24,.72);
+  border:1px solid rgba(0,234,255,.22);
+  border-radius:20px;
+  box-shadow:
+    0 0 10px rgba(0,255,255,.10) inset,
+    0 0 22px rgba(0,255,255,.14),
+    0 0 60px rgba(0,255,255,.08);
+
+  padding:clamp(14px, 3vmin, 28px);
 }
 
-/* 17) Final belt & suspenders for horizontal bleed in modals */
-.eternal-modal-card * { max-width: 100%; }
+.eternal-modal-card *{ max-width:100%; }
+
+/* --------------------------------------------------
+   Touch + Mobile ergonomics
+-------------------------------------------------- */
+:where(.toolbar-btn, .seal-chip, .eternal-klock-mini, button, [role="button"], a){
+  -webkit-tap-highlight-color:transparent;
+  -webkit-touch-callout:none;
+  user-select:none;
+  -webkit-user-select:none;
+  touch-action:manipulation;
+}
+
+@media (hover:none) and (pointer:coarse){
+  :where(.toolbar-btn, .seal-chip, .eternal-klock-mini){
+    min-height:44px;
+    min-width:44px;
+  }
+  input,select,textarea{ font-size:16px; } /* iOS no-zoom */
+}
+
+/* --------------------------------------------------
+   Responsive
+-------------------------------------------------- */
+@media (max-width:600px){
+  .eternal-klock-mini{
+    font-size:.7rem;
+    padding:.45rem .9rem;
+    max-width:calc(100vw - 16px);
+    backdrop-filter:blur(10px) saturate(1.15);
+  }
+
+  .eternal-klock-detail{
+    padding:1rem;
+    max-width:90%;
+  }
+
+  .eternal-klock-title{ font-size:1.2rem; }
+
+  .eternal-klock-header{
+    flex-direction:column;
+    gap:.5rem;
+  }
+
+  .eternal-spiral-wrapper{ width:22px; height:22px; }
+  .eternal-spiral-svg{ width:44px; height:44px; }
+
+  .sacred-geometry-object{ width:120px; height:120px; }
+
+  .seal-toast{ font-size:11px; }
+  .seal-chip{ min-height:34px; }
+}
+
+/* --------------------------------------------------
+   Reduced Motion
+-------------------------------------------------- */
+@media (prefers-reduced-motion:reduce){
+  *{ transition:none !important; }
+}

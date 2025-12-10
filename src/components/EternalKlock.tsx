@@ -3,6 +3,7 @@
 
 /**
  * EternalKlock — FULL FILE (SunCalc removed; Sovereign Solar engine/hook)
+ * v10.2.1 — INSTANT OPEN (no fade/animated entrance) + NO LOADING FLASH
  * 100% OFFLINE: computes the exact API-equivalent payload locally (no fetch), identical display.
  *
  * Refactor goals:
@@ -13,17 +14,18 @@
  * - ✅ Pulse-boundary scheduler + Worker fallback without double-ticking spam
  * - ✅ Solar override + cross-tab sync stays instant
  *
- * Fixes applied (in this file):
- * - De-duped ALL refresh entrypoints through a single tick gate (interval/worker/timeout/events/solar-change)
- * - Removed off-boundary “extra refresh” spam: φ-breath interval now drives glow only (time stays pulse-authoritative)
- * - Worker Blob URL is revoked on cleanup (no leaks)
- * - Glow-off timeouts are tracked + cleared on unmount (no setState-after-unmount)
- * - BroadcastChannel uses one channel for RX/TX (still instant; simpler cleanup)
- * - Year progress bar uses klock.yearPercent when available (no mismatched math)
- * - ✅ Added a clear CLOSE “X” button inside the opened panel (CSS next)
+ * Week Kalendar fixes (this file):
+ * - ✅ Manual open ALWAYS works (no session-dismiss gate on button tap)
+ * - ✅ Escape/backdrop closes TOPMOST first (Week Kalendar → then Details)
+ * - ✅ Removed doc-level “mousedown outside” closer (it was nuking WeekKalendar portals)
+ * - ✅ WeekKalendar mounts with a container inside the overlay (better stacking + click safety)
+ *
+ * Instant-open change (this file):
+ * - ✅ No "Loading…" flash: initial klock state is computed synchronously (baseline offline payload)
+ * - ✅ No styled opening: overlay/card explicitly disable animation + transition via inline style
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "./EternalKlock.css";
 
@@ -167,11 +169,9 @@ type WakeLockLike = {
 /** Type guard without extending Navigator (prevents lib-dom conflicts) */
 const hasWakeLock = (n: Navigator): n is Navigator & { wakeLock: WakeLockLike } => "wakeLock" in n;
 
-/* ────────────────────────────────────────────────────────────────
+/* ────────────────────────────────────────────────
    Constants (mirror engine/API)
-   ──────────────────────────────────────────────────────────────── */
-const WEEK_DISMISS_KEY = "weekKalDismissed";
-
+   ──────────────────────────────────────────────── */
 const ARC_BEAT_PULSES = 6;
 const MICRO_CYCLE_PULSES = 60;
 const CHAKRA_LOOP_PULSES = 360;
@@ -626,7 +626,12 @@ function buildOfflinePayload(now: Date = new Date()): KlockData {
 
     eternalMonthProgress: { daysElapsed, daysRemaining, percent: monthPercent },
 
-    solarChakraStep: { beatIndex: solarBeatIdx, stepIndex: solarStepIndex, stepsPerBeat: STEPS_PER_BEAT, percentIntoStep: solarPercentIntoStep },
+    solarChakraStep: {
+      beatIndex: solarBeatIdx,
+      stepIndex: solarStepIndex,
+      stepsPerBeat: STEPS_PER_BEAT,
+      percentIntoStep: solarPercentIntoStep,
+    },
     solarChakraStepString,
 
     chakraStep: { beatIndex: eternalBeatIdx, stepIndex, stepsPerBeat: STEPS_PER_BEAT, percentIntoStep },
@@ -720,16 +725,29 @@ const SOLAR_BC_NAME = "SOVEREIGN_SOLAR_SYNC";
 type SolarBroadcastMessage = { type: "solar:updated"; t: number };
 
 /* ────────────────────────────────────────────────
+   Instant-open style (kills fade/entrance animation)
+   ──────────────────────────────────────────────── */
+const INSTANT_OPEN_STYLE: React.CSSProperties = {
+  animation: "none",
+  transition: "none",
+};
+
+/* ────────────────────────────────────────────────
    Main Component
    ──────────────────────────────────────────────── */
 export const EternalKlock: React.FC = () => {
-  const [klock, setKlock] = useState<KlockData | null>(null);
+  // ✅ No loading flash: start with a baseline offline payload immediately.
+  const [klock, setKlock] = useState<KlockData>(() => buildOfflinePayload(new Date()));
+
   const [showDetails, setShowDetails] = useState<boolean>(false);
   const [glowPulse, setGlowPulse] = useState<boolean>(false);
   const [showWeekModal, setShowWeekModal] = useState<boolean>(false);
 
   // 🟢 Sovereign Solar (no SunCalc)
   const solarHook = useSovereignSolarClock();
+
+  // Portal target (no state, no effect)
+  const portalTarget = typeof document !== "undefined" ? document.body : null;
 
   // Refs (DOM)
   const detailRef = useRef<HTMLDivElement | null>(null);
@@ -762,12 +780,6 @@ export const EternalKlock: React.FC = () => {
   useEffect(() => {
     solarOverrideRef.current = solarOverrideSec;
   }, [solarOverrideSec]);
-
-  // Portal target
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    setPortalTarget(document.body);
-  }, []);
 
   // Body lock class for overlay
   useEffect(() => {
@@ -973,14 +985,6 @@ export const EternalKlock: React.FC = () => {
     refreshKlock();
   }, [refreshKlock]);
 
-  // Fixed (legacy) pulse for SigilGlyphButton param (kept as you had it)
-  const kaiPulse = useMemo((): number => {
-    const moment = new Date(Date.UTC(2024, 4, 10, 6, 45, 40));
-    const base = new Date("1990-02-19T00:00:00Z");
-    const diffSeconds = Math.floor((moment.getTime() - base.getTime()) / 1000);
-    return 206_000_000 + Math.floor(diffSeconds / (3 + Math.sqrt(5)));
-  }, []);
-
   const [sealCopied, setSealCopied] = useState<boolean>(false);
   const sealToastTimer = useRef<number | null>(null);
 
@@ -1051,7 +1055,6 @@ export const EternalKlock: React.FC = () => {
       };
     }
 
-    fireTick();
     scheduleNext();
 
     const onShow = () => {
@@ -1114,15 +1117,16 @@ export const EternalKlock: React.FC = () => {
     };
   }, [acquireWakeLock, releaseWakeLock]);
 
-  // Initial load + solar version snapshot
+  // Initial load + solar version snapshot (schedule tick, don’t sync-set in effect body)
   useEffect(() => {
     try {
       lastSolarVersionRef.current = localStorage.getItem(SOLAR_BROADCAST_KEY);
     } catch {
       // ignore
     }
-    refreshKlock();
-  }, [refreshKlock]);
+    const id = window.setTimeout(() => fireTick(), 0);
+    return () => window.clearTimeout(id);
+  }, [fireTick]);
 
   // Cross-page instant update when Solar settings change.
   useEffect(() => {
@@ -1160,16 +1164,22 @@ export const EternalKlock: React.FC = () => {
     };
   }, [fireTick]);
 
-  // Reactively rebuild when the sovereign hook emits a new step/arc
+  // Reactively rebuild when the sovereign hook emits a new step/arc (schedule, don’t sync-set in effect body)
   useEffect(() => {
-    fireTick();
+    const id = window.setTimeout(() => fireTick(), 0);
+    return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [solarHook?.solarStepString, solarHook?.solarArcName, solarHook?.sunriseOffsetSec, solarOverrideSec]);
 
-  // Close Week modal if details closed
-  useEffect(() => {
-    if (!showDetails) setShowWeekModal(false);
-  }, [showDetails]);
+  // Close helpers (topmost-first behavior)
+  const closeDetails = useCallback(() => {
+    setShowWeekModal(false);
+    setShowDetails(false);
+  }, []);
+
+  const closeWeekFirst = useCallback(() => {
+    setShowWeekModal(false);
+  }, []);
 
   // Overlay extra close behavior on scroll (with “interaction cooldown”)
   const suppressScrollCloseUntil = useRef<number>(0);
@@ -1178,7 +1188,6 @@ export const EternalKlock: React.FC = () => {
 
     const overlayNode = overlayRef.current;
     const detailNode = detailRef.current;
-    const toggleNode = toggleRef.current;
 
     const markInteractionInside = () => {
       suppressScrollCloseUntil.current = Date.now() + 800;
@@ -1189,15 +1198,7 @@ export const EternalKlock: React.FC = () => {
       const focusedInside = !!ae && !!overlayNode?.contains(ae);
       const inCooldown = Date.now() < suppressScrollCloseUntil.current;
       if (focusedInside || inCooldown) return;
-      setShowDetails(false);
-    };
-
-    const handleDocMouseDown = (evt: MouseEvent) => {
-      const target = evt.target as Node | null;
-      if (!target) return;
-      const insideDetail = !!detailNode && detailNode.contains(target);
-      const onToggle = !!toggleNode && toggleNode.contains(target);
-      if (!insideDetail && !onToggle) setShowDetails(false);
+      closeDetails();
     };
 
     detailNode?.addEventListener("pointerdown", markInteractionInside, { capture: true });
@@ -1205,27 +1206,26 @@ export const EternalKlock: React.FC = () => {
     overlayNode?.addEventListener("focusin", markInteractionInside, { capture: true });
 
     window.addEventListener("scroll", handleScroll, { passive: true });
-    document.addEventListener("mousedown", handleDocMouseDown);
 
     return () => {
       window.removeEventListener("scroll", handleScroll);
-      document.removeEventListener("mousedown", handleDocMouseDown);
-
       detailNode?.removeEventListener("pointerdown", markInteractionInside, true);
       detailNode?.removeEventListener("click", markInteractionInside, true);
       overlayNode?.removeEventListener("focusin", markInteractionInside, true);
     };
-  }, [showDetails]);
+  }, [closeDetails, showDetails]);
 
-  // Toggle details panel
+  // Toggle details panel (instant)
   const handleToggle = useCallback(() => {
-    setShowDetails((open) => {
-      if (open) return false;
-      if ("vibrate" in navigator && typeof navigator.vibrate === "function") navigator.vibrate(10);
-      audioRef.current?.play().catch(() => void 0);
-      return true;
-    });
-  }, []);
+    if (showDetails) {
+      closeDetails();
+      return;
+    }
+    suppressScrollCloseUntil.current = Date.now() + 800;
+    if ("vibrate" in navigator && typeof navigator.vibrate === "function") navigator.vibrate(10);
+    audioRef.current?.play().catch(() => void 0);
+    setShowDetails(true);
+  }, [closeDetails, showDetails]);
 
   // Arc → CSS variables (mirrored onto modal)
   useEffect(() => {
@@ -1252,8 +1252,6 @@ export const EternalKlock: React.FC = () => {
     detailRef.current?.style.setProperty("--chakra", `hsl(${hue} 100% 55%)`);
   }, [klock]);
 
-  if (!klock) return <div className="eternal-klock-mini">Loading Kai Pulse…</div>;
-
   // Derived UI values
   const spiralData = getSpiralLevelData(klock.kaiPulseEternal);
   const fullYears = Math.floor(klock.harmonicYearCompletions || 0);
@@ -1273,10 +1271,12 @@ export const EternalKlock: React.FC = () => {
   const percentToNextBeat =
     (((((klock.kaiPulseToday % beatPulseCount) + beatPulseCount) % beatPulseCount) / beatPulseCount) * 100);
 
-  const openWeekModal = () => {
-    if (sessionStorage.getItem(WEEK_DISMISS_KEY) === "1") return;
+  // Manual open ALWAYS works (no dismiss gate on button tap)
+  const openWeekModal = useCallback(() => {
+    suppressScrollCloseUntil.current = Date.now() + 800;
     setShowWeekModal(true);
-  };
+    if ("vibrate" in navigator && typeof navigator.vibrate === "function") navigator.vibrate(8);
+  }, []);
 
   // Canonical weekday order
   const SOLAR_DAY_NAMES = ["Solhara", "Aquaris", "Flamora", "Verdari", "Sonari", "Kaelith"] as const;
@@ -1309,6 +1309,9 @@ export const EternalKlock: React.FC = () => {
   const arkIndexForKey = Math.floor(((((klock.solarChakraStep?.beatIndex ?? 0) % 36) + 36) % 36) / 6) % 6;
   const kaiKey = `ark-${arkIndexForKey}-${klock.solarChakraStepString}`;
 
+  // Week modal container (keeps portals inside overlay hierarchy for better stacking/click safety)
+  const weekModalContainer = detailRef.current ?? overlayRef.current ?? portalTarget;
+
   return (
     <div ref={containerRef} className="eternal-klock-container">
       <div className="eternal-klock-header">
@@ -1336,7 +1339,7 @@ export const EternalKlock: React.FC = () => {
         </div>
       </div>
 
-      {/* FULL-SCREEN POPOVER VIA PORTAL */}
+      {/* FULL-SCREEN POPOVER VIA PORTAL (INSTANT: no fade/anim) */}
       {showDetails &&
         portalTarget &&
         createPortal(
@@ -1347,29 +1350,40 @@ export const EternalKlock: React.FC = () => {
             aria-label="Eternal Klock Details"
             ref={overlayRef}
             tabIndex={-1}
+            style={INSTANT_OPEN_STYLE}
             onClick={(e) => {
-              if (e.target === overlayRef.current) setShowDetails(false);
+              if (e.target !== overlayRef.current) return;
+              if (showWeekModal) {
+                closeWeekFirst();
+                return;
+              }
+              closeDetails();
             }}
             onKeyDown={(e) => {
-              if (e.key === "Escape") setShowDetails(false);
+              if (e.key !== "Escape") return;
+              if (showWeekModal) {
+                e.stopPropagation();
+                closeWeekFirst();
+                return;
+              }
+              closeDetails();
             }}
           >
-            <div className="eternal-modal-card" ref={detailRef} onClick={(e) => e.stopPropagation()}>
+            <div
+              className="eternal-modal-card"
+              ref={detailRef}
+              style={INSTANT_OPEN_STYLE}
+              onClick={(e) => e.stopPropagation()}
+            >
               {/* ✅ CLEAR CLOSE X (CSS will position + style) */}
-              <button
-                type="button"
-                className="ek-close-btn"
-                aria-label="Close"
-                title="Close"
-                onClick={() => setShowDetails(false)}
-              >
+              <button type="button" className="ek-close-btn" aria-label="Close" title="Close" onClick={closeDetails}>
                 ×
               </button>
 
               {/* GRAND DISPLAY CONTROLS */}
               <div className="ek-display-controls" aria-label="Display scale controls">
                 <div className="ek-scale-row">
-                  <div className="ek-scale-readout"></div>
+                  <div className="ek-scale-readout" />
                 </div>
               </div>
 
@@ -1377,13 +1391,15 @@ export const EternalKlock: React.FC = () => {
                 <h2 className="eternal-klock-title">𐰘𐰜𐰇 · 𐰋𐰢𐱃</h2>
 
                 <div className="eternal-klock-toolbar">
-                  <SigilGlyphButton kaiPulse={kaiPulse} />
-                  <button className="toolbar-btn" onClick={openWeekModal} title="Open Kairos Week Spiral">
+                  <SigilGlyphButton kaiPulse={klock.kaiPulseEternal} />
+                  <button className="toolbar-btn" onClick={openWeekModal} title="Open Kairos Week Spiral" type="button">
                     <img src="/assets/weekkalendar.svg" alt="Kairos Week" className="toolbar-icon" draggable={false} />
                   </button>
                 </div>
 
-                {showWeekModal && <WeekKalendarModal onClose={() => setShowWeekModal(false)} />}
+                {showWeekModal && weekModalContainer && (
+                  <WeekKalendarModal onClose={() => setShowWeekModal(false)} container={weekModalContainer} />
+                )}
 
                 <div className="eternal-klock-section-title" />
                 <div className="eternal-klock-section-title">
@@ -1497,9 +1513,7 @@ export const EternalKlock: React.FC = () => {
 
                 <div className="week-progress-bar">
                   <div
-                    className={`week-progress-fill ${glowPulse ? "sync-pulse" : ""} ${
-                      Math.round(weekPercent) === 100 ? "burst" : ""
-                    }`}
+                    className={`week-progress-fill ${glowPulse ? "sync-pulse" : ""} ${Math.round(weekPercent) === 100 ? "burst" : ""}`}
                     style={{ width: `${weekPercent}%` }}
                     title={`${weekPercent.toFixed(2)}% of week`}
                   />
@@ -1546,12 +1560,8 @@ export const EternalKlock: React.FC = () => {
                 <div className="month-progress-bar">
                   <div
                     className={`month-progress-fill ${glowPulse ? "sync-pulse" : ""}`}
-                    style={{
-                      width: `${((klock.kaiPulseEternal % HARMONIC_MONTH_PULSES) / HARMONIC_MONTH_PULSES) * 100}%`,
-                    }}
-                    title={`${(((klock.kaiPulseEternal % HARMONIC_MONTH_PULSES) / HARMONIC_MONTH_PULSES) * 100).toFixed(
-                      2
-                    )}% of month`}
+                    style={{ width: `${((klock.kaiPulseEternal % HARMONIC_MONTH_PULSES) / HARMONIC_MONTH_PULSES) * 100}%` }}
+                    title={`${(((klock.kaiPulseEternal % HARMONIC_MONTH_PULSES) / HARMONIC_MONTH_PULSES) * 100).toFixed(2)}% of month`}
                   />
                 </div>
 
@@ -1569,9 +1579,8 @@ export const EternalKlock: React.FC = () => {
                     <span
                       className={`seal-code ${sealCopied ? "copied" : ""}`}
                       onClick={() => {
-                        if (!klock.seal) return;
                         navigator.clipboard
-                          .writeText(klock.seal)
+                          .writeText(klock.seal ?? "")
                           .then(() => {
                             if (sealToastTimer.current !== null) window.clearTimeout(sealToastTimer.current);
                             setSealCopied(true);
@@ -1717,9 +1726,7 @@ export const EternalKlock: React.FC = () => {
 
                 <div>
                   <strong>Step:</strong>{" "}
-                  {klock.solarChakraStep
-                    ? `${klock.solarChakraStep.stepIndex} / ${klock.solarChakraStep.stepsPerBeat}`
-                    : "—"}
+                  {klock.solarChakraStep ? `${klock.solarChakraStep.stepIndex} / ${klock.solarChakraStep.stepsPerBeat}` : "—"}
                 </div>
 
                 <div>
