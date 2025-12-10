@@ -3,19 +3,14 @@
 
 /**
  * KaiStatus — Atlantean μpulse Bar
- * v4.7 — SLIM TIMELINE + D/M/Y (KKS-1.0)
+ * v4.9 — 2-ROW TIMELINE (DAY row + MONTH/ARK row) + ARK CHAKRA COLORS (KKS-1.0)
  *
- * Goals (per your screenshot):
- * - TOP line is the timeline: Beat:Step • Day • Ark • D/M/Y (ALWAYS one line)
- * - Countdown sits slightly below (full length, never squeezes the top line)
- * - Pulse stays visible always:
- *    - Wide/Tight: Pulse stays on the TOP line after Ark/DMY
- *    - Tiny/Nano: Pulse drops to the lower row (left of countdown, or above if nano)
- * - Never ellipsis, never abbreviate
- * - Adds D#/M#/Y# derived EXACTLY from μpulses (FeedCard parity):
- *    - Day:   1..42
- *    - Month: 1..8
- *    - Year:  0.. (zero-based)
+ * Update (per your screenshots):
+ * - Month + Month Chakra + Ark move to their own row (between top timeline and countdown)
+ * - Ark color is NOT forced Heart anymore:
+ *    Ignition must be Root (red), then ascends by arc:
+ *    Ignition→Root, Integration→Sacral, Harmonization→Solar Plexus,
+ *    Reflekt→Heart, Purify→Throat, Dream→Third Eye
  */
 
 import * as React from "react";
@@ -111,7 +106,6 @@ function uiScaleFor(layout: LayoutMode): number {
 }
 
 function bottomModeFor(layout: LayoutMode): BottomMode {
-  // nano: give countdown its own line (pulse above it), to avoid any squeeze.
   return layout === "nano" ? "stack" : "row";
 }
 
@@ -143,6 +137,10 @@ function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
   return width;
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Ark mapping (beats 0..35; 6 beats per ark)
+───────────────────────────────────────────────────────────── */
+
 const ARK_NAMES = [
   "Ignition",
   "Integration",
@@ -162,10 +160,7 @@ function arkFromBeat(beat: number): ArkName {
 
 /* ─────────────────────────────────────────────────────────────
    KKS-1.0: D/M/Y from μpulses (exact, deterministic) — FeedCard parity
-   dayOfMonth: 1..42
-   month:      1..8
-   year:       0.. (zero-based)
-   ───────────────────────────────────────────────────────────── */
+───────────────────────────────────────────────────────────── */
 
 /** Euclidean mod (always 0..m-1) */
 const modE = (a: bigint, m: bigint): bigint => {
@@ -190,21 +185,92 @@ const toSafeNumber = (x: bigint): number => {
 };
 
 function kaiDMYFromPulseKKS(pulse: number): { day: number; month: number; year: number } {
-  // Bridge pulse -> epoch ms (φ-exact) -> μpulses (φ-exact) to match engine behavior.
   const ms = epochMsFromPulse(pulse); // bigint
   const pμ = microPulsesSinceGenesis(ms); // bigint μpulses
 
-  const dayIdx = floorDivE(pμ, N_DAY_MICRO); // bigint days since genesis (can be negative)
+  const dayIdx = floorDivE(pμ, N_DAY_MICRO); // bigint days since genesis
 
   const monthIdx = floorDivE(dayIdx, BigInt(DAYS_PER_MONTH)); // bigint
   const yearIdx = floorDivE(dayIdx, BigInt(DAYS_PER_YEAR)); // bigint
 
   const dayOfMonth = toSafeNumber(modE(dayIdx, BigInt(DAYS_PER_MONTH))) + 1; // 1..42
   const month = toSafeNumber(modE(monthIdx, BigInt(MONTHS_PER_YEAR))) + 1; // 1..8
-  const year = toSafeNumber(yearIdx); // ✅ zero-based year (0..)
+  const year = toSafeNumber(yearIdx); // 0..
 
   return { day: dayOfMonth, month, year };
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Chakra labeling + deterministic chakra assignment hooks
+───────────────────────────────────────────────────────────── */
+
+type ChakraName =
+  | "Root"
+  | "Sacral"
+  | "Solar Plexus"
+  | "Heart"
+  | "Throat"
+  | "Third Eye"
+  | "Crown";
+
+const CHAKRA_SEQ: readonly ChakraName[] = [
+  "Root",
+  "Sacral",
+  "Solar Plexus",
+  "Heart",
+  "Throat",
+  "Third Eye",
+  "Crown",
+] as const;
+
+function chakraToLabel(ch: ChakraName): string {
+  return ch === "Crown" ? "Krown" : ch;
+}
+
+function chakraFromDayOfMonth(dayOfMonth: number): ChakraName {
+  const d = Number.isFinite(dayOfMonth) ? Math.floor(dayOfMonth) : 1;
+  const idx = Math.max(0, Math.min(6, Math.floor((Math.max(1, d) - 1) / 6)));
+  return CHAKRA_SEQ[idx] ?? "Root";
+}
+
+function modIndex(n: number, m: number): number {
+  const r = n % m;
+  return r < 0 ? r + m : r;
+}
+
+function chakraFromMonth(month: number): ChakraName {
+  const m = Number.isFinite(month) ? Math.floor(month) : 1;
+  const idx = modIndex(Math.max(1, m) - 1, 7);
+  return CHAKRA_SEQ[idx] ?? "Root";
+}
+
+/** Month names (8). Replace labels here if you have canonical names. */
+const KAI_MONTH_NAMES: readonly string[] = [
+  "Aethon",
+  "Virelai",
+  "Solari",
+  "Amarin",
+  "Kaelus",
+  "Umbriel",
+  "Noktura",
+  "Liora",
+] as const;
+
+function monthNameFromIndex(month: number): string {
+  const m = Number.isFinite(month) ? Math.floor(month) : 1;
+  const idx = Math.max(1, Math.min(8, m)) - 1;
+  return KAI_MONTH_NAMES[idx] ?? `Month ${Math.max(1, m)}`;
+}
+
+/** Ark → Chakra color mapping (Ignition MUST be Root/red). */
+const ARK_CHAKRA: Readonly<Record<ArkName, ChakraName>> = {
+  Ignition: "Root",
+  Integration: "Sacral",
+  Harmonization: "Solar Plexus",
+  Reflekt: "Heart",
+  Purify: "Throat",
+  Dream: "Third Eye",
+};
 
 type KaiStatusVars = React.CSSProperties & {
   ["--kai-progress"]?: number;
@@ -222,7 +288,7 @@ export function KaiStatus(): React.JSX.Element {
   const layout: LayoutMode = layoutForWidth(width);
   const bottomMode: BottomMode = bottomModeFor(layout);
 
-  // Pulse sits on TOP line when there’s room; otherwise drops to the bottom row.
+  // Pulse sits on TOP row when there’s room; otherwise drops to the countdown row.
   const pulseOnTop = layout === "wide" || layout === "tight";
 
   const [pulseDur, setPulseDur] = React.useState<number>(DEFAULT_PULSE_DUR_S);
@@ -264,6 +330,7 @@ export function KaiStatus(): React.JSX.Element {
       : Number.parseInt(String(kaiNow.beat), 10) || 0;
 
   const arkFull: ArkName = arkFromBeat(beatNum);
+  const arkChakra: ChakraName = ARK_CHAKRA[arkFull] ?? "Heart";
 
   const pulseNum =
     typeof kaiNow.pulse === "number"
@@ -271,7 +338,14 @@ export function KaiStatus(): React.JSX.Element {
       : Number.parseInt(String(kaiNow.pulse), 10) || 0;
 
   const dmy = React.useMemo(() => kaiDMYFromPulseKKS(pulseNum), [pulseNum]);
+
+  const dayChakra = React.useMemo<ChakraName>(() => chakraFromDayOfMonth(dmy.day), [dmy.day]);
+  const monthChakra = React.useMemo<ChakraName>(() => chakraFromMonth(dmy.month), [dmy.month]);
+  const monthName = React.useMemo<string>(() => monthNameFromIndex(dmy.month), [dmy.month]);
+
   const dmyText = `D${dmy.day}/M${dmy.month}/Y${dmy.year}`;
+  const dayChakraLabel = chakraToLabel(dayChakra);
+  const monthChakraLabel = chakraToLabel(monthChakra);
 
   const styleVars: KaiStatusVars = React.useMemo(() => {
     return {
@@ -288,8 +362,7 @@ export function KaiStatus(): React.JSX.Element {
         title={secsTextFull}
         aria-label={`Next pulse in ${secsTextFull} seconds`}
       >
-        {secsText}
-        <span className="kai-status__nUnit">s</span>
+        {secsText} <span className="kai-status__nUnit">s</span>
       </span>
     </div>
   );
@@ -299,17 +372,87 @@ export function KaiStatus(): React.JSX.Element {
       className="kai-pill kai-pill--pulse"
       title={`Pulse ${pulseNum}`}
       aria-label={`Pulse ${pulseNum}`}
+      data-chakra="Pulse"
     >
       ☤KAI: <strong className="kai-pill__num">{pulseNum}</strong>
+    </span>
+  );
+
+  const DMYPill = (
+    <span className="kai-pill kai-pill--dmy" title={dmyText} aria-label={`Date ${dmyText}`}>
+      <span className="kai-dmy__seg kai-dmy__seg--day" data-chakra={dayChakra}>
+        D<span className="kai-dmy__num">{dmy.day}</span>
+      </span>
+      <span className="kai-dmy__sep">/</span>
+      <span className="kai-dmy__seg kai-dmy__seg--month" data-chakra={monthChakra}>
+        M<span className="kai-dmy__num">{dmy.month}</span>
+      </span>
+      <span className="kai-dmy__sep">/</span>
+      <span className="kai-dmy__seg kai-dmy__seg--year" data-chakra="Year">
+        Y<span className="kai-dmy__num">{dmy.year}</span>
+      </span>
+    </span>
+  );
+
+  const DayPill = (
+    <span
+      className="kai-pill kai-pill--day"
+      title={dayNameFull}
+      aria-label={`Day ${dayNameFull}`}
+      data-chakra={dayChakra}
+    >
+      {dayNameFull}
+    </span>
+  );
+
+  const DayChakraPill = (
+    <span
+      className="kai-pill kai-pill--dayChakra"
+      title={`Day chakra ${dayChakraLabel}`}
+      aria-label={`Day chakra ${dayChakraLabel}`}
+      data-chakra={dayChakra}
+    >
+      {dayChakraLabel}
+    </span>
+  );
+
+  const MonthNamePill = (
+    <span
+      className="kai-pill kai-pill--monthName"
+      title={monthName}
+      aria-label={`Month ${monthName}`}
+      data-chakra={monthChakra}
+    >
+      {monthName}
+    </span>
+  );
+
+  const MonthChakraPill = (
+    <span
+      className="kai-pill kai-pill--monthChakra"
+      title={`Month chakra ${monthChakraLabel}`}
+      aria-label={`Month chakra ${monthChakraLabel}`}
+      data-chakra={monthChakra}
+    >
+      {monthChakraLabel}
+    </span>
+  );
+
+  const ArkPill = (
+    <span
+      className="kai-pill kai-pill--ark"
+      title={arkFull}
+      aria-label={`Ark ${arkFull}`}
+      data-chakra={arkChakra} // ✅ Ignition becomes Root/red
+    >
+      {arkFull}
     </span>
   );
 
   return (
     <div
       ref={rootRef}
-      className={`kai-feed-status kai-feed-status--slim${
-        flash ? " kai-feed-status--flash" : ""
-      }`}
+      className={`kai-feed-status kai-feed-status--slim${flash ? " kai-feed-status--flash" : ""}`}
       role="status"
       aria-live="polite"
       data-layout={layout}
@@ -317,10 +460,16 @@ export function KaiStatus(): React.JSX.Element {
       data-kai-bsi={beatStepDisp}
       data-kai-ark={arkFull}
       data-kai-dmy={dmyText}
+      data-day-chakra={dayChakra}
+      data-month-chakra={monthChakra}
+      data-ark-chakra={arkChakra}
+      data-day-num={dmy.day}
+      data-month-num={dmy.month}
+      data-year-num={dmy.year}
       style={styleVars}
     >
-      {/* TOP: timeline must stay on ONE line (scrolls horizontally if needed) */}
-      <div className="kai-status__top" aria-label="Kai timeline">
+      {/* ROW 1: day row (one line; scrollable) */}
+      <div className="kai-status__top" aria-label="Kai timeline (day row)">
         <span className="kai-status__bsiWrap" aria-label={`Beat step ${beatStepDisp}`}>
           <span className="kai-status__kLabel" aria-hidden="true">
             KAIROS
@@ -330,26 +479,21 @@ export function KaiStatus(): React.JSX.Element {
           </span>
         </span>
 
-        <span className="kai-pill kai-pill--dmy" title={dmyText} aria-label={`Date ${dmyText}`}>
-          {dmyText}
-        </span>
-
-        <span
-          className="kai-pill kai-pill--day"
-          title={dayNameFull}
-          aria-label={`Day ${dayNameFull}`}
-        >
-          {dayNameFull}
-        </span>
-
-        <span className="kai-pill kai-pill--ark" title={arkFull} aria-label={`Ark ${arkFull}`}>
-          {arkFull}
-        </span>
+        {DMYPill}
+        {DayPill}
+        {DayChakraPill}
 
         {pulseOnTop ? PulsePill : null}
       </div>
 
-      {/* BOTTOM: countdown slightly below (full length). Pulse drops here on tiny/nano. */}
+      {/* ROW 2: month + ark row (one line; scrollable) */}
+      <div className="kai-status__mid" aria-label="Kai timeline (month/ark row)">
+        {MonthNamePill}
+        {MonthChakraPill}
+        {ArkPill}
+      </div>
+
+      {/* ROW 3: countdown row (pulse drops here on tiny/nano) */}
       <div className="kai-status__bottom" aria-label="Next pulse row">
         {pulseOnTop ? null : PulsePill}
         {Countdown}

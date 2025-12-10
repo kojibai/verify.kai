@@ -1,12 +1,18 @@
 /* src/pages/sigilstream/status/KaiStatus.css
-   KaiStatus — Atlantean μpulse Bar (v4.6)
+   KaiStatus — Atlantean μpulse Bar (v4.8)
    SLIM TIMELINE MODE • krystal-frost • never-cut.
 
-   ✅ TOP line (one line, never wraps): Beat:Step • Day • Ark • (Pulse on wide/tight)
+   ✅ TOP line (one line, never wraps): Beat:Step • D/M/Y • Day • DayChakra • MonthName • MonthChakra • Ark • (Pulse on wide/tight)
    ✅ BOTTOM line: Pulse (when tiny/nano) + NEXT countdown (full length)
    ✅ No ellipsis, no abbreviations, no hidden data
    ✅ If the TOP line is too narrow: it becomes horizontally scrollable (so nothing is cut off)
    ✅ TRUE scaling via --kai-ui-scale (no transforms)
+
+   ✅ NEW (v4.8 TSX parity):
+   - Chakra tint hooks via data-chakra on pills + D/M segments
+   - Day name + Day chakra + D# segment all match DAY chakra color
+   - Month name + Month chakra + M# segment all match MONTH chakra color
+   - Ark pill is always HEART colored
 */
 
 .kai-feed-status{
@@ -18,6 +24,16 @@
 
   /* local alias */
   --s: var(--kai-ui-scale);
+
+  /* ───────── chakra ink (RGB triplets) ───────── */
+  /* Keep these as your canonical chakra colors (edit here to match your system exactly). */
+  --ch-root: 255 72 92;
+  --ch-sacral: 255 156 72;
+  --ch-solar: 255 226 90;
+  --ch-heart: 92 236 134;
+  --ch-throat: 98 190 255;
+  --ch-third-eye: 146 126 255;
+  --ch-crown: 238 150 255;
 
   /* ───────── geometry (slim) ───────── */
   --r: 16px;
@@ -141,7 +157,7 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
-   SLIM STRUCTURE (v4.6 TSX)
+   SLIM STRUCTURE (v4.8 TSX)
    .kai-status__top    (one line timeline; scrolls horizontally if needed)
    .kai-status__bottom (pulse (if needed) + countdown slightly below)
    ───────────────────────────────────────────────────────────── */
@@ -266,6 +282,202 @@
 .kai-pill__num{
   font-weight: 900;
   letter-spacing: 0.01em;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   D/M/Y pill (segmented; D and M inherit chakra tint)
+   ───────────────────────────────────────────────────────────── */
+
+.kai-pill--dmy{
+  gap: calc(4px * var(--s));
+  padding: 0 clamp(6px, calc(8px * var(--s)), 9px);
+}
+
+.kai-dmy__seg{
+  display: inline-flex;
+  align-items: baseline;
+  gap: calc(2px * var(--s));
+  font-weight: 860;
+  letter-spacing: 0.01em;
+}
+
+.kai-dmy__num{
+  font-weight: 930;
+  letter-spacing: 0.01em;
+}
+
+.kai-dmy__sep{
+  opacity: 0.65;
+  color: rgba(220,232,250,0.92);
+  margin: 0 calc(1px * var(--s));
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Chakra tinting (exact color hooks)
+   - Targets only the REAL chakra names (Pulse/Year stay neutral)
+   - Applies to: Day, DayChakra, MonthName, MonthChakra, Ark(Heart), and D/M segments
+   ───────────────────────────────────────────────────────────── */
+
+@supports (color: rgb(0 0 0 / 1)){
+  /* ROOT */
+  .kai-feed-status :is(.kai-pill,.kai-dmy__seg)[data-chakra="Root"]{
+    --ch: var(--ch-root);
+    color: rgb(var(--ch) / 0.96);
+    border-color: rgb(var(--ch) / 0.34);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.22);
+    background:
+      radial-gradient(140% 220% at 22% 0%,
+        rgb(var(--ch) / 0.22),
+        rgba(255,255,255,0.00) 62%),
+      linear-gradient(180deg,
+        rgba(255,255,255,0.085),
+        rgba(255,255,255,0.020));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.12),
+      0 10px 22px rgba(0,0,0,0.16),
+      0 0 0 1px rgb(var(--ch) / 0.10);
+  }
+
+  /* SACRAL */
+  .kai-feed-status :is(.kai-pill,.kai-dmy__seg)[data-chakra="Sacral"]{
+    --ch: var(--ch-sacral);
+    color: rgb(var(--ch) / 0.96);
+    border-color: rgb(var(--ch) / 0.34);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.22);
+    background:
+      radial-gradient(140% 220% at 22% 0%,
+        rgb(var(--ch) / 0.22),
+        rgba(255,255,255,0.00) 62%),
+      linear-gradient(180deg,
+        rgba(255,255,255,0.085),
+        rgba(255,255,255,0.020));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.12),
+      0 10px 22px rgba(0,0,0,0.16),
+      0 0 0 1px rgb(var(--ch) / 0.10);
+  }
+
+  /* SOLAR PLEXUS */
+  .kai-feed-status :is(.kai-pill,.kai-dmy__seg)[data-chakra="Solar Plexus"]{
+    --ch: var(--ch-solar);
+    color: rgb(var(--ch) / 0.96);
+    border-color: rgb(var(--ch) / 0.36);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.22);
+    background:
+      radial-gradient(140% 220% at 22% 0%,
+        rgb(var(--ch) / 0.20),
+        rgba(255,255,255,0.00) 62%),
+      linear-gradient(180deg,
+        rgba(255,255,255,0.090),
+        rgba(255,255,255,0.020));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.12),
+      0 10px 22px rgba(0,0,0,0.16),
+      0 0 0 1px rgb(var(--ch) / 0.10);
+  }
+
+  /* HEART (also Ark) */
+  .kai-feed-status :is(.kai-pill,.kai-dmy__seg)[data-chakra="Heart"]{
+    --ch: var(--ch-heart);
+    color: rgb(var(--ch) / 0.96);
+    border-color: rgb(var(--ch) / 0.34);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.22);
+    background:
+      radial-gradient(140% 220% at 22% 0%,
+        rgb(var(--ch) / 0.22),
+        rgba(255,255,255,0.00) 62%),
+      radial-gradient(140% 220% at 90% 120%,
+        rgb(var(--ch) / 0.14),
+        rgba(255,255,255,0.00) 62%),
+      linear-gradient(180deg,
+        rgba(255,255,255,0.085),
+        rgba(255,255,255,0.020));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.12),
+      0 10px 22px rgba(0,0,0,0.16),
+      0 0 0 1px rgb(var(--ch) / 0.10);
+  }
+
+  /* THROAT */
+  .kai-feed-status :is(.kai-pill,.kai-dmy__seg)[data-chakra="Throat"]{
+    --ch: var(--ch-throat);
+    color: rgb(var(--ch) / 0.96);
+    border-color: rgb(var(--ch) / 0.34);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.22);
+    background:
+      radial-gradient(140% 220% at 22% 0%,
+        rgb(var(--ch) / 0.22),
+        rgba(255,255,255,0.00) 62%),
+      linear-gradient(180deg,
+        rgba(255,255,255,0.085),
+        rgba(255,255,255,0.020));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.12),
+      0 10px 22px rgba(0,0,0,0.16),
+      0 0 0 1px rgb(var(--ch) / 0.10);
+  }
+
+  /* THIRD EYE */
+  .kai-feed-status :is(.kai-pill,.kai-dmy__seg)[data-chakra="Third Eye"]{
+    --ch: var(--ch-third-eye);
+    color: rgb(var(--ch) / 0.96);
+    border-color: rgb(var(--ch) / 0.34);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.22);
+    background:
+      radial-gradient(140% 220% at 22% 0%,
+        rgb(var(--ch) / 0.22),
+        rgba(255,255,255,0.00) 62%),
+      linear-gradient(180deg,
+        rgba(255,255,255,0.085),
+        rgba(255,255,255,0.020));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.12),
+      0 10px 22px rgba(0,0,0,0.16),
+      0 0 0 1px rgb(var(--ch) / 0.10);
+  }
+
+  /* CROWN (label may render as Krown, but data-chakra stays Crown) */
+  .kai-feed-status :is(.kai-pill,.kai-dmy__seg)[data-chakra="Crown"]{
+    --ch: var(--ch-crown);
+    color: rgb(var(--ch) / 0.96);
+    border-color: rgb(var(--ch) / 0.34);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.22);
+    background:
+      radial-gradient(140% 220% at 22% 0%,
+        rgb(var(--ch) / 0.22),
+        rgba(255,255,255,0.00) 62%),
+      linear-gradient(180deg,
+        rgba(255,255,255,0.085),
+        rgba(255,255,255,0.020));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.12),
+      0 10px 22px rgba(0,0,0,0.16),
+      0 0 0 1px rgb(var(--ch) / 0.10);
+  }
+}
+
+/* Make the segmented D/M/Y pill keep its separators neutral even when segments are tinted */
+.kai-pill--dmy .kai-dmy__sep{
+  color: rgba(220,232,250,0.88);
+}
+
+/* Slightly tighten the chakra name pills (they can be longer words) */
+.kai-pill--dayChakra,
+.kai-pill--monthChakra{
+  padding: 0 clamp(6px, calc(8px * var(--s)), 9px);
+  letter-spacing: 0.01em;
+}
+
+/* Month name can be wide; keep it crisp */
+.kai-pill--monthName{
+  letter-spacing: 0.01em;
+}
+
+/* Ark pill must always read like “Heart” even if other rules change */
+.kai-pill--ark{
+  /* data-chakra="Heart" from TSX drives actual tint;
+     this just ensures shape/weight feels “official” */
+  font-weight: 900;
 }
 
 /* ─────────────────────────────────────────────────────────────
