@@ -877,11 +877,11 @@ function PayloadCard(props: {
         <span>☤Kai: {pulse}</span>
         <span className="sf-muted"> · </span>
       <span className="sf-kai-label">
-  {pad2(beat)}:{pad2(step)} — D{d}/M{m}/Y{y} · {weekday}
+  {pad2(beat)}:{pad2(step)} — D{d}/M{m}/Y{y} · {ark} 
 </span>
 
         <span className="sf-muted"> · </span>
-        <span className="sf-kai-label">{ark} · {monthName} </span>
+        <span className="sf-kai-label"> {weekday} · {monthName} </span>
 <span className="sf-kai-label">
  
 </span>
