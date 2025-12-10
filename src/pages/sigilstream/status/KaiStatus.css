@@ -1,8 +1,12 @@
 /* src/pages/sigilstream/status/KaiStatus.css
-   KaiStatus — Atlantean μpulse Bar (v3.3)
-   Single-line • zero-overlap • krystal-frost.
-   ✅ ALWAYS SHOWS: Day + Chakra + Pulse (no hiding, no ellipsis, no abbreviations)
-   ✅ TRUE layout scaling: uses --kai-ui-scale to shrink font/padding/gaps (no transforms)
+   KaiStatus — Atlantean μpulse Bar (v4.6)
+   SLIM TIMELINE MODE • krystal-frost • never-cut.
+
+   ✅ TOP line (one line, never wraps): Beat:Step • Day • Ark • (Pulse on wide/tight)
+   ✅ BOTTOM line: Pulse (when tiny/nano) + NEXT countdown (full length)
+   ✅ No ellipsis, no abbreviations, no hidden data
+   ✅ If the TOP line is too narrow: it becomes horizontally scrollable (so nothing is cut off)
+   ✅ TRUE scaling via --kai-ui-scale (no transforms)
 */
 
 .kai-feed-status{
@@ -15,14 +19,17 @@
   /* local alias */
   --s: var(--kai-ui-scale);
 
-  /* ───────── geometry ───────── */
-  --r: 18px;
+  /* ───────── geometry (slim) ───────── */
+  --r: 16px;
   --padX: 12px;
-  --padY: 10px;
+  --padY: 8px;
 
-  /* base gaps */
-  --gap: 10px;
-  --gapR: 10px;
+  --gapTop: 8px;
+  --gapBottom: 10px;
+  --pillGap: 8px;
+
+  --barH: 5px;
+  --barBottom: 7px;
 
   /* ───────── ink ───────── */
   --ink: rgba(240,246,255,0.96);
@@ -38,14 +45,12 @@
   --a2: rgba(255,180,245,0.12);
 
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
+  display: block;
 
-  gap: 10px;
-
-  height: 56px;
+  /* Slim, content-driven height (never clips). */
+  min-height: 48px;
   padding: var(--padY) var(--padX);
+  padding-bottom: calc(var(--padY) + var(--barH) + var(--barBottom) + 2px);
   margin: 8px 12px 10px;
 
   border-radius: var(--r);
@@ -72,7 +77,6 @@
   -webkit-backdrop-filter: blur(16px) saturate(1.22);
 
   overflow: hidden;
-  white-space: nowrap;
   font-variant-numeric: tabular-nums;
   contain: layout paint;
 }
@@ -128,7 +132,7 @@
 
 /* boundary flash */
 .kai-feed-status--flash{
-  animation: kai-status-flash 200ms ease-out;
+  animation: kai-status-flash 180ms ease-out;
 }
 @keyframes kai-status-flash{
   0%   { filter: brightness(1); }
@@ -136,52 +140,87 @@
   100% { filter: brightness(1); }
 }
 
-/* LEFT */
-.kai-feed-status__left{
+/* ─────────────────────────────────────────────────────────────
+   SLIM STRUCTURE (v4.6 TSX)
+   .kai-status__top    (one line timeline; scrolls horizontally if needed)
+   .kai-status__bottom (pulse (if needed) + countdown slightly below)
+   ───────────────────────────────────────────────────────────── */
+
+.kai-status__top{
   display: flex;
   align-items: center;
-  gap: calc(var(--gap) * var(--s));
-  min-width: 0;
-  overflow: hidden;
-}
+  gap: calc(var(--gapTop) * var(--s));
 
-/* RIGHT */
-.kai-feed-status__right{
-  display: flex;
+  /* MUST stay one line */
+  flex-wrap: nowrap;
+  white-space: nowrap;
+
+  /* never cut off: allow horizontal scroll instead of clipping */
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+
+  min-width: 0;
+  padding-bottom: calc(2px * var(--s));
+}
+.kai-status__top::-webkit-scrollbar{ height: 0; width: 0; }
+
+.kai-status__bsiWrap{
+  display: inline-flex;
   align-items: baseline;
-  gap: calc(var(--gapR) * var(--s));
+  gap: calc(10px * var(--s));
   flex: 0 0 auto;
-  margin-left: auto; /* <- pushes right side, no space-between weirdness */
-  min-width: 0;
+  white-space: nowrap;
 }
 
-/* labels */
-.kai-feed-status__kLabel{
+.kai-status__kLabel{
   color: var(--muted);
-  font-size: clamp(9px, calc(11px * var(--s)), 11px);
+  font-size: clamp(9px, calc(10.5px * var(--s)), 11px);
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  opacity: 0.92;
-  flex: 0 0 auto;
+  opacity: 0.88;
+  white-space: nowrap;
 }
 
-.kai-feed-status__bsi{
+.kai-status__bsi{
   color: var(--ink);
-  font-size: clamp(14px, calc(18px * var(--s)), 18px);
+  font-size: clamp(14px, calc(17px * var(--s)), 18px);
   font-weight: 860;
   letter-spacing: 0.02em;
   text-shadow: 0 1px 0 rgba(0,0,0,0.25);
-  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
-/* pills */
+.kai-status__bottom{
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: calc(var(--gapBottom) * var(--s));
+  min-width: 0;
+
+  /* slightly below timeline */
+  margin-top: calc(2px * var(--s));
+}
+
+/* nano: stack bottom (pulse above countdown) */
+.kai-feed-status[data-bottom="stack"] .kai-status__bottom{
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(6px * var(--s));
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Pills (never truncate)
+   ───────────────────────────────────────────────────────────── */
+
 .kai-pill{
   display: inline-flex;
   align-items: center;
   gap: calc(6px * var(--s));
 
-  height: clamp(22px, calc(26px * var(--s)), 26px);
-  padding: 0 clamp(6px, calc(10px * var(--s)), 10px);
+  height: clamp(20px, calc(24px * var(--s)), 26px);
+  padding: 0 clamp(6px, calc(9px * var(--s)), 10px);
   border-radius: 999px;
 
   border: 1px solid rgba(255,255,255,0.12);
@@ -190,24 +229,20 @@
       rgba(255,255,255,0.10),
       rgba(255,255,255,0.00) 62%),
     linear-gradient(180deg,
-      rgba(255,255,255,0.085),
-      rgba(255,255,255,0.022));
+      rgba(255,255,255,0.080),
+      rgba(255,255,255,0.020));
 
   color: rgba(236,244,255,0.92);
-  font-size: clamp(9.8px, calc(12px * var(--s)), 12px);
+  font-size: clamp(9.6px, calc(11.5px * var(--s)), 12px);
   line-height: 1;
 
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.10),
-    0 10px 22px rgba(0,0,0,0.18);
+    0 10px 22px rgba(0,0,0,0.16);
 
   flex: 0 0 auto;
-}
 
-/* NEVER truncate day/chakra/pulse text */
-.kai-pill--day,
-.kai-pill--chakra,
-.kai-pill--pulse{
+  /* NEVER truncate pill content */
   max-width: none;
   overflow: visible;
   text-overflow: clip;
@@ -233,44 +268,62 @@
   letter-spacing: 0.01em;
 }
 
-/* countdown */
-.kai-feed-status__nLabel{
-  color: var(--muted);
-  font-size: clamp(9px, calc(11px * var(--s)), 11px);
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  opacity: 0.90;
+/* ─────────────────────────────────────────────────────────────
+   Countdown (slightly below, full length)
+   ───────────────────────────────────────────────────────────── */
+
+.kai-status__countdown{
+  display: inline-flex;
+  align-items: baseline;
+  gap: calc(8px * var(--s));
+  flex: 0 0 auto;
+  min-width: 0;
+  white-space: nowrap;
 }
 
-.kai-feed-status__nVal{
+.kai-status__nLabel{
+  color: var(--muted);
+  font-size: clamp(9px, calc(10.5px * var(--s)), 11px);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.88;
+  white-space: nowrap;
+}
+
+.kai-status__nVal{
   color: var(--ink);
-  font-size: clamp(14px, calc(18px * var(--s)), 18px);
+  font-size: clamp(13px, calc(16.5px * var(--s)), 18px);
   font-weight: 880;
   letter-spacing: 0.01em;
   text-shadow: 0 1px 0 rgba(0,0,0,0.25);
+  white-space: nowrap;
 }
 
-.kai-feed-status__nUnit{
+.kai-status__nUnit{
   margin-left: clamp(2px, calc(4px * var(--s)), 4px);
   color: rgba(210,224,245,0.90);
-  font-size: clamp(10px, calc(12px * var(--s)), 12px);
+  font-size: clamp(10px, calc(11.5px * var(--s)), 12px);
   letter-spacing: 0.10em;
+  white-space: nowrap;
 }
 
-/* progress bar */
+/* ─────────────────────────────────────────────────────────────
+   Progress bar (slimmer)
+   ───────────────────────────────────────────────────────────── */
+
 .kai-feed-status__bar{
   position: absolute;
   left: var(--padX);
   right: var(--padX);
-  bottom: 9px;
+  bottom: var(--barBottom);
 
-  height: 6px;
+  height: var(--barH);
   border-radius: 999px;
   overflow: hidden;
 
   border: 1px solid rgba(255,255,255,0.12);
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.065), rgba(255,255,255,0.012)),
+    linear-gradient(180deg, rgba(255,255,255,0.060), rgba(255,255,255,0.012)),
     radial-gradient(140% 240% at 50% 50%,
       rgba(255,255,255,0.06),
       rgba(255,255,255,0.00) 60%);
@@ -322,15 +375,36 @@
   100% { transform: translateX(560%); opacity: 0.0; }
 }
 
-/* density modes: labels optional, data always */
-.kai-feed-status[data-layout="compact"]{ height: 54px; }
-.kai-feed-status[data-layout="micro"]{ height: 52px; --padX: 10px; }
+/* ─────────────────────────────────────────────────────────────
+   Layout tuning (never hide anything)
+   ───────────────────────────────────────────────────────────── */
 
-.kai-feed-status[data-layout="compact"] .kai-feed-status__kLabel,
-.kai-feed-status[data-layout="compact"] .kai-feed-status__nLabel,
-.kai-feed-status[data-layout="micro"] .kai-feed-status__kLabel,
-.kai-feed-status[data-layout="micro"] .kai-feed-status__nLabel{
-  display: none;
+.kai-feed-status[data-layout="tight"]{
+  --padX: 11px;
+  --padY: 8px;
+  --r: 15px;
+  --pillGap: 7px;
+  --barH: 5px;
+  --barBottom: 7px;
+}
+
+.kai-feed-status[data-layout="tiny"]{
+  --padX: 10px;
+  --padY: 8px;
+  --r: 14px;
+  --pillGap: 6px;
+  --barH: 5px;
+  --barBottom: 7px;
+}
+
+/* nano: tightest */
+.kai-feed-status[data-layout="nano"]{
+  --padX: 10px;
+  --padY: 7px;
+  --r: 14px;
+  --pillGap: 6px;
+  --barH: 4px;
+  --barBottom: 6px;
 }
 
 /* motion safety */

@@ -3,20 +3,15 @@
 
 /**
  * KaiStatus — Atlantean μpulse Bar
- * v3.4 — ALWAYS-SHOW MODE (Day + Chakra Ark + Pulse)
- * - Day + Chakra Ark ALWAYS render (no hiding at any size)
- * - No abbreviations (Kaelith stays Kaelith; Solar Plexus stays Solar Plexus)
- * - Layout driven by measured width: adjusts density + text scaling, never drops data
- * - Countdown display: fixed to 3 decimals (x.xxx)
+ * v4.6 — SLIM TIMELINE MODE
  *
- * Chakra Ark is derived from Beat:
- * 36 beats/day, 6 arks/day → 6 beats per ark:
- *   0–5   Ignition Ark
- *   6–11  Integration Ark
- *   12–17 Harmonization Ark
- *   18–23 Reflection Ark
- *   24–29 Purification Ark
- *   30–35 Dream Ark
+ * Goals (per your screenshot):
+ * - TOP line is the timeline: Beat:Step • Day • Ark (ALWAYS one line)
+ * - Countdown sits slightly below (full length, never squeezes the top line)
+ * - Pulse stays visible always:
+ *    - Wide/Tight: Pulse stays on the TOP line after Ark
+ *    - Tiny/Nano: Pulse drops to the lower row (left of countdown, or above if nano)
+ * - Never ellipsis, never abbreviate
  */
 
 import * as React from "react";
@@ -80,84 +75,97 @@ function readPulseDurSeconds(el: HTMLElement | null): number {
   return Number.isFinite(v) && v > 0 ? v : DEFAULT_PULSE_DUR_S;
 }
 
-/** Always-show modes: we never hide pills; we only tighten spacing + scale text. */
-type LayoutMode = "full" | "compact" | "micro";
+type LayoutMode = "wide" | "tight" | "tiny" | "nano";
+type BottomMode = "row" | "stack";
 
-/** Responsive layout mode based on *actual* rendered width (prevents overlap). */
-function useStatusLayout(ref: React.RefObject<HTMLElement | null>): LayoutMode {
+function layoutForWidth(width: number): LayoutMode {
+  if (width > 0 && width < 360) return "nano";
+  if (width > 0 && width < 520) return "tiny";
+  if (width > 0 && width < 760) return "tight";
+  return "wide";
+}
+
+function uiScaleFor(layout: LayoutMode): number {
+  switch (layout) {
+    case "nano":
+      return 0.84;
+    case "tiny":
+      return 0.90;
+    case "tight":
+      return 0.95;
+    default:
+      return 1.0;
+  }
+}
+
+function bottomModeFor(layout: LayoutMode): BottomMode {
+  // nano: give countdown its own line (pulse above it), to avoid any squeeze.
+  return layout === "nano" ? "stack" : "row";
+}
+
+function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
   const [width, setWidth] = React.useState<number>(0);
 
   React.useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
 
-    const setFromEl = (): void => {
+    const read = (): void => {
       const w = Math.round(el.getBoundingClientRect().width);
       setWidth(w);
     };
 
-    setFromEl();
+    read();
 
     if (typeof ResizeObserver !== "undefined") {
-      const ro = new ResizeObserver(() => setFromEl());
+      const ro = new ResizeObserver(() => read());
       ro.observe(el);
       return () => ro.disconnect();
     }
 
-    const onResize = (): void => setFromEl();
+    const onResize = (): void => read();
     window.addEventListener("resize", onResize, { passive: true });
     return () => window.removeEventListener("resize", onResize);
   }, [ref]);
 
-  // Collapse sooner than media queries to ensure no collisions.
-  if (width > 0 && width < 520) return "micro";
-  if (width > 0 && width < 760) return "compact";
-  return "full";
-}
-
-type KaiStatusVars = React.CSSProperties & {
-  ["--kai-progress"]?: number;
-  ["--kai-ui-scale"]?: number; // applied by CSS to scale text/pills (1..~0.86)
-};
-
-function uiScaleFor(layout: LayoutMode): number {
-  // Tuned to keep ALL labels visible without abbreviations.
-  // CSS will apply this via transform/typography sizing.
-  switch (layout) {
-    case "micro":
-      return 0.86;
-    case "compact":
-      return 0.92;
-    default:
-      return 1.0;
-  }
+  return width;
 }
 
 const ARK_NAMES = [
-  "Ignite",
-  "Integrate",
-  "Harmonize",
+  "Ignition",
+  "Integration",
+  "Harmonization",
   "Reflekt",
   "Purify",
   "Dream",
 ] as const;
 
-type ChakraArkName = (typeof ARK_NAMES)[number];
+type ArkName = (typeof ARK_NAMES)[number];
 
-function chakraArkFromBeat(beat: number): ChakraArkName {
+function arkFromBeat(beat: number): ArkName {
   const b = Number.isFinite(beat) ? Math.floor(beat) : 0;
   const idx = Math.max(0, Math.min(5, Math.floor(b / 6)));
   return ARK_NAMES[idx];
 }
 
+type KaiStatusVars = React.CSSProperties & {
+  ["--kai-progress"]?: number;
+  ["--kai-ui-scale"]?: number;
+};
+
 export function KaiStatus(): React.JSX.Element {
   const kaiNow = useAlignedKaiTicker();
   const secsLeftAnchor = useKaiPulseCountdown(true);
+  const secsLeft = useSmoothCountdown(secsLeftAnchor);
 
   const rootRef = React.useRef<HTMLDivElement | null>(null);
-  const layout = useStatusLayout(rootRef);
+  const width = useElementWidth(rootRef);
 
-  const secsLeft = useSmoothCountdown(secsLeftAnchor);
+  const layout: LayoutMode = layoutForWidth(width);
+  const bottomMode: BottomMode = bottomModeFor(layout);
+
+  // Pulse sits on TOP line when there’s room; otherwise drops to the bottom row.
+  const pulseOnTop = layout === "wide" || layout === "tight";
 
   const [pulseDur, setPulseDur] = React.useState<number>(DEFAULT_PULSE_DUR_S);
   React.useEffect(() => {
@@ -174,7 +182,7 @@ export function KaiStatus(): React.JSX.Element {
 
     if (prev != null && secsLeftAnchor != null && secsLeftAnchor > prev + 0.25) {
       setFlash(true);
-      const t = window.setTimeout(() => setFlash(false), 200);
+      const t = window.setTimeout(() => setFlash(false), 180);
       return () => window.clearTimeout(t);
     }
     return;
@@ -187,19 +195,17 @@ export function KaiStatus(): React.JSX.Element {
     return clamp01(1 - secsLeft / pulseDur);
   }, [secsLeft, pulseDur]);
 
-  // Full precision for a11y/title; 3 decimals for display.
   const secsTextFull = secsLeft !== null ? secsLeft.toFixed(6) : "—";
   const secsText = secsLeft !== null ? secsLeft.toFixed(3) : "—";
 
-  // Labels: ALWAYS FULL (no abbreviations).
-  const harmonicDayFull = String(kaiNow.harmonicDay);
+  const dayFull = String(kaiNow.harmonicDay);
 
   const beatNum =
     typeof kaiNow.beat === "number"
       ? kaiNow.beat
       : Number.parseInt(String(kaiNow.beat), 10) || 0;
 
-  const chakraArkFull: ChakraArkName = chakraArkFromBeat(beatNum);
+  const arkFull: ArkName = arkFromBeat(beatNum);
 
   const styleVars: KaiStatusVars = React.useMemo(() => {
     return {
@@ -208,69 +214,73 @@ export function KaiStatus(): React.JSX.Element {
     };
   }, [progress, layout]);
 
+  const Countdown = (
+    <div className="kai-status__countdown" aria-label="Next pulse">
+      <span className="kai-status__nLabel">NEXT</span>
+      <span
+        className="kai-status__nVal"
+        title={secsTextFull}
+        aria-label={`Next pulse in ${secsTextFull} seconds`}
+      >
+        {secsText}
+        <span className="kai-status__nUnit">s</span>
+      </span>
+    </div>
+  );
+
+  const PulsePill = (
+    <span
+      className="kai-pill kai-pill--pulse"
+      title={`Pulse ${kaiNow.pulse}`}
+      aria-label={`Pulse ${kaiNow.pulse}`}
+    >
+      ☤KAI: <strong className="kai-pill__num">{kaiNow.pulse}</strong>
+    </span>
+  );
+
   return (
     <div
       ref={rootRef}
-      className={`kai-feed-status${flash ? " kai-feed-status--flash" : ""}`}
+      className={`kai-feed-status kai-feed-status--slim${
+        flash ? " kai-feed-status--flash" : ""
+      }`}
       role="status"
       aria-live="polite"
       data-layout={layout}
-      data-kai-beat={kaiNow.beat}
-      data-kai-step={kaiNow.step}
+      data-bottom={bottomMode}
       data-kai-bsi={beatStepDisp}
-      data-kai-pulse={kaiNow.pulse}
-      data-kai-ark={chakraArkFull}
+      data-kai-ark={arkFull}
       style={styleVars}
     >
-      <div className="kai-feed-status__left">
-        <span className="kai-feed-status__kLabel" aria-label="Kairos">
-          KAIROS
+      {/* TOP: timeline must stay on ONE line: Beat:Step • Day • Ark (Pulse optionally appended) */}
+      <div className="kai-status__top" aria-label="Kai timeline">
+        <span className="kai-status__bsiWrap" aria-label={`Beat step ${beatStepDisp}`}>
+          <span className="kai-status__kLabel" aria-hidden="true">
+            KAIROS
+          </span>
+          <span className="kai-status__bsi" title={beatStepDisp}>
+            {beatStepDisp}
+          </span>
         </span>
 
-        <span className="kai-feed-status__bsi" aria-label={`Beat step ${beatStepDisp}`}>
-          {beatStepDisp}
+        <span className="kai-pill kai-pill--day" title={dayFull} aria-label={`Day ${dayFull}`}>
+          {dayFull}
         </span>
 
-        {/* ✅ ALWAYS show Day (full) */}
-        <span
-          className="kai-pill kai-pill--day"
-          title={harmonicDayFull}
-          aria-label={`Harmonic day ${harmonicDayFull}`}
-        >
-          {harmonicDayFull}
+        <span className="kai-pill kai-pill--ark" title={arkFull} aria-label={`Ark ${arkFull}`}>
+          {arkFull}
         </span>
 
-        {/* ✅ ALWAYS show Chakra Ark (full) */}
-        <span
-          className="kai-pill kai-pill--chakra"
-          title={chakraArkFull}
-          aria-label={`Chakra ark ${chakraArkFull}`}
-        >
-          {chakraArkFull}
-        </span>
-
-        {/* ✅ ALWAYS show Pulse */}
-        <span
-          className="kai-pill kai-pill--pulse"
-          title={`Absolute pulse ${kaiNow.pulse}`}
-          aria-label={`Absolute pulse ${kaiNow.pulse}`}
-        >
-          ☤KAI: <strong className="kai-pill__num">{kaiNow.pulse}</strong>
-        </span>
+        {pulseOnTop ? PulsePill : null}
       </div>
 
-      <div className="kai-feed-status__right" aria-label="Countdown to next pulse">
-        <span className="kai-feed-status__nLabel">NEXT</span>
-        <span
-          className="kai-feed-status__nVal"
-          title={secsTextFull}
-          aria-label={`Next pulse in ${secsTextFull} seconds`}
-        >
-          {secsText}
-          <span className="kai-feed-status__nUnit">s</span>
-        </span>
+      {/* BOTTOM: countdown slightly below (full length). Pulse drops here on tiny/nano. */}
+      <div className="kai-status__bottom" aria-label="Next pulse row">
+        {pulseOnTop ? null : PulsePill}
+        {Countdown}
       </div>
 
+      {/* Progress bar (always present) */}
       <div className="kai-feed-status__bar" aria-hidden="true">
         <div className="kai-feed-status__barFill" />
         <div className="kai-feed-status__barSpark" />
