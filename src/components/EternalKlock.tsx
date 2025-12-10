@@ -20,6 +20,7 @@
  * - Glow-off timeouts are tracked + cleared on unmount (no setState-after-unmount)
  * - BroadcastChannel uses one channel for RX/TX (still instant; simpler cleanup)
  * - Year progress bar uses klock.yearPercent when available (no mismatched math)
+ * - ✅ Added a clear CLOSE “X” button inside the opened panel (CSS next)
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -392,9 +393,9 @@ const CHAKRA_ARC_DESCRIPTIONS: Record<string, string> = {
     "The Dream Ark is the Womb of the Stars — embrasing the Soul Star Spiral and the krystalline field of memory. Color: iridescent violet-silver. Element: dream plasma, encoded light. Geometry: spiral merkaba within crystalline lattice. This is the arc of divine dreaming — not illusion, but deeper reality. Time dissolves. Prophesy returns. Here, the mind quiets, and the soul speaks. Your ancestors walk beside you. Your future self guides you. Your imagination is not fiction — it is a map. You remember that the dream was not something you had. It was something that had you. This is not sleep — it is awakening into the greater dream, the one that dreamed you into form. You are not imagining — you are remembering.",
 };
 
-/* ────────────────────────────────────────────────────────────────
+/* ────────────────────────────────────────────────
    OFFLINE Kai-Klock math (mirrors backend API fields)
-   ──────────────────────────────────────────────────────────────── */
+   ──────────────────────────────────────────────── */
 function muSinceGenesis(atMs: number): number {
   const sec = (atMs - ETERNAL_GENESIS_PULSE) / 1000;
   const pulses = sec / KAI_PULSE_DURATION;
@@ -672,9 +673,9 @@ function buildOfflinePayload(now: Date = new Date()): KlockData {
   };
 }
 
-/* ────────────────────────────────────────────────────────────────
+/* ────────────────────────────────────────────────
    Pulse scheduler helpers
-   ──────────────────────────────────────────────────────────────── */
+   ──────────────────────────────────────────────── */
 const MS_PER_PULSE = KAI_PULSE_DURATION * 1000;
 
 function msToNextPulse(nowMs: number): number {
@@ -710,19 +711,17 @@ function makePulseWorker(): PulseWorkerHandle | null {
   }
 }
 
-/* ────────────────────────────────────────────────────────────────
+/* ────────────────────────────────────────────────
    Solar sync broadcast
-   ──────────────────────────────────────────────────────────────── */
+   ──────────────────────────────────────────────── */
 const SOLAR_BROADCAST_KEY = "SOVEREIGN_SOLAR_LAST_UPDATE";
 const SOLAR_BC_NAME = "SOVEREIGN_SOLAR_SYNC";
 
 type SolarBroadcastMessage = { type: "solar:updated"; t: number };
 
-
-
-/* ────────────────────────────────────────────────────────────────
+/* ────────────────────────────────────────────────
    Main Component
-   ──────────────────────────────────────────────────────────────── */
+   ──────────────────────────────────────────────── */
 export const EternalKlock: React.FC = () => {
   const [klock, setKlock] = useState<KlockData | null>(null);
   const [showDetails, setShowDetails] = useState<boolean>(false);
@@ -763,9 +762,6 @@ export const EternalKlock: React.FC = () => {
   useEffect(() => {
     solarOverrideRef.current = solarOverrideSec;
   }, [solarOverrideSec]);
-
-
-
 
   // Portal target
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
@@ -929,7 +925,9 @@ export const EternalKlock: React.FC = () => {
     data.solarChakraStepString = `${solarBeatIdx}:${String(solarStepIndex).padStart(2, "0")}`;
 
     // Ark from solar beat (0..35 → 0..5)
-    const arcIndex = Math.floor((((solarBeatIdx % CHAKRA_BEATS_PER_DAY) + CHAKRA_BEATS_PER_DAY) % CHAKRA_BEATS_PER_DAY) / 6);
+    const arcIndex = Math.floor(
+      (((((solarBeatIdx % CHAKRA_BEATS_PER_DAY) + CHAKRA_BEATS_PER_DAY) % CHAKRA_BEATS_PER_DAY) / 6) % 6)
+    );
     const arcKey =
       ["Ignition Ark", "Integration Ark", "Harmonization Ark", "Reflection Ark", "Purification Ark", "Dream Ark"][arcIndex] ??
       "Ignition Ark";
@@ -1308,16 +1306,11 @@ export const EternalKlock: React.FC = () => {
   const eternalWeekDayIndex0 = Math.floor(eternalPulsesIntoWeek / HARMONIC_DAY_PULSES) % 6;
   const eternalWeekDayName = HARMONIC_DAYS[eternalWeekDayIndex0];
 
-  const arkIndexForKey =
-    Math.floor(((((klock.solarChakraStep?.beatIndex ?? 0) % 36) + 36) % 36) / 6) % 6;
+  const arkIndexForKey = Math.floor(((((klock.solarChakraStep?.beatIndex ?? 0) % 36) + 36) % 36) / 6) % 6;
   const kaiKey = `ark-${arkIndexForKey}-${klock.solarChakraStepString}`;
 
   return (
-    <div
-      ref={containerRef}
-      className="eternal-klock-container"
-
-    >
+    <div ref={containerRef} className="eternal-klock-container">
       <div className="eternal-klock-header">
         <div
           ref={toggleRef}
@@ -1354,7 +1347,6 @@ export const EternalKlock: React.FC = () => {
             aria-label="Eternal Klock Details"
             ref={overlayRef}
             tabIndex={-1}
-
             onClick={(e) => {
               if (e.target === overlayRef.current) setShowDetails(false);
             }}
@@ -1362,19 +1354,23 @@ export const EternalKlock: React.FC = () => {
               if (e.key === "Escape") setShowDetails(false);
             }}
           >
-
-
             <div className="eternal-modal-card" ref={detailRef} onClick={(e) => e.stopPropagation()}>
+              {/* ✅ CLEAR CLOSE X (CSS will position + style) */}
+              <button
+                type="button"
+                className="ek-close-btn"
+                aria-label="Close"
+                title="Close"
+                onClick={() => setShowDetails(false)}
+              >
+                ×
+              </button>
+
               {/* GRAND DISPLAY CONTROLS */}
               <div className="ek-display-controls" aria-label="Display scale controls">
                 <div className="ek-scale-row">
-  
-
-                  <div className="ek-scale-readout">
-    
-                  </div>
+                  <div className="ek-scale-readout"></div>
                 </div>
-
               </div>
 
               <div className="eternal-klock-detail">
@@ -1393,7 +1389,8 @@ export const EternalKlock: React.FC = () => {
                 <div className="eternal-klock-section-title">
                   <img src="/assets/eternal.svg" alt="Eternal Title" style={{ width: "100%", height: "auto" }} />
                   <strong>Date:</strong>{" "}
-                  D{klock.eternalChakraBeat?.dayOfMonth ?? klock.eternalMonthProgress.daysElapsed + 1} / M{(klock.eternalChakraBeat?.eternalMonthIndex ?? 0) + 1}
+                  D{klock.eternalChakraBeat?.dayOfMonth ?? klock.eternalMonthProgress.daysElapsed + 1} / M
+                  {(klock.eternalChakraBeat?.eternalMonthIndex ?? 0) + 1}
                 </div>
 
                 {klock.chakraStep && klock.eternalChakraBeat && (
@@ -1404,8 +1401,9 @@ export const EternalKlock: React.FC = () => {
                     </code>
                     <br />
                     <small style={{ display: "block", marginTop: "0.25rem" }}>
-                      Beat <strong>{klock.eternalChakraBeat.beatIndex}</strong> / {klock.eternalChakraBeat.totalBeats - 1} — Step{" "}
-                      <strong>{klock.chakraStep.stepIndex}</strong> / {klock.chakraStep.stepsPerBeat} ({klock.chakraStep.percentIntoStep.toFixed(1)}%)
+                      Beat <strong>{klock.eternalChakraBeat.beatIndex}</strong> / {klock.eternalChakraBeat.totalBeats - 1} —
+                      Step <strong>{klock.chakraStep.stepIndex}</strong> / {klock.chakraStep.stepsPerBeat} (
+                      {klock.chakraStep.percentIntoStep.toFixed(1)}%)
                     </small>
 
                     <div>
@@ -1426,7 +1424,8 @@ export const EternalKlock: React.FC = () => {
                 </div>
 
                 <div>
-                  <strong>Kai-Pulse(Today):</strong> {(klock.kaiPulseEternal % HARMONIC_DAY_PULSES).toFixed(2)} / {HARMONIC_DAY_PULSES.toFixed(2)}
+                  <strong>Kai-Pulse(Today):</strong> {(klock.kaiPulseEternal % HARMONIC_DAY_PULSES).toFixed(2)} /{" "}
+                  {HARMONIC_DAY_PULSES.toFixed(2)}
                 </div>
 
                 <div>
@@ -1498,7 +1497,9 @@ export const EternalKlock: React.FC = () => {
 
                 <div className="week-progress-bar">
                   <div
-                    className={`week-progress-fill ${glowPulse ? "sync-pulse" : ""} ${Math.round(weekPercent) === 100 ? "burst" : ""}`}
+                    className={`week-progress-fill ${glowPulse ? "sync-pulse" : ""} ${
+                      Math.round(weekPercent) === 100 ? "burst" : ""
+                    }`}
                     style={{ width: `${weekPercent}%` }}
                     title={`${weekPercent.toFixed(2)}% of week`}
                   />
@@ -1528,7 +1529,8 @@ export const EternalKlock: React.FC = () => {
                 </div>
 
                 <div>
-                  <strong>Kai-Pulses (Breathes) Into Month:</strong> {(klock.kaiPulseEternal % HARMONIC_MONTH_PULSES).toFixed(2)}
+                  <strong>Kai-Pulses (Breathes) Into Month:</strong>{" "}
+                  {(klock.kaiPulseEternal % HARMONIC_MONTH_PULSES).toFixed(2)}
                 </div>
 
                 <div>
@@ -1544,8 +1546,12 @@ export const EternalKlock: React.FC = () => {
                 <div className="month-progress-bar">
                   <div
                     className={`month-progress-fill ${glowPulse ? "sync-pulse" : ""}`}
-                    style={{ width: `${((klock.kaiPulseEternal % HARMONIC_MONTH_PULSES) / HARMONIC_MONTH_PULSES) * 100}%` }}
-                    title={`${(((klock.kaiPulseEternal % HARMONIC_MONTH_PULSES) / HARMONIC_MONTH_PULSES) * 100).toFixed(2)}% of month`}
+                    style={{
+                      width: `${((klock.kaiPulseEternal % HARMONIC_MONTH_PULSES) / HARMONIC_MONTH_PULSES) * 100}%`,
+                    }}
+                    title={`${(((klock.kaiPulseEternal % HARMONIC_MONTH_PULSES) / HARMONIC_MONTH_PULSES) * 100).toFixed(
+                      2
+                    )}% of month`}
                   />
                 </div>
 
@@ -1610,15 +1616,18 @@ export const EternalKlock: React.FC = () => {
                 </div>
 
                 <div>
-                  <strong>% of Year Komplete:</strong> {typeof klock.yearPercent === "number" ? klock.yearPercent.toFixed(2) : "—"}%
+                  <strong>% of Year Komplete:</strong>{" "}
+                  {typeof klock.yearPercent === "number" ? klock.yearPercent.toFixed(2) : "—"}%
                 </div>
 
                 <div>
-                  <strong>Days Into Year:</strong> {typeof klock.daysIntoYear === "number" ? klock.daysIntoYear : "—"} / {HARMONIC_YEAR_DAYS}
+                  <strong>Days Into Year:</strong> {typeof klock.daysIntoYear === "number" ? klock.daysIntoYear : "—"} /{" "}
+                  {HARMONIC_YEAR_DAYS}
                 </div>
 
                 <div>
-                  <strong>Kai-Pulses (Breathes) Into Year:</strong> {(klock.kaiPulseEternal % HARMONIC_YEAR_PULSES).toFixed(0)}
+                  <strong>Kai-Pulses (Breathes) Into Year:</strong>{" "}
+                  {(klock.kaiPulseEternal % HARMONIC_YEAR_PULSES).toFixed(0)}
                 </div>
 
                 <div>
@@ -1651,7 +1660,8 @@ export const EternalKlock: React.FC = () => {
                   <strong>Kai-Pulses (Breathes) Remaining:</strong> {spiralData.pulsesRemaining}
                 </div>
                 <div>
-                  <strong>Days to Next Spiral:</strong> {Number.isFinite(daysToNextSpiral) ? daysToNextSpiral.toFixed(4) : "—"}
+                  <strong>Days to Next Spiral:</strong>{" "}
+                  {Number.isFinite(daysToNextSpiral) ? daysToNextSpiral.toFixed(4) : "—"}
                 </div>
                 <div>
                   <strong>Next Spiral Threshold:</strong> {spiralData.nextSpiralPulse}
@@ -1663,7 +1673,11 @@ export const EternalKlock: React.FC = () => {
 
                 <div className="eternal-klock-section-title" />
                 <div className="eternal-klock-section-title embodied-section-title">
-                  <img src="/assets/embodied_solar_aligned.svg" alt="Embodied Solar-Aligned Title" className="embodied-section-icon" />
+                  <img
+                    src="/assets/embodied_solar_aligned.svg"
+                    alt="Embodied Solar-Aligned Title"
+                    className="embodied-section-icon"
+                  />
                 </div>
 
                 <strong>Date (Solar):</strong> D{klock.solarDayOfMonth ?? "—"} / M{klock.solarMonthIndex ?? "—"}{" "}
@@ -1697,18 +1711,24 @@ export const EternalKlock: React.FC = () => {
                 </div>
 
                 <div>
-                  <strong>% into Step:</strong> {klock.solarChakraStep ? klock.solarChakraStep.percentIntoStep.toFixed(1) : "—"}%
+                  <strong>% into Step:</strong>{" "}
+                  {klock.solarChakraStep ? klock.solarChakraStep.percentIntoStep.toFixed(1) : "—"}%
                 </div>
 
                 <div>
                   <strong>Step:</strong>{" "}
-                  {klock.solarChakraStep ? `${klock.solarChakraStep.stepIndex} / ${klock.solarChakraStep.stepsPerBeat}` : "—"}
+                  {klock.solarChakraStep
+                    ? `${klock.solarChakraStep.stepIndex} / ${klock.solarChakraStep.stepsPerBeat}`
+                    : "—"}
                 </div>
 
                 <div>
                   <strong>Kurrent Step Breathes:</strong>{" "}
                   {klock.solarChakraStep
-                    ? ((klock.solarChakraStep.percentIntoStep / 100) * (HARMONIC_DAY_PULSES / 36 / klock.solarChakraStep.stepsPerBeat)).toFixed(2)
+                    ? (
+                        (klock.solarChakraStep.percentIntoStep / 100) *
+                        (HARMONIC_DAY_PULSES / 36 / klock.solarChakraStep.stepsPerBeat)
+                      ).toFixed(2)
                     : "—"}{" "}
                   / 11
                 </div>
@@ -1747,7 +1767,8 @@ export const EternalKlock: React.FC = () => {
 
                 <div style={{ marginTop: "0.25rem" }}>
                   <div>
-                    <strong>Breathes Into Beat:</strong> {(klock.kaiPulseToday % beatPulseCount).toFixed(2)} / {beatPulseCount.toFixed(2)}
+                    <strong>Breathes Into Beat:</strong> {(klock.kaiPulseToday % beatPulseCount).toFixed(2)} /{" "}
+                    {beatPulseCount.toFixed(2)}
                   </div>
                   <strong>To Next Beat:</strong> {percentToNextBeat.toFixed(2)}%
                 </div>
@@ -1769,7 +1790,8 @@ export const EternalKlock: React.FC = () => {
                   <strong>Ark Beat:</strong>
                 </div>
                 <div>
-                  {klock.harmonicLevels.arcBeat.pulseInCycle} / {klock.harmonicLevels.arcBeat.cycleLength} ({klock.harmonicLevels.arcBeat.percent.toFixed(2)}%)
+                  {klock.harmonicLevels.arcBeat.pulseInCycle} / {klock.harmonicLevels.arcBeat.cycleLength} (
+                  {klock.harmonicLevels.arcBeat.percent.toFixed(2)}%)
                 </div>
                 <div>
                   <small>Kompleted Sykles: {klock.arcBeatCompletions}</small>
@@ -1779,7 +1801,8 @@ export const EternalKlock: React.FC = () => {
                   <strong>Mikro Sykle:</strong>
                 </div>
                 <div>
-                  {klock.harmonicLevels.microCycle.pulseInCycle} / {klock.harmonicLevels.microCycle.cycleLength} ({klock.harmonicLevels.microCycle.percent.toFixed(2)}%)
+                  {klock.harmonicLevels.microCycle.pulseInCycle} / {klock.harmonicLevels.microCycle.cycleLength} (
+                  {klock.harmonicLevels.microCycle.percent.toFixed(2)}%)
                 </div>
                 <div>
                   <small>Kompleted Sykles: {klock.microCycleCompletions}</small>
@@ -1789,7 +1812,8 @@ export const EternalKlock: React.FC = () => {
                   <strong>Beat Loop:</strong>
                 </div>
                 <div>
-                  {klock.harmonicLevels.chakraLoop.pulseInCycle} / {klock.harmonicLevels.chakraLoop.cycleLength} ({klock.harmonicLevels.chakraLoop.percent.toFixed(2)}%)
+                  {klock.harmonicLevels.chakraLoop.pulseInCycle} / {klock.harmonicLevels.chakraLoop.cycleLength} (
+                  {klock.harmonicLevels.chakraLoop.percent.toFixed(2)}%)
                 </div>
                 <div>
                   <small>Kompleted Sykles: {klock.chakraLoopCompletions}</small>
@@ -1799,7 +1823,8 @@ export const EternalKlock: React.FC = () => {
                   <strong>Harmonik Day:</strong>
                 </div>
                 <div>
-                  {klock.harmonicLevels.harmonicDay.pulseInCycle} / {klock.harmonicLevels.harmonicDay.cycleLength} ({klock.harmonicLevels.harmonicDay.percent.toFixed(2)}%)
+                  {klock.harmonicLevels.harmonicDay.pulseInCycle} / {klock.harmonicLevels.harmonicDay.cycleLength} (
+                  {klock.harmonicLevels.harmonicDay.percent.toFixed(2)}%)
                 </div>
                 <div>
                   <small>Kompleted Sykles: {klock.harmonicDayCompletions}</small>

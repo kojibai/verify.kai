@@ -78,11 +78,46 @@ type KlockNavState = { openDetails?: boolean };
 
 // ✅ IMPORTANT FIX (compile-time):
 // Your EternalKlock component MUST accept this prop.
-// You still need to update `src/components/KaiKlockHomeFace.tsx`
-// to export a default component typed with `{ initialDetailsOpen?: boolean }`.
+// Update `src/components/KaiKlockHomeFace.tsx` to export a default component typed with:
+// `{ initialDetailsOpen?: boolean }`.
 type EternalKlockProps = {
   initialDetailsOpen?: boolean;
 };
+
+type KaiMoment = ReturnType<typeof momentFromUTC>;
+
+function readNum(obj: unknown, key: string): number | null {
+  if (!obj || typeof obj !== "object") return null;
+  const rec = obj as Record<string, unknown>;
+  const v = rec[key];
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+function fmt2(n: number): string {
+  const nn = Math.floor(n);
+  if (!Number.isFinite(nn)) return "00";
+  if (nn < 0) return String(nn);
+  return String(nn).padStart(2, "0");
+}
+
+function formatPulse(pulse: number): string {
+  if (!Number.isFinite(pulse)) return "—";
+  if (pulse < 0) return String(pulse);
+  if (pulse < 1_000_000) return String(pulse).padStart(6, "0");
+  return pulse.toLocaleString("en-US");
+}
+
+/**
+ * ✅ NOW label: no "Beat"/"Step" words.
+ * Format is exactly "00:00" (Beat:Step) with no label text.
+ */
+function formatNowPulseLabel(m: KaiMoment): string {
+  const beat = readNum(m, "beat") ?? readNum(m, "beatIndex");
+  const step = readNum(m, "stepIndex") ?? readNum(m, "step");
+  const bb = beat !== null ? fmt2(beat) : "00";
+  const ss = step !== null ? fmt2(step) : "00";
+  return `${bb}:${ss}`;
+}
 
 function useVisualViewportSize(): { width: number; height: number } {
   const read = useCallback((): { width: number; height: number } => {
@@ -461,7 +496,6 @@ function ExplorerRoute(): React.JSX.Element {
 
 function KlockRoute(): React.JSX.Element {
   const navigate = useNavigate();
-  const location = useLocation();
   const [open, setOpen] = useState<boolean>(true);
 
   const handleClose = useCallback((): void => {
@@ -469,19 +503,11 @@ function KlockRoute(): React.JSX.Element {
     navigate("/", { replace: true });
   }, [navigate]);
 
-  const initialDetailsOpen = useMemo<boolean>(() => {
-    const st: unknown = location.state;
-    if (!st || typeof st !== "object") return false;
-    if (!("openDetails" in st)) return false;
+  // ✅ BIG FACE OPENS FIRST (always):
+  // We force initialDetailsOpen=true so the Klock launches straight into the large face view.
+  const initialDetailsOpen = true;
 
-    const openDetails = (st as KlockNavState).openDetails;
-    return openDetails === true;
-  }, [location.state]);
-
-  // ✅ IMPORTANT FIX:
-  // Cast the imported component to a typed component locally, so TS
-  // knows it can accept `initialDetailsOpen`.
-  // (You STILL should update KaiKlockHomeFace.tsx to truly accept this prop.)
+  // ✅ Cast imported module to typed component locally (no `any`)
   const EternalKlockTyped = EternalKlock as unknown as React.ComponentType<EternalKlockProps>;
 
   return (
@@ -501,8 +527,12 @@ function AppChrome(): React.JSX.Element {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Canonical Golden Breath
   const BREATH_S = useMemo(() => 3 + Math.sqrt(5), []);
   const BREATH_MS = useMemo(() => BREATH_S * 1000, [BREATH_S]);
+
+  // Canonical day breath count (precision)
+  const BREATHS_PER_DAY = useMemo(() => 17_491.270421, []);
 
   const vvSize = useVisualViewportSize();
 
@@ -514,25 +544,34 @@ function AppChrome(): React.JSX.Element {
     [BREATH_S, vvSize.height],
   );
 
-  const kaiPulseNow = useCallback((): number => {
-    return momentFromUTC(new Date()).pulse;
+  // ✅ Read full Kai moment so we can render NOW label "00:00"
+  const readNowMoment = useCallback((): KaiMoment => {
+    return momentFromUTC(new Date());
   }, []);
 
-  const [pulseNow, setPulseNow] = useState<number>(() => kaiPulseNow());
+  const [nowMoment, setNowMoment] = useState<KaiMoment>(() => readNowMoment());
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      setPulseNow(kaiPulseNow());
+      setNowMoment(readNowMoment());
     }, 250);
     return () => window.clearInterval(id);
-  }, [kaiPulseNow]);
+  }, [readNowMoment]);
 
-  const pulseNowStr = useMemo(() => {
-    if (!Number.isFinite(pulseNow)) return "—";
-    if (pulseNow < 0) return String(pulseNow);
-    if (pulseNow < 1_000_000) return String(pulseNow).padStart(6, "0");
-    return pulseNow.toLocaleString("en-US");
-  }, [pulseNow]);
+  const pulseNow = nowMoment.pulse;
+  const pulseNowStr = useMemo(() => formatPulse(pulseNow), [pulseNow]);
+
+  // ✅ "00:00" (Beat:Step), no labels
+  const nowPulseLabel = useMemo(() => formatNowPulseLabel(nowMoment), [nowMoment]);
+
+  const neonTextStyle = useMemo<CSSProperties>(
+    () => ({
+      color: "var(--accent-color)",
+      textShadow:
+        "0 0 14px rgba(0, 255, 255, 0.22), 0 0 28px rgba(0, 255, 255, 0.12)",
+    }),
+    [],
+  );
 
   const navItems = useMemo<NavItem[]>(
     () => [
@@ -706,6 +745,21 @@ function AppChrome(): React.JSX.Element {
     navigate("/klock", { state: st });
   }, [navigate]);
 
+  const liveTitle = useMemo(() => {
+    return `LIVE • NOW PULSE ${pulseNowStr} • ${nowPulseLabel} • Breath ${BREATH_S.toFixed(
+      6,
+    )}s (${Math.round(BREATH_MS)}ms) • ${BREATHS_PER_DAY.toLocaleString("en-US", {
+      minimumFractionDigits: 6,
+      maximumFractionDigits: 6,
+    })}/day • Open Eternal KaiKlok`;
+  }, [pulseNowStr, nowPulseLabel, BREATH_S, BREATH_MS, BREATHS_PER_DAY]);
+
+  const liveAria = useMemo(() => {
+    return `LIVE. Kai Pulse now ${pulseNow}. ${nowPulseLabel}. Breath length ${BREATH_S.toFixed(
+      3,
+    )} seconds. Open Eternal KaiKlok.`;
+  }, [pulseNow, nowPulseLabel, BREATH_S]);
+
   return (
     <div
       className="app-shell"
@@ -740,18 +794,25 @@ function AppChrome(): React.JSX.Element {
           type="button"
           className="topbar-live"
           onClick={openKlock}
-          aria-label={`LIVE. Kai Pulse now ${pulseNow}. Breath length ${BREATH_S.toFixed(
-            3,
-          )} seconds. Open Eternal KaiKlok.`}
-          title={`LIVE • NOW PULSE ${pulseNowStr} • Breath ${BREATH_S.toFixed(
-            6,
-          )}s (${Math.round(BREATH_MS)}ms) • Open Eternal KaiKlok`}
+          aria-label={liveAria}
+          title={liveTitle}
         >
           <span className="live-orb" aria-hidden="true" />
           <div className="live-text">
-            <div className="live-title">☤KAI</div>
+            <div className="live-title" style={neonTextStyle}>
+              ☤KAI
+            </div>
             <div className="live-meta">
-              <span className="mono">{pulseNowStr}</span>
+              <span className="mono" style={neonTextStyle}>
+                {pulseNowStr}
+              </span>
+            </div>
+
+            {/* ✅ "00:00" no labels, neon (not white) */}
+            <div className="live-sub">
+              <span className="mono" style={neonTextStyle}>
+                {nowPulseLabel}
+              </span>
             </div>
           </div>
         </button>
@@ -855,7 +916,7 @@ function AppChrome(): React.JSX.Element {
                     <span className="mono">ΦNet</span> • Sovereign Gate
                   </div>
                   <div className="panel-foot__right">
-                    <span className="mono">V</span> <span className="mono">25.4</span>
+                    <span className="mono">V</span> <span className="mono">25.5</span>
                   </div>
                 </footer>
               </section>
@@ -873,8 +934,8 @@ function NotFound(): React.JSX.Element {
       <div className="notfound__code">404</div>
       <div className="notfound__title">Route not found</div>
       <div className="notfound__hint">
-        Use the Sovereign Gate navigation to return to Verifier, Mint Sigil,
-        KaiVoh, or PhiStream.
+        Use the Sovereign Gate navigation to return to Verifier, Mint Sigil, KaiVoh,
+        or PhiStream.
       </div>
       <div className="notfound__actions">
         <NavLink className="notfound__cta" to="/">
@@ -907,6 +968,7 @@ export default function App(): React.JSX.Element {
           <Route path="voh" element={<KaiVohRoute />} />
           <Route path="explorer" element={<ExplorerRoute />} />
           <Route path="klock" element={<KlockRoute />} />
+          <Route path="klok" element={<KlockRoute />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
