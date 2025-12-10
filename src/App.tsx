@@ -874,7 +874,7 @@ function AppChrome(): React.JSX.Element {
             <div className="brand__text">
               <div className="brand__title">Sovereign Gate</div>
               <div className="brand__subtitle">
-                Stewardship of Breath-Minted Value · Kairos Identity Registry
+                Breath-Minted Value · Kairos Identity Registry
               </div>
             </div>
           </div>
@@ -1019,10 +1019,10 @@ function AppChrome(): React.JSX.Element {
       href="https://github.com/kojibai/verify.kai"
       target="_blank"
       rel="noreferrer"
-      aria-label="Version 26.0 (opens GitHub)"
+      aria-label="Version 26.1 (opens GitHub)"
       title="Open GitHub"
     >
-      26.0
+      26.1
     </a>
   </div>
 </footer>
