@@ -3,11 +3,20 @@
 
 /**
  * KaiStatus — Atlantean μpulse Bar
- * v3.2 — ALWAYS-SHOW MODE
- * - Day + Chakra ALWAYS render (no hiding at any size)
+ * v3.4 — ALWAYS-SHOW MODE (Day + Chakra Ark + Pulse)
+ * - Day + Chakra Ark ALWAYS render (no hiding at any size)
  * - No abbreviations (Kaelith stays Kaelith; Solar Plexus stays Solar Plexus)
  * - Layout driven by measured width: adjusts density + text scaling, never drops data
  * - Countdown display: fixed to 3 decimals (x.xxx)
+ *
+ * Chakra Ark is derived from Beat:
+ * 36 beats/day, 6 arks/day → 6 beats per ark:
+ *   0–5   Ignition Ark
+ *   6–11  Integration Ark
+ *   12–17 Harmonization Ark
+ *   18–23 Reflection Ark
+ *   24–29 Purification Ark
+ *   30–35 Dream Ark
  */
 
 import * as React from "react";
@@ -124,6 +133,23 @@ function uiScaleFor(layout: LayoutMode): number {
   }
 }
 
+const ARK_NAMES = [
+  "Ignite",
+  "Integrate",
+  "Harmonize",
+  "Reflekt",
+  "Purify",
+  "Dream",
+] as const;
+
+type ChakraArkName = (typeof ARK_NAMES)[number];
+
+function chakraArkFromBeat(beat: number): ChakraArkName {
+  const b = Number.isFinite(beat) ? Math.floor(beat) : 0;
+  const idx = Math.max(0, Math.min(5, Math.floor(b / 6)));
+  return ARK_NAMES[idx];
+}
+
 export function KaiStatus(): React.JSX.Element {
   const kaiNow = useAlignedKaiTicker();
   const secsLeftAnchor = useKaiPulseCountdown(true);
@@ -167,7 +193,13 @@ export function KaiStatus(): React.JSX.Element {
 
   // Labels: ALWAYS FULL (no abbreviations).
   const harmonicDayFull = String(kaiNow.harmonicDay);
-  const chakraDayFull = String(kaiNow.chakraDay);
+
+  const beatNum =
+    typeof kaiNow.beat === "number"
+      ? kaiNow.beat
+      : Number.parseInt(String(kaiNow.beat), 10) || 0;
+
+  const chakraArkFull: ChakraArkName = chakraArkFromBeat(beatNum);
 
   const styleVars: KaiStatusVars = React.useMemo(() => {
     return {
@@ -187,6 +219,7 @@ export function KaiStatus(): React.JSX.Element {
       data-kai-step={kaiNow.step}
       data-kai-bsi={beatStepDisp}
       data-kai-pulse={kaiNow.pulse}
+      data-kai-ark={chakraArkFull}
       style={styleVars}
     >
       <div className="kai-feed-status__left">
@@ -207,13 +240,13 @@ export function KaiStatus(): React.JSX.Element {
           {harmonicDayFull}
         </span>
 
-        {/* ✅ ALWAYS show Chakra (full) */}
+        {/* ✅ ALWAYS show Chakra Ark (full) */}
         <span
           className="kai-pill kai-pill--chakra"
-          title={chakraDayFull}
-          aria-label={`Spiral day ${chakraDayFull}`}
+          title={chakraArkFull}
+          aria-label={`Chakra ark ${chakraArkFull}`}
         >
-          {chakraDayFull}
+          {chakraArkFull}
         </span>
 
         {/* ✅ ALWAYS show Pulse */}
