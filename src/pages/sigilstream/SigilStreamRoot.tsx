@@ -794,7 +794,7 @@ function PayloadCard(props: {
   const { d, m, y } = pulseToDMY(pulse);
   const monthName = pulseToMonthName(pulse);
   const weekday = normalizeWeekdayLabel(pulseToWeekday(pulse));
-  const chakra = normalizeChakraLabel(pulseToChakraDay(pulse));
+
 
   const phiKey =
     pickString(payload, ["userPhiKey", "phiKey", "phikey", "authorPhiKey"]) ??
@@ -854,7 +854,7 @@ function PayloadCard(props: {
 </span>
 
         <span className="sf-muted"> · </span>
-        <span className="sf-kai-label">{chakra} · {monthName} </span>
+        <span className="sf-kai-label">{monthName} </span>
 <span className="sf-kai-label">
  
 </span>
