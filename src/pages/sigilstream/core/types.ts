@@ -20,7 +20,7 @@ export const CHAKRAS = [
   "Heart",
   "Throat",
   "Third Eye",
-  "Crown",
+  "Krown",
 ] as const;
 export type ChakraName = (typeof CHAKRAS)[number];
 
@@ -31,7 +31,7 @@ export const DAY_TO_CHAKRA: Record<HarmonicDay, ChakraName> = {
   Flamora: "Solar Plexus",
   Verdari: "Heart",
   Sonari: "Throat",
-  Kaelith: "Crown",
+  Kaelith: "Krown",
 };
 
 /** Eternal-Klok calendar constants */
