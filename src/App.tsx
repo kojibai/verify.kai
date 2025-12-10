@@ -32,6 +32,9 @@ import SovereignDeclarations from "./components/SovereignDeclarations";
 // ✅ IMPORTANT: use the ACTUAL explorer file (it lives in /pages)
 import SigilExplorer from "./components/SigilExplorer";
 
+// ✅ NEW: Eternal KaiKlok module (popover content)
+import EternalKlock from "./components/KaiKlockHomeFace";
+
 import SigilFeedPage from "./pages/SigilFeedPage";
 import SigilPage from "./pages/SigilPage/SigilPage";
 import PShort from "./pages/PShort";
@@ -57,6 +60,28 @@ type ExplorerPopoverStyle = CSSProperties & {
   ["--sx-border"]?: string;
   ["--sx-border-strong"]?: string;
   ["--sx-ring"]?: string;
+};
+
+// Klock popover vars
+type KlockPopoverStyle = CSSProperties & {
+  ["--klock-breath"]?: string;
+  ["--klock-border"]?: string;
+  ["--klock-border-strong"]?: string;
+  ["--klock-ring"]?: string;
+
+  // ✅ makes the Klock itself bigger (CSS can key off this immediately)
+  ["--klock-scale"]?: string;
+};
+
+// ✅ router state shape for auto-opening details on KaiKlok launch
+type KlockNavState = { openDetails?: boolean };
+
+// ✅ IMPORTANT FIX (compile-time):
+// Your EternalKlock component MUST accept this prop.
+// You still need to update `src/components/KaiKlockHomeFace.tsx`
+// to export a default component typed with `{ initialDetailsOpen?: boolean }`.
+type EternalKlockProps = {
+  initialDetailsOpen?: boolean;
 };
 
 function useVisualViewportSize(): { width: number; height: number } {
@@ -141,6 +166,12 @@ function ExplorerPopover(props: {
     };
   }, [open, onClose, isClient]);
 
+  const closeBtnRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    window.requestAnimationFrame(() => closeBtnRef.current?.focus());
+  }, [open]);
+
   // ✅ hooks never conditional; compute every render, noop when closed
   const overlayStyle = useMemo<ExplorerPopoverStyle | undefined>(() => {
     if (!open || !isClient) return undefined;
@@ -148,8 +179,11 @@ function ExplorerPopover(props: {
     const h = vvSize.height;
     const w = vvSize.width;
 
-    // Provide SX vars so the kx-x button renders/animates correctly
     return {
+      // ✅ force true full-screen hitbox (prevents click-through reopen bugs)
+      position: "fixed",
+      inset: 0,
+      pointerEvents: "auto",
       height: h > 0 ? `${h}px` : undefined,
       width: w > 0 ? `${w}px` : undefined,
 
@@ -161,6 +195,27 @@ function ExplorerPopover(props: {
     };
   }, [open, isClient, vvSize.height, vvSize.width]);
 
+  const onBackdropPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>): void => {
+      if (e.target === e.currentTarget) {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    },
+    [onClose],
+  );
+
+  const onClosePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>): void => {
+      // ✅ prevents click-through to underlying LIVE button on some mobile stacks
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+    },
+    [onClose],
+  );
+
   if (!open || !isClient || !portalHost) return null;
 
   return createPortal(
@@ -170,13 +225,23 @@ function ExplorerPopover(props: {
       role="dialog"
       aria-modal="true"
       aria-label="PhiStream Explorer"
+      onPointerDown={onBackdropPointerDown}
+      onClick={(e) => {
+        // extra guard against click-through
+        e.stopPropagation();
+      }}
     >
       <div className="explorer-pop__panel" role="document">
-        {/* ✅ Fixed “best X ever”: use your kx-x (font-metric proof, centered) */}
         <button
+          ref={closeBtnRef}
           type="button"
           className="explorer-pop__close kx-x"
-          onClick={onClose}
+          onPointerDown={onClosePointerDown}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onClose();
+          }}
           aria-label="Close PhiStream Explorer"
           title="Close (Esc)"
         >
@@ -187,6 +252,144 @@ function ExplorerPopover(props: {
 
         <div className="sr-only" aria-live="polite">
           PhiStream explorer portal open
+        </div>
+      </div>
+    </div>,
+    portalHost,
+  );
+}
+
+function KlockPopover(props: {
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+}): React.JSX.Element | null {
+  const { open, onClose, children } = props;
+
+  const isClient = typeof document !== "undefined";
+  const vvSize = useVisualViewportSize();
+
+  const portalHost = useMemo<HTMLElement | null>(() => {
+    if (!isClient) return null;
+    const el = document.querySelector(".app-shell");
+    return el instanceof HTMLElement ? el : document.body;
+  }, [isClient]);
+
+  // ESC to close + lock background scroll (only while open)
+  useEffect(() => {
+    if (!open || !isClient) return;
+
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") onClose();
+    };
+
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+
+    document.addEventListener("keydown", onKey);
+
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+    };
+  }, [open, onClose, isClient]);
+
+  const closeBtnRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    window.requestAnimationFrame(() => closeBtnRef.current?.focus());
+  }, [open]);
+
+  const overlayStyle = useMemo<KlockPopoverStyle | undefined>(() => {
+    if (!open || !isClient) return undefined;
+
+    const h = vvSize.height;
+    const w = vvSize.width;
+
+    return {
+      // ✅ force true full-screen hitbox (prevents click-through / “won’t close” illusions)
+      position: "fixed",
+      inset: 0,
+      pointerEvents: "auto",
+      height: h > 0 ? `${h}px` : undefined,
+      width: w > 0 ? `${w}px` : undefined,
+
+      ["--klock-breath"]: "5.236s",
+      ["--klock-border"]: "rgba(255, 216, 120, 0.26)",
+      ["--klock-border-strong"]: "rgba(255, 231, 160, 0.55)",
+      ["--klock-ring"]:
+        "0 0 0 2px rgba(255, 225, 150, 0.22), 0 0 0 6px rgba(255, 210, 120, 0.10)",
+
+      // ✅ Bigger Klock (CSS can map this to size/typography/layout)
+      ["--klock-scale"]: "5",
+    };
+  }, [open, isClient, vvSize.height, vvSize.width]);
+
+  const onBackdropPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>): void => {
+      if (e.target === e.currentTarget) {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    },
+    [onClose],
+  );
+
+  const onClosePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>): void => {
+      // ✅ strongest close: prevents click-through + closes immediately on press
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+    },
+    [onClose],
+  );
+
+  if (!open || !isClient || !portalHost) return null;
+
+  return createPortal(
+    <div
+      className="klock-pop"
+      style={overlayStyle}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Eternal KaiKlok"
+      onPointerDown={onBackdropPointerDown}
+      onClick={(e) => {
+        // extra guard against click-through
+        e.stopPropagation();
+      }}
+    >
+      <div className="klock-pop__panel" role="document" data-klock-size="xl">
+        <button
+          ref={closeBtnRef}
+          type="button"
+          className="klock-pop__close kx-x"
+          onPointerDown={onClosePointerDown}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onClose();
+          }}
+          aria-label="Close Eternal KaiKlok"
+          title="Close (Esc)"
+        >
+          ×
+        </button>
+
+        <div className="klock-pop__body">
+          <div className="klock-stage" role="presentation" data-klock-stage="1">
+            <div className="klock-stage__inner">{children}</div>
+          </div>
+        </div>
+
+        <div className="sr-only" aria-live="polite">
+          Eternal KaiKlok portal open
         </div>
       </div>
     </div>,
@@ -213,17 +416,10 @@ function KaiVohRoute(): React.JSX.Element {
   );
 }
 
-/**
- * ✅ Sigil Mint modal route (same pattern as KaiVohRoute)
- * - mounted by route: /mint
- * - closes back to /
- * - modal renders via portal (covers app; background remains app-locked)
- */
 function SigilMintRoute(): React.JSX.Element {
   const navigate = useNavigate();
   const [open, setOpen] = useState<boolean>(true);
 
-  // “first paint” hint for the modal (it has its own live engine)
   const initialPulse = useMemo<number>(() => momentFromUTC(new Date()).pulse, []);
 
   const handleClose = useCallback((): void => {
@@ -241,12 +437,6 @@ function SigilMintRoute(): React.JSX.Element {
   );
 }
 
-/**
- * ✅ Explorer modal route (IDENTICAL pattern to SigilMintRoute / KaiVohRoute)
- * - mounted by route: /explorer (inside AppChrome)
- * - closes back to /
- * - renders full-screen popover via portal
- */
 function ExplorerRoute(): React.JSX.Element {
   const navigate = useNavigate();
   const [open, setOpen] = useState<boolean>(true);
@@ -269,10 +459,48 @@ function ExplorerRoute(): React.JSX.Element {
   );
 }
 
+function KlockRoute(): React.JSX.Element {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [open, setOpen] = useState<boolean>(true);
+
+  const handleClose = useCallback((): void => {
+    setOpen(false);
+    navigate("/", { replace: true });
+  }, [navigate]);
+
+  const initialDetailsOpen = useMemo<boolean>(() => {
+    const st: unknown = location.state;
+    if (!st || typeof st !== "object") return false;
+    if (!("openDetails" in st)) return false;
+
+    const openDetails = (st as KlockNavState).openDetails;
+    return openDetails === true;
+  }, [location.state]);
+
+  // ✅ IMPORTANT FIX:
+  // Cast the imported component to a typed component locally, so TS
+  // knows it can accept `initialDetailsOpen`.
+  // (You STILL should update KaiKlockHomeFace.tsx to truly accept this prop.)
+  const EternalKlockTyped = EternalKlock as unknown as React.ComponentType<EternalKlockProps>;
+
+  return (
+    <>
+      <KlockPopover open={open} onClose={handleClose}>
+        <EternalKlockTyped initialDetailsOpen={initialDetailsOpen} />
+      </KlockPopover>
+
+      <div className="sr-only" aria-live="polite">
+        Eternal KaiKlok portal open
+      </div>
+    </>
+  );
+}
+
 function AppChrome(): React.JSX.Element {
   const location = useLocation();
+  const navigate = useNavigate();
 
-  // φ-exact breath (seconds): 3 + √5
   const BREATH_S = useMemo(() => 3 + Math.sqrt(5), []);
   const BREATH_MS = useMemo(() => BREATH_S * 1000, [BREATH_S]);
 
@@ -286,7 +514,6 @@ function AppChrome(): React.JSX.Element {
     [BREATH_S, vvSize.height],
   );
 
-  // ✅ Kai Pulse NOW
   const kaiPulseNow = useCallback((): number => {
     return momentFromUTC(new Date()).pulse;
   }, []);
@@ -323,6 +550,7 @@ function AppChrome(): React.JSX.Element {
     if (p.startsWith("/mint")) return "Mint Sigil";
     if (p.startsWith("/voh")) return "KaiVoh";
     if (p.startsWith("/explorer")) return "PhiStream";
+    if (p.startsWith("/klock")) return "KaiKlok";
     return "Sovereign Gate";
   }, [location.pathname]);
 
@@ -330,14 +558,14 @@ function AppChrome(): React.JSX.Element {
     document.title = `ΦNet • ${pageTitle}`;
   }, [pageTitle]);
 
-  // ✅ “Locked” routes want perfect centering (Verifier + Mint + KaiVoh + Explorer)
   const lockPanelByRoute = useMemo(() => {
     const p = location.pathname;
     return (
       p === "/" ||
       p.startsWith("/voh") ||
       p.startsWith("/mint") ||
-      p.startsWith("/explorer")
+      p.startsWith("/explorer") ||
+      p.startsWith("/klock")
     );
   }, [location.pathname]);
 
@@ -449,7 +677,6 @@ function AppChrome(): React.JSX.Element {
     };
   }, [panelShouldScroll]);
 
-  /* ✅ Mobile nav: keep ACTIVE item in view when the rail is horizontally scrollable */
   const navListRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -473,6 +700,11 @@ function AppChrome(): React.JSX.Element {
       }
     });
   }, [location.pathname]);
+
+  const openKlock = useCallback((): void => {
+    const st: KlockNavState = { openDetails: true };
+    navigate("/klock", { state: st });
+  }, [navigate]);
 
   return (
     <div
@@ -504,17 +736,16 @@ function AppChrome(): React.JSX.Element {
           </div>
         </div>
 
-        <a
+        <button
+          type="button"
           className="topbar-live"
-          href="https://kaiklok.com"
-          target="_blank"
-          rel="noopener noreferrer"
+          onClick={openKlock}
           aria-label={`LIVE. Kai Pulse now ${pulseNow}. Breath length ${BREATH_S.toFixed(
             3,
-          )} seconds. Open KaiKlok.com.`}
+          )} seconds. Open Eternal KaiKlok.`}
           title={`LIVE • NOW PULSE ${pulseNowStr} • Breath ${BREATH_S.toFixed(
             6,
-          )}s (${Math.round(BREATH_MS)}ms) • View full Kairos Time at KaiKlok.com`}
+          )}s (${Math.round(BREATH_MS)}ms) • Open Eternal KaiKlok`}
         >
           <span className="live-orb" aria-hidden="true" />
           <div className="live-text">
@@ -523,7 +754,7 @@ function AppChrome(): React.JSX.Element {
               <span className="mono">{pulseNowStr}</span>
             </div>
           </div>
-        </a>
+        </button>
       </header>
 
       <main
@@ -624,7 +855,7 @@ function AppChrome(): React.JSX.Element {
                     <span className="mono">ΦNet</span> • Sovereign Gate
                   </div>
                   <div className="panel-foot__right">
-                    <span className="mono">V</span> <span className="mono">25.2</span>
+                    <span className="mono">V</span> <span className="mono">25.4</span>
                   </div>
                 </footer>
               </section>
@@ -658,11 +889,9 @@ export default function App(): React.JSX.Element {
   return (
     <BrowserRouter>
       <Routes>
-        {/* ✅ FULL-PAGE Sigil routes (NO AppChrome wrapper) */}
         <Route path="s" element={<SigilPage />} />
         <Route path="s/:hash" element={<SigilPage />} />
 
-        {/* ✅ FULL-PAGE Stream routes (NO AppChrome wrapper) */}
         <Route path="stream" element={<SigilFeedPage />} />
         <Route path="stream/p/:token" element={<SigilFeedPage />} />
         <Route path="feed" element={<SigilFeedPage />} />
@@ -672,15 +901,12 @@ export default function App(): React.JSX.Element {
         <Route path="p~token" element={<SigilFeedPage />} />
         <Route path="p" element={<PShort />} />
 
-        {/* Everything else stays inside the Sovereign Gate chrome */}
         <Route element={<AppChrome />}>
           <Route index element={<VerifierStamper />} />
           <Route path="mint" element={<SigilMintRoute />} />
           <Route path="voh" element={<KaiVohRoute />} />
-
-          {/* ✅ PhiStream opens Explorer popover (route-mounted, like SigilMint) */}
           <Route path="explorer" element={<ExplorerRoute />} />
-
+          <Route path="klock" element={<KlockRoute />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

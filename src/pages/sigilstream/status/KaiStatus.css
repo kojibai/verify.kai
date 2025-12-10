@@ -693,3 +693,126 @@
     margin-top: -1px;
   }
 }
+/* ─────────────────────────────────────────────
+   Kai-Klok popover (Atlantean glass)
+───────────────────────────────────────────── */
+
+.kai-feed-status{
+  cursor: pointer;
+}
+.kai-feed-status:focus-visible{
+  outline: 2px solid rgba(255, 225, 120, 0.65);
+  outline-offset: 3px;
+}
+
+.kk-pop{
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding:
+    max(14px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(14px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+}
+
+.kk-pop__backdrop{
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: radial-gradient(1200px 700px at 30% 10%,
+      rgba(120, 220, 255, 0.14),
+      rgba(0, 0, 0, 0.72) 55%,
+      rgba(0, 0, 0, 0.86));
+  backdrop-filter: blur(10px);
+}
+
+.kk-pop__panel{
+  position: relative;
+  width: min(520px, 92vw);
+  border-radius: 26px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03)) padding-box,
+    radial-gradient(1200px 500px at 20% 0%,
+      rgba(255, 220, 120, 0.18),
+      rgba(120, 220, 255, 0.12),
+      transparent 70%) border-box;
+  box-shadow:
+    0 22px 80px rgba(0,0,0,0.55),
+    0 0 0 1px rgba(255,255,255,0.06) inset;
+  overflow: hidden;
+  transform-origin: 50% 0%;
+  animation: kk-pop-in 180ms cubic-bezier(.22,.61,.36,1) both;
+}
+
+@keyframes kk-pop-in{
+  from { transform: translateY(8px) scale(0.985); opacity: 0; }
+  to   { transform: translateY(0)   scale(1);     opacity: 1; }
+}
+
+.kk-pop__head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 8px;
+}
+
+.kk-pop__title{
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  color: rgba(240, 246, 255, 0.96);
+  text-shadow: 0 0 18px rgba(255, 220, 120, 0.18);
+}
+
+.kk-pop__close{
+  border: 0;
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.06);
+  color: rgba(240, 246, 255, 0.92);
+  cursor: pointer;
+}
+.kk-pop__close:hover{
+  background: rgba(255,255,255,0.10);
+}
+
+.kk-pop__meta{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 14px 10px;
+}
+
+.kk-pop__pill{
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.22);
+  color: rgba(230, 240, 255, 0.92);
+}
+
+.kk-pop__dial{
+  padding: 10px 14px 14px;
+  display: grid;
+  place-items: center;
+}
+
+.kk-pop__dial > *{
+  width: min(360px, 70vw);
+  max-width: 360px;
+}
+
+.kk-pop__foot{
+  padding: 0 14px 14px;
+  display: flex;
+  justify-content: center;
+}
+
+.kk-pop__hint{
+  font-size: 12px;
+  color: rgba(198, 212, 235, 0.78);
+}

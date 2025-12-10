@@ -1,0 +1,318 @@
+/* ───────────────────────────────────────────────────────────────
+   MonthKalendarModal.css · Atlantean Lumitech
+   v6.2 · Auto-Fit ViewBox • Camera Modes • Touch Polish
+   • Fullscreen SVG, no CSS tilt (no clipping)
+   • Tiny camera controls (Fit / Follow / Free)
+──────────────────────────────────────────────────────────────── */
+
+:root {
+  /* cosmos */
+  --nebula-base: #04060c;
+  --nebula-deep: #01050e;
+
+  /* aqua zero-point (dynamic via JS) */
+  --aqua-core: #00eaff;
+  --aqua-soft: rgba(0, 234, 255, 0.14);
+
+  /* glow strata */
+  --seal-glow-inset: rgba(0, 234, 255, 0.36);
+  --seal-glow-mid:   rgba(0, 234, 255, 0.42);
+  --seal-glow-outer: rgba(0, 234, 255, 0.24);
+
+  /* note dot */
+  --note-dot: #ff1559;
+
+  /* timing */
+  --pulse: 5.236s;
+  --double: calc(var(--pulse) * 2);
+
+  /* safe-area insets */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+/* smooth fonts, 3D */
+*:where(.mw-backdrop, .mw-backdrop *) {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+/* ───────── BACKDROP – OPAQUE COSMIC PORTAL ───────── */
+.mw-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  background: var(--nebula-base);
+  background-image:
+    radial-gradient(ellipse at 50% 42%, rgba(0,12,26,0.96) 0%, var(--nebula-deep) 80%),
+    radial-gradient(circle at 30% 30%, rgba(1,20,40,0.9) 0%, transparent 70%),
+    radial-gradient(circle at 70% 60%, rgba(0,34,60,0.7) 0%, transparent 60%),
+    repeating-radial-gradient(circle at 48% 50%, rgba(0,78,108,0.25) 0 2px, transparent 2px 5px);
+  background-blend-mode: overlay, screen, lighten, normal;
+  animation:
+    mw-nebulaFlow var(--double) linear infinite,
+    mw-portalShift1 200s linear infinite,
+    mw-portalShift2 137s linear infinite,
+    mw-portalShift3 89s linear infinite;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+  overscroll-behavior: none;
+  contain: layout paint style;
+  content-visibility: auto;
+
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@keyframes mw-nebulaFlow {
+  0%, 100% { background-position: 50% 40%, 50% 50%; }
+  50%     { background-position: 52% 44%, 48% 48%; }
+}
+@keyframes mw-portalShift1 { 0% { background-position: 50% 42%; } 100% { background-position: 55% 38%; } }
+@keyframes mw-portalShift2 { 0% { background-position: 30% 30%; } 100% { background-position: 25% 35%; } }
+@keyframes mw-portalShift3 { 0% { background-position: 70% 60%; } 100% { background-position: 65% 55%; } }
+
+/* subtle star-twinkle overlay (still opaque overall) */
+.mw-backdrop::before,
+.mw-backdrop::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, rgba(255,255,255,0.7) 1px, transparent 2px);
+  background-size: 3px 3px;
+  mix-blend-mode: screen;
+  opacity: 0.06;
+  animation: mw-twinkle 7s linear infinite;
+}
+.mw-backdrop::after {
+  background-size: 4px 4px;
+  animation-duration: 11s;
+  opacity: 0.05;
+  transform: translateZ(0);
+}
+@keyframes mw-twinkle {
+  0%   { transform: translate3d(0,0,0) scale(1); }
+  50%  { transform: translate3d(-0.5rem, 0.75rem,0) scale(1.03); }
+  100% { transform: translate3d(0,0,0) scale(1); }
+}
+
+/* ───────── PANEL ───────── */
+.mw-panel {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden; /* safe now that we auto-fit */
+  pointer-events: auto;
+  contain: layout paint style;
+  content-visibility: auto;
+  will-change: transform;
+
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* ───────── CLOSE (Atlantean Glyph) ───────── */
+.mw-close.mw-close--glyph {
+  all: unset;
+  position: absolute;
+  top: calc(var(--safe-top) + 0.75rem);
+  right: calc(var(--safe-right) + 0.75rem);
+  width: 2.6rem;
+  height: 2.6rem;
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+  z-index: 10001;
+  transition: transform 0.25s ease;
+}
+.mw-close.mw-close--glyph:hover { transform: scale(1.1); }
+.mw-close.mw-close--glyph svg {
+  width: 100%;
+  height: 100%;
+  filter:
+    drop-shadow(0 0 8px rgba(0,234,255,0.75))
+    drop-shadow(0 0 12px rgba(255,21,89,0.75));
+}
+.glyphSheen line {
+  stroke-dasharray: 120;
+  stroke-dashoffset: 120;
+  animation: mw-glyphSheen var(--double) ease-in-out infinite;
+}
+@keyframes mw-glyphSheen {
+  0%   { stroke-opacity: 0; stroke-dashoffset: 120; }
+  8%   { stroke-opacity: 0.8; }
+  22%  { stroke-opacity: 0; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* ───────── SVG STAGE (fullscreen) ───────── */
+/* No more CSS rotateX/rotateZ here — we render “tilt” inside the scene if wanted */
+.mw-stage {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: visible;
+  will-change: transform;
+  contain: layout paint style;
+  content-visibility: auto;
+
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.mw-stage path { stroke-linecap: round; }
+.mw-stage text {
+  font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-size: 4px;
+  pointer-events: none;
+  text-shadow: 0 0 4px rgba(0,0,0,0.6);
+}
+
+/* ───────── DAY CHIPS ───────── */
+.mw-daychip {
+  vector-effect: non-scaling-stroke;
+  filter: url(#mw-neon);
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+.mw-daychip:hover { transform: translateZ(2px) scale(1.05); }
+.mw-hasNote { box-shadow: 0 0 10px var(--seal-glow-mid); }
+.mw-note-dot {
+  filter:
+    drop-shadow(0 0 4px var(--note-dot))
+    drop-shadow(0 0 8px var(--note-dot));
+}
+
+/* today highlight */
+.mw-today {
+  filter:
+    drop-shadow(0 0 8px var(--aqua-core))
+    drop-shadow(0 0 12px var(--seal-glow-mid));
+}
+.mw-today-label {
+  filter:
+    drop-shadow(0 0 8px var(--aqua-core))
+    drop-shadow(0 0 12px var(--seal-glow-mid));
+  animation: mw-textPulse var(--pulse) ease-in-out infinite;
+}
+@keyframes mw-textPulse {
+  50% {
+    transform: scale(1.1);
+    filter:
+      drop-shadow(0 0 12px var(--aqua-core))
+      drop-shadow(0 0 16px var(--seal-glow-mid));
+  }
+}
+
+/* ───────── COMET ───────── */
+.mw-comet .mw-comet-core {
+  fill: var(--aqua-core);
+  opacity: 0.95;
+  animation: mw-cometCore var(--pulse) ease-in-out infinite;
+}
+.mw-comet .mw-comet-glow-1 {
+  fill: var(--aqua-core);
+  opacity: 0.12;
+  animation: mw-cometGlow var(--pulse) ease-in-out infinite;
+}
+.mw-comet .mw-comet-glow-2 {
+  fill: var(--aqua-core);
+  opacity: 0.06;
+  animation: mw-cometGlow var(--double) ease-in-out infinite;
+}
+@keyframes mw-cometCore { 50% { transform: scale(1.08); } }
+@keyframes mw-cometGlow { 50% { transform: scale(1.12); opacity: 0.1; } }
+
+/* ───────── SEAL CHIP ───────── */
+.mw-seal {
+  position: absolute;
+  bottom: calc(var(--safe-bottom) + 2.2rem);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.6rem 1.2rem;
+  border-radius: 1rem;
+  background: var(--aqua-soft);
+  color: #e6faff;
+  font: 500 1rem "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  box-shadow:
+    inset 0 0 1px var(--seal-glow-inset),
+    0 0 12px var(--seal-glow-mid);
+  animation:
+    mw-sealPulse var(--pulse) ease-in-out infinite,
+    mw-sealFloat var(--double) ease-in-out infinite;
+  pointer-events: none;
+  contain: paint;
+}
+@keyframes mw-sealPulse {
+  50% { box-shadow: inset 0 0 1px var(--seal-glow-inset), 0 0 16px var(--seal-glow-mid); }
+}
+@keyframes mw-sealFloat {
+  50% { transform: translateX(-50%) translateY(-0.5rem); }
+}
+
+/* ───────── CAMERA CONTROLS ───────── */
+.mw-cam {
+  position: absolute;
+  bottom: calc(var(--safe-bottom) + 0.8rem);
+  left: calc(var(--safe-left) + 0.8rem);
+  display: flex;
+  gap: .4rem;
+  z-index: 10002;
+}
+.mw-cam-btn {
+  all: unset;
+  padding: .42rem .66rem;
+  border-radius: .7rem;
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.9);
+  font: 500 .86rem/1 "Inter", system-ui, sans-serif;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+}
+.mw-cam-btn:hover { background: rgba(255,255,255,0.14); }
+.mw-cam-btn.is-active {
+  background: rgba(0, 234, 255, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(0,234,255,0.36);
+}
+
+/* ───────── HDR HUE DRIFT (optional) ───────── */
+@media (dynamic-range: high) {
+  .mw-backdrop,
+  .mw-seal {
+    animation: mw-hueDrift calc(var(--double) * 6) linear infinite;
+  }
+  @keyframes mw-hueDrift {
+    0%   { filter: hue-rotate(0deg); }
+    100% { filter: hue-rotate(360deg); }
+  }
+}
+
+/* ───────── REDUCED MOTION ───────── */
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* ───────── MOBILE TUNING ───────── */
+@media (max-width: 680px) {
+  .mw-seal { bottom: calc(var(--safe-bottom) + 1.6rem); }
+  .mw-close.mw-close--glyph {
+    top: calc(var(--safe-top) + 0.5rem);
+    right: calc(var(--safe-right) + 0.5rem);
+  }
+}
+/* --- keep everything you already have --- */
+
+/* bump default SVG text a touch; tspans override anyway */
+.mw-stage text { font-size: 4.2px; }
+
+/* label polish */
+.mw-label { paint-order: stroke fill; }
+.mw-label-day { letter-spacing: .15px; }
+.mw-label-num { letter-spacing: .2px; }
+
+/* today label glow is already handled by .mw-today-label */

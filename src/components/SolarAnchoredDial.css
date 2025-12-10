@@ -1,0 +1,321 @@
+/* SolarAnchoredDial.css — Atlantean priest-king elegance, mobile-first */
+
+/* ─────────────────────────────────────────────
+   Palette & panel scale (scoped, not global)
+   ──────────────────────────────────────────── */
+   :root {
+    --panel-max: 720px;
+    --cy: #00f6ff;            /* sacred neon */
+    --ink: #def8ff;
+    --ink-dim: #9bd9ee;
+    --bg: rgba(6, 16, 22, 0.6);
+    --glass: rgba(8, 24, 32, 0.66);
+    --ring: color-mix(in oklab, var(--cy) 40%, transparent);
+    --accent: #7af9ff;
+  }
+  
+  /* Container (keeps the dial compact; override --dial-size per need) */
+  .solar-anchored-dial {
+    --dial-size: clamp(200px, 70vw, 320px);  /* phone-first dial size */
+    display: grid;
+    justify-items: center;
+    align-items: start;
+    gap: 14px;
+    inline-size: 100%;
+    max-inline-size: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* ─────────────────────────────────────────────
+     Panel — glass, breathable, independently scrollable
+     ──────────────────────────────────────────── */
+  .solar-sync-panel {
+    width: min(100%, var(--panel-max));
+    max-inline-size: calc(100% - 24px);     /* never wider than viewport minus padding */
+    margin-inline: auto;
+  
+    box-sizing: border-box;
+    padding: 12px 14px;
+    border-radius: 18px;
+    background: var(--glass);
+    backdrop-filter: blur(10px) saturate(1.25);
+    -webkit-backdrop-filter: blur(10px) saturate(1.25);
+    border: 1px solid var(--ring);
+    color: var(--ink);
+    box-shadow:
+      0 14px 40px rgba(0,0,0,0.35),
+      0 0 0 1px color-mix(in oklab, var(--cy) 18%, transparent) inset;
+  
+    max-height: min(60vh, 560px);
+    overflow: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  
+    /* interaction sanity on touch devices */
+    touch-action: manipulation;
+  }
+  
+  @supports (height: 100svh) {
+    .solar-sync-panel { max-height: min(60svh, 560px); }
+  }
+  
+  /* ─────────────────────────────────────────────
+     Title row
+     ──────────────────────────────────────────── */
+  .panel-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  
+  .panel-glyph {
+    width: 28px;
+    height: 28px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(100% 100% at 50% 50%, rgba(0, 255, 255, .22), rgba(0, 255, 255, .05));
+    color: var(--accent);
+    font-weight: 800;
+    box-shadow:
+      0 0 10px rgba(0, 246, 255, .4),
+      inset 0 0 10px rgba(0, 246, 255, .2);
+  }
+  
+  .panel-text strong {
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+  }
+  .panel-sub {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--ink-dim);
+    margin-top: 2px;
+  }
+  
+  /* Tiny “?” help button, aligned right in the title row */
+  .icon-button.help {
+    margin-left: auto;
+    width: 28px;
+    height: 28px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    font-weight: 900;
+    border: 1px solid color-mix(in oklab, var(--cy) 45%, transparent);
+    background: radial-gradient(100% 100% at 50% 50%, rgba(0,0,0,0.35), rgba(0,0,0,0.15));
+    color: var(--ink);
+    cursor: pointer;
+    transition: transform .08s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;
+    box-shadow:
+      0 4px 18px rgba(0, 246, 255, 0.12),
+      inset 0 0 18px rgba(0, 246, 255, 0.08);
+  }
+  .icon-button.help:hover  { transform: translateY(-1px); }
+  .icon-button.help:active { transform: translateY(0); }
+  
+  /* ─────────────────────────────────────────────
+     Rows & inputs
+     ──────────────────────────────────────────── */
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 12px;
+    margin-top: 8px;
+  }
+  
+  .buttons-row {
+    justify-content: space-between;
+    width: 100%;
+  }
+  
+  .nudge { display: inline-flex; gap: 6px; }
+  
+  .input-row { margin-top: 6px; }
+  
+  .label {
+    width: 100%;
+    font-size: 0.82rem;
+    color: var(--ink-dim);
+    margin-bottom: 4px;
+  }
+  
+  .input-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+  
+  /* iOS no-zoom on focus: >=16px font; smooth focus visuals */
+  .time-input {
+    flex: 1 1 160px;
+    min-width: 140px;
+    font: 600 17px/1.1 ui-sans-serif, system-ui, -apple-system, "Inter", "Nunito", Segoe UI, Roboto, Arial, sans-serif;
+    color: var(--ink);
+    background: rgba(0,0,0,0.35);
+    border: 1px solid color-mix(in oklab, var(--cy) 35%, transparent);
+    border-radius: 10px;
+    padding: 10px 12px;
+    outline: none;
+    caret-color: var(--accent);
+    box-shadow: 0 0 0 2px transparent;
+    transition: box-shadow .18s ease, border-color .18s ease, background .18s ease;
+    -webkit-user-select: text;
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
+  }
+  .time-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--cy) 25%, transparent);
+    background: rgba(0, 0, 0, 0.45);
+  }
+  
+  /* ─────────────────────────────────────────────
+     Neon, living buttons
+     ──────────────────────────────────────────── */
+  .btn {
+    position: relative;
+    appearance: none;
+    border: 1px solid color-mix(in oklab, var(--cy) 65%, transparent);
+    color: var(--ink);
+    background:
+      radial-gradient(120% 140% at 50% 0%, rgba(0,255,255,.10), rgba(0,0,0,.18)),
+      linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.15));
+    border-radius: 12px;
+    padding: 10px 12px;
+    font: 800 0.92rem/1 ui-sans-serif, system-ui, -apple-system, "Inter", "Nunito", Segoe UI, Roboto, Arial, sans-serif;
+    cursor: pointer;
+    transition:
+      transform .08s ease,
+      box-shadow .18s ease,
+      border-color .18s ease,
+      background .18s ease,
+      filter .18s ease;
+    text-shadow: 0 0 2px rgba(122,249,255,.35);
+    box-shadow:
+      0 6px 22px rgba(0,246,255,.10),
+      inset 0 0 18px rgba(0,246,255,.08);
+  }
+  .btn:hover  { transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  
+  .btn.primary,
+  .btn.save {
+    color: #e8feff;
+    text-shadow:
+      0 0 8px rgba(0,246,255,.85),
+      0 0 22px rgba(122,249,255,.55),
+      0 0 46px rgba(122,249,255,.30);
+    border-color: color-mix(in oklab, var(--cy) 90%, white 10%);
+    background:
+      radial-gradient(130% 160% at 50% -20%, rgba(0,246,255,.35), rgba(0,0,0,0)),
+      linear-gradient(180deg, rgba(0,246,255,.28), rgba(0,60,70,.26) 36%, rgba(0,0,0,.36));
+    box-shadow:
+      0 0 22px rgba(0,246,255,.45),
+      0 0 60px rgba(0,246,255,.25),
+      inset 0 0 28px rgba(0,246,255,.35);
+    animation: auroraPulse 3.1s ease-in-out infinite alternate;
+  }
+  .btn.primary:hover,
+  .btn.save:hover {
+    transform: translateY(-1px) scale(1.015);
+    box-shadow:
+      0 12px 38px rgba(0,246,255,.55),
+      0 0 86px rgba(0,246,255,.35),
+      inset 0 0 38px rgba(0,246,255,.45);
+  }
+  .btn.primary:active,
+  .btn.save:active {
+    transform: translateY(0) scale(.985);
+    box-shadow:
+      0 0 16px rgba(0,246,255,.7),
+      inset 0 0 42px rgba(0,246,255,.55);
+  }
+  
+  /* gleam layer */
+  .btn.primary::after,
+  .btn.save::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: inherit;
+    background:
+      conic-gradient(from 180deg at 50% 50%,
+        rgba(122,249,255,0) 0deg,
+        rgba(122,249,255,.35) 70deg,
+        rgba(122,249,255,0) 140deg);
+    filter: blur(12px);
+    opacity: 0;
+    transition: opacity .2s ease;
+    pointer-events: none;
+  }
+  .btn.primary:hover::after,
+  .btn.save:hover::after { opacity: 1; }
+  
+  .btn:disabled {
+    opacity: .55;
+    color: color-mix(in oklab, var(--ink) 75%, white 25%);
+    border-color: color-mix(in oklab, var(--cy) 30%, transparent);
+    cursor: not-allowed;
+    box-shadow:
+      0 4px 14px rgba(0,246,255,.08),
+      inset 0 0 16px rgba(0,246,255,.06);
+  }
+  
+  /* Animations */
+  @keyframes auroraPulse {
+    0%   { filter: drop-shadow(0 0 6px rgba(0,246,255,.25)); }
+    100% { filter: drop-shadow(0 0 18px rgba(0,246,255,.65)); }
+  }
+  @keyframes solarBurst {
+    0%   { box-shadow: 0 0 0 0 rgba(0,246,255,.65); }
+    100% { box-shadow: 0 0 0 22px rgba(0,246,255,0); }
+  }
+  
+  /* Tasteful explainer reveal */
+  .explainer {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height .24s ease, opacity .24s ease, margin-top .24s ease;
+  }
+  .explainer.open {
+    max-height: 220px;
+    opacity: 1;
+    margin-top: 8px;
+  }
+  
+  /* Screenreader live status (accessible, invisible) */
+  .sr-live {
+    position: absolute;
+    width: 1px; height: 1px;
+    overflow: hidden; clip: rect(0 0 0 0);
+    white-space: nowrap; clip-path: inset(50%);
+  }
+  
+  /* ─────────────────────────────────────────────
+     Responsive tweaks
+     ──────────────────────────────────────────── */
+  @media (max-width: 560px) {
+    .solar-anchored-dial { --dial-size: clamp(160px, 70vw, 240px); }
+    .buttons-row { gap: 8px; }
+    .btn { padding: 10px 10px; }
+    .nudge .btn { padding: 8px 10px; }
+    .solar-sync-panel { max-height: min(64svh, 520px); }
+  }
+  
+  @media (min-width: 1200px) {
+    .solar-anchored-dial { --dial-size: clamp(220px, 24vh, 320px); }
+  }
+  
+  /* Reduced motion respect (soften or remove animations) */
+  @media (prefers-reduced-motion: reduce) {
+    .btn.primary,
+    .btn.save { animation: none; }
+    .btn.primary:focus-visible,
+    .btn.save:focus-visible { animation: none; }
+  }
+  

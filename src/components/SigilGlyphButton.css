@@ -1,0 +1,128 @@
+/* ────────────────────────────────────────────────────────────────
+   sigil-button.css · Atlantean Lumitech  “Celestial-Focus Skin”
+   v3.0 — radiant glass-orb aesthetic
+───────────────────────────────────────────────────────────────── */
+
+/* ====== Core button ====== */
+.sigil-button {
+    --ring-hue: 182;                  /* base CYAN (tweakable)            */
+    --ring: hsl(var(--ring-hue) 100% 55%);
+    --ring-soft: hsl(var(--ring-hue) 100% 65% / .45);
+  
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    padding: 4px;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    background: hsla(0 0% 100% / .05);          /* subtle glass blur base   */
+    backdrop-filter: blur(6px) saturate(1.4);
+    box-shadow:
+      0 0 4px 1px var(--ring-soft) inset,
+      0 0 6px var(--ring),
+      0 0 14px var(--ring-soft);
+    transition:
+      transform 0.25s cubic-bezier(.22,1.15,.47,1.04),
+      box-shadow   0.25s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  
+  /* ====== Halo ring ====== */
+  .sigil-button::before {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: inherit;
+    padding: 1.5px;
+    background:
+      conic-gradient(from 0turn,
+        var(--ring),
+        transparent 32%, /* feather sweep */
+        var(--ring) 34%,
+        transparent 65%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    filter: blur(6px);
+    animation: spinRing 5.5s linear infinite;
+    pointer-events: none;
+  }
+  
+  /* ====== Hover / active ====== */
+  .sigil-button:hover {
+    transform: translateY(-3px) scale(1.08);
+    box-shadow:
+      0 0 6px 1px var(--ring) inset,
+      0 0 10px var(--ring),
+      0 0 22px var(--ring);
+  }
+  .sigil-button:active {
+    transform: translateY(0) scale(.93);
+    transition: transform 0.12s ease-out;
+    box-shadow:
+      0 0 2px 1px var(--ring) inset,
+      0 0 6px var(--ring),
+      0 0 12px var(--ring-soft);
+  }
+  
+  /* ====== Saturating glow pulse synced to global pulse var (optional) ====== */
+  @keyframes spinRing {
+    to { transform: rotate(360deg); }
+  }
+  
+  /* ====== Loader star (used by .sigil-loader) ====== */
+  .sigil-loader {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: hsla(0 0% 100% / .05);
+    backdrop-filter: blur(6px) saturate(1.3);
+    position: relative;
+    overflow: hidden;
+  }
+  .sigil-loader::after {
+    content: "";
+    position: absolute;
+    inset: 6px;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    border-top-color: var(--ring);
+    animation: loaderSpin 1s linear infinite;
+  }
+  @keyframes loaderSpin { to { transform: rotate(360deg); } }
+  /* Make sure nothing inside the button can hijack the click */
+.sigil-button .sigil-thumb { pointer-events: none; }
+.sigil-button a,
+.sigil-button [role="link"],
+.sigil-button svg a {
+  pointer-events: none !important;
+}
+/* Thumbnail wrapper */
+.sigil-thumb {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+/* Shield sits above the SVG/QR and eats events so links never fire */
+.sigil-thumb .sigil-shield {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: transparent;
+  pointer-events: auto;          /* capture the click here */
+  touch-action: manipulation;    /* safe on mobile */
+}
+
+/* (Optional) belt-and-suspenders: avoid accidental focus inside */
+.sigil-button a,
+.sigil-button [role="link"] {
+  pointer-events: none !important;
+}

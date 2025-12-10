@@ -1,0 +1,306 @@
+/* ───────────────────────────────────────────────────────────────
+   DayDetailModal.css · Atlantean Lumitech “Kairos Kalendar — Day”
+   v2.0 · Phi-Pulse Hyper-Clarity ✦ One-X, Divine Centering
+   ───────────────────────────────────────────────────────────────
+   ✦ Perfect optical centering (safe-area aware, DVH)
+   ✦ Sticky header; close (✕) is always reachable
+   ✦ Backdrop for modal is NON-interactive → ONLY ✕ closes modal
+   ✦ Bottom-sheet editor has its own tappable backdrop to dismiss
+   ✦ Momentum scrolling + overscroll containment (no page bounce)
+   ✦ Tap ergonomics; content-visibility; strict containment
+───────────────────────────────────────────────────────────────── */
+
+/* ══════════════ Tokens ══════════════ */
+:root{
+  --c-bg:      #050607;
+  --c-panel:   #0d0f11;
+  --c-glow:    #00eaff;
+  --c-gold:    #f5c84c;
+  --c-red:     #ff3b30;
+  --c-note:    #9d4dff;
+
+  --radius-xl: 26px;
+  --radius-lg: 18px;
+  --radius:    12px;
+  --border-lg: 2px solid var(--c-glow);
+
+  --kai-pulse: 5.236s;
+
+  /* mobile ergonomics / dvh */
+  --tap: 44px;
+  --dvh: 100dvh;
+}
+
+/* ══════════════ Global reset ══════════════ */
+*,*::before,*::after{ box-sizing:border-box }
+html,body{
+  background:var(--c-bg);
+  font-family:"Inter var",-apple-system,BlinkMacSystemFont,system-ui,Segoe UI,Roboto,sans-serif;
+  color:#e7f8ff;
+  -webkit-font-smoothing:antialiased;
+  margin:0;
+  overscroll-behavior:none;
+}
+button{ -webkit-tap-highlight-color:transparent }
+
+/* ══════════════ Backdrops ══════════════ */
+/* MODAL backdrop: visible but NON-interactive (does not intercept taps/clicks). */
+.day-modal-backdrop{
+  position:fixed; inset:0; z-index:60;
+  display:flex; align-items:center; justify-content:center;
+  padding:
+    env(safe-area-inset-top,0)
+    env(safe-area-inset-right,0)
+    env(safe-area-inset-bottom,0)
+    env(safe-area-inset-left,0);
+  background:radial-gradient(circle at 50% 50%, rgba(0,234,255,.12), rgba(0,0,0,.92));
+  min-height:var(--dvh,100vh);
+
+  pointer-events:none;            /* <— critical: ONLY ✕ closes */
+  content-visibility:auto;
+  contain:layout paint style;
+}
+
+/* NOTE-EDITOR backdrop: interactive (tap to close the sheet) */
+.note-editor-backdrop{
+  position:fixed; inset:0; z-index:119;
+  background:radial-gradient(circle at 50% 50%, rgba(0,234,255,.10), rgba(0,0,0,.70));
+  pointer-events:auto;           /* <— sheet can be dismissed by tapping outside */
+  touch-action:manipulation;
+}
+
+/* ══════════════ Modal Panel ══════════════ */
+.day-modal{
+  pointer-events:auto; /* receives interactions */
+
+  width:min(92vw,720px);
+  max-height:min(92vh, calc(var(--dvh) - 8vh));
+  background:var(--c-panel);
+  border:1px solid rgba(0,234,255,.18);
+  border-radius:var(--radius-xl);
+  box-shadow:
+    0 0 14px 2px rgba(0,234,255,.35),
+    0 0 38px 6px rgba(0,234,255,.15);
+  display:flex; flex-direction:column; overflow:hidden;
+
+  /* Centering + spacing */
+  margin:6vh auto;
+
+  /* Perf */
+  content-visibility:auto;
+  contain:layout paint style;
+  contain-intrinsic-size:720px 640px;
+  will-change:transform,opacity;
+  animation:modal-breathe var(--kai-pulse) ease-in-out infinite alternate;
+}
+
+@keyframes modal-breathe{
+  0%{   box-shadow:0 0 14px 3px rgba(0,234,255,.30) }
+  100%{ box-shadow:0 0 24px 5px rgba(0,234,255,.42) }
+}
+
+@media (max-width:599px){
+  .day-modal{
+    margin-top:calc(env(safe-area-inset-top) + 4.75rem);
+    margin-bottom:4vh;
+    width:min(94vw,720px);
+  }
+}
+
+/* ══════════════ Header (sticky) ══════════════ */
+.day-header{
+  position:sticky; top:0; z-index:3;
+  display:flex; justify-content:space-between; align-items:center;
+  padding:1.25rem 1.5rem 1rem;
+  background:var(--c-panel);
+  border-bottom:1px solid rgba(0,234,255,.12);
+  backdrop-filter:blur(6px);
+}
+.day-header h2{
+  margin:0;
+  font-size:1.25rem; font-weight:600; line-height:1.2;
+  color:var(--c-gold);
+  text-shadow:0 0 6px rgba(245,200,76,.45);
+}
+.day-header h2 span{ color:var(--c-glow); font-weight:400 }
+
+/* ══════════════ Close button (ONLY way to exit modal) ══════════════ */
+.close-btn{
+  all:unset; cursor:pointer;
+  width:max(2.25rem, var(--tap));
+  height:max(2.25rem, var(--tap));
+  border-radius:50%; display:grid; place-items:center;
+  background:rgba(255,255,255,.05);
+  box-shadow:0 0 4px rgba(0,0,0,.35);
+  font-size:1.12rem;
+  color:var(--c-red);
+  transition:background .18s, transform .18s;
+  touch-action:manipulation;
+  will-change:transform,background;
+}
+.close-btn:hover{  background:rgba(255,59,48,.16); transform:rotate(90deg) }
+.close-btn:active{ transform:scale(.92) rotate(90deg) }
+.close-btn:focus-visible{ outline:2px solid rgba(255,59,48,.6); outline-offset:3px }
+
+/* ══════════════ Scroll Area ══════════════ */
+.beat-list{
+  flex:1 1 auto;
+  overflow-y:auto;
+  padding:.35rem 0 2.5rem;
+  scroll-behavior:smooth;
+  overscroll-behavior:contain; /* no viewport bounce */
+  -webkit-overflow-scrolling:touch;
+  scrollbar-gutter:stable both-edges;
+}
+
+/* Custom scrollbar */
+.beat-list::-webkit-scrollbar{ width:8px }
+.beat-list::-webkit-scrollbar-thumb{ background:rgba(0,234,255,.35); border-radius:4px }
+.beat-list::-webkit-scrollbar-track{ background:rgba(255,255,255,.02) }
+.beat-list{ scrollbar-width:thin; scrollbar-color:rgba(0,234,255,.35) rgba(255,255,255,.02) }
+
+/* ══════════════ Accordion – Chapters & Beats ══════════════ */
+.chapter-container + .chapter-container{ margin-top:1rem }
+
+.chapter-header,
+.beat-header{
+  all:unset;
+  display:flex; justify-content:space-between; align-items:center;
+  width:100%;
+  padding:.7rem 1rem;
+  font-size:1rem; font-weight:600;
+  background:rgba(0,234,255,.08);
+  border-radius:var(--radius);
+  cursor:pointer;
+  transition:background .18s;
+  touch-action:manipulation;
+  user-select:none;
+}
+.chapter-header:hover,
+.beat-header:hover{ background:rgba(0,234,255,.12) }
+.chapter-header.open,
+.beat-header.open{  background:rgba(0,234,255,.18) }
+
+.chevron{
+  width:.55rem; height:.55rem; flex:none;
+  border-right:2px solid var(--c-glow);
+  border-bottom:2px solid var(--c-glow);
+  transform:rotate(45deg);
+  transition:transform .25s;
+}
+.chapter-header.open .chevron,
+.beat-header.open .chevron{ transform:rotate(225deg) }
+
+.chapter-body,
+.beat-steps{ overflow:hidden } /* for height animation */
+
+.beat-accordion + .beat-accordion{ margin-top:.6rem }
+
+/* ══════════════ Step row ══════════════ */
+.step-row{
+  display:flex; justify-content:space-between; align-items:center; gap:.75rem;
+  padding:.55rem .75rem;
+  border-radius:var(--radius);
+  transition:background .18s, transform .18s;
+  cursor:pointer; position:relative;
+  touch-action:manipulation;
+  user-select:none;
+}
+.step-row:hover{ background:rgba(255,255,255,.06); transform:translateX(4px) }
+
+.step-index{ font-size:.9rem; color:#c2f6ff; letter-spacing:.015em }
+.step-note-preview{
+  flex:1; font-size:.8rem; opacity:.75;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+
+/* aura for steps with note */
+.step-row.has-note{ background:rgba(157,77,255,.09) }
+.step-row.has-note::before{
+  content:""; position:absolute; inset:0; border-radius:var(--radius);
+  box-shadow:0 0 6px 2px rgba(157,77,255,.32); pointer-events:none;
+}
+
+/* optional current-step breathing */
+.step-row.current{
+  background:rgba(0,234,255,.14);
+  animation:breathe-current var(--kai-pulse) ease-in-out infinite;
+}
+@keyframes breathe-current{
+  0%{   box-shadow:0 0 8px 2px rgba(0,234,255,.35) }
+  100%{ box-shadow:0 0 14px 4px rgba(0,234,255,.50) }
+}
+
+/* ══════════════ Bottom-sheet Note Editor ══════════════ */
+.note-editor{
+  position:fixed; left:0; right:0; bottom:0; z-index:120;
+  background:var(--c-panel);
+  border-top:var(--border-lg);
+  border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+  padding:1.25rem 1.4rem 1.5rem;
+  box-shadow:0 -4px 12px rgba(0,234,255,.22);
+
+  pointer-events:auto; touch-action:manipulation;
+
+  content-visibility:auto;
+  contain:layout paint style;
+  will-change:transform;
+}
+.note-editor h4{
+  margin:0 0 .6rem;
+  font-size:1rem; color:var(--c-gold);
+  text-shadow:0 0 5px rgba(245,200,76,.45);
+}
+.note-editor textarea{
+  width:100%; height:7rem;
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(0,234,255,.22);
+  border-radius:var(--radius);
+  padding:.8rem .9rem;
+  color:#e7f8ff; font-size:.9rem; line-height:1.4;
+  resize:vertical; outline:none;
+  transition:border .18s, box-shadow .18s;
+  -webkit-overflow-scrolling:touch;
+}
+.note-editor textarea:focus{
+  border-color:var(--c-glow);
+  box-shadow:0 0 6px rgba(0,234,255,.55);
+}
+
+/* Editor footer buttons */
+.note-editor footer{
+  display:flex; justify-content:flex-end; gap:.75rem; margin-top:.95rem;
+}
+.btn-cancel,.btn-save{
+  all:unset; cursor:pointer;
+  padding:.58rem 1.25rem;
+  font-size:.9rem; font-weight:600;
+  border-radius:var(--radius);
+  transition:background .18s, box-shadow .18s, filter .18s;
+  touch-action:manipulation;
+}
+.btn-cancel{ background:rgba(255,255,255,.07) }
+.btn-cancel:hover{ background:rgba(255,255,255,.12) }
+
+.btn-save{
+  background:var(--c-glow); color:#001217;
+  box-shadow:0 0 8px 2px rgba(0,234,255,.35);
+}
+.btn-save:hover:not(:disabled){ box-shadow:0 0 14px 4px rgba(0,234,255,.55) }
+.btn-save:disabled{ opacity:.4; cursor:not-allowed }
+
+/* ══════════════ Mobile polish ══════════════ */
+@media (max-width:480px){
+  .day-header{ padding:1rem 1rem .85rem }
+  .chapter-header,.beat-header{ padding:.64rem .9rem }
+  .step-row{ padding:.5rem .7rem }
+}
+
+/* ══════════════ Reduced-motion preference ══════════════ */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation:none !important;
+    transition:none !important;
+    scroll-behavior:auto !important;
+  }
+}

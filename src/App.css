@@ -1,22 +1,16 @@
 /* src/App.css
    ΦNet — Atlantean Banking Console Shell
-   Official, sovereign, glass + audit-grade UI chrome
+   v25.3 — KLOCK PORTAL HARDENED (X works) + CSS refactor (no dupes, same look)
 
    ✅ GUARANTEE (this file):
-   - The App stays "app-locked" (no document scroll).
-   - The MAIN panel body is ALWAYS internally scrollable *when content exceeds height*.
-   - When content fits, it stays perfectly centered with no scrolling.
-   - Bottom actions (PhiKey / PhiStream) remain reachable + CLICKABLE on all device sizes,
-     including iOS Safari + Android Chrome dynamic bars + safe-area home indicator.
+   - App stays app-locked (no document scroll).
+   - MAIN panel body scrolls only when needed; otherwise perfectly centered.
+   - Mobile safe-areas respected (iOS/Android dynamic bars).
+   - Explorer (ΦStream) and KaiKlok portals are true full-screen overlays.
 
-   ✅ Tightness upgrades (this update):
-   - Less vertical gap between Atrium price chart (workspace-topbar) and Atrium body.
-   - Reduced shell padding + row gaps (especially on short-height devices / landscape).
-   - Fixed safe-area padding for bottom dock/footer so PhiKey/PhiStream never clip.
-
-   ✅ NEW (this update):
-   - MOBILE NAV TILES: show 2 cards at a time, horizontal swipe to access remaining tiles.
-     (Verifier / Mint / KaiVoh / ΦStream)
+   ✅ FIX (this version):
+   - Eternal KaiKlok close “X” is always clickable (z-index + stacking fix).
+   - Klock stage centers the clock MASSIVE (true hero square).
 */
 
 /* ────────────────────────────────────────────────────────────────
@@ -90,16 +84,14 @@
   /* Safe area */
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
-  /* ✅ Tighter shell controls */
+  /* Tighter shell controls */
   --stage-pad: clamp(1.05rem, 2.4vw, 2.5rem);
   --frame-pad: clamp(1.05rem, 2.1vw, 2rem);
 
-  /* ✅ tighter atrium grid spacing (chart ↔ atrium body) */
+  /* tighter atrium grid spacing */
   --workspace-gap: 0.85rem;
 
-  /* ✅ Extra “reach space” ONLY when panel scrolls:
-     ensures bottom CTA bars/buttons (PhiKey / PhiStream) can be scrolled above
-     the iOS home indicator + dynamic browser UI. */
+  /* Extra reach space ONLY when panel scrolls */
   --bottom-actions-reserve: 104px;
 }
 
@@ -122,8 +114,7 @@ body,
   width: 100%;
 }
 
-/* ✅ iOS/Safari “perfect center” fix:
-   Use the visible viewport height (dvh) when available, and keep a stable baseline (svh). */
+/* iOS/Safari “perfect center” fix: prefer svh/dvh when available */
 @supports (min-height: 100svh) {
   html,
   body,
@@ -139,7 +130,7 @@ body,
   }
 }
 
-/* lock viewport like an app: no page scroll, only internal panels scroll */
+/* lock viewport like an app */
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "SF Pro Text", "Inter", "Segoe UI", sans-serif;
@@ -147,7 +138,7 @@ body {
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow: hidden; /* app-like: prevent document scroll */
+  overflow: hidden;
   overscroll-behavior: none;
   touch-action: manipulation;
   -webkit-tap-highlight-color: rgba(51, 246, 255, 0.14);
@@ -183,7 +174,6 @@ a {
   color: var(--accent-cyan);
   text-decoration: none;
 }
-
 a:hover {
   text-decoration: underline;
 }
@@ -225,7 +215,6 @@ a:hover {
   box-shadow: var(--shadow-soft);
   transition: transform var(--transition-fast);
 }
-
 .skip-link:focus {
   transform: translateY(0);
 }
@@ -236,13 +225,10 @@ a:hover {
 
 .app-shell {
   position: fixed;
-  left: 0;
-  top: 0;
+  inset: 0;
   width: 100%;
 
-  /* ✅ Critical: use VisualViewport height when provided by App.tsx (--vvh-px)
-     so bottom CTAs never land under dynamic browser bars.
-     Fallbacks: 100dvh → 100vh. */
+  /* Critical: VisualViewport height from App.tsx */
   height: var(--vvh-px, 100dvh);
   max-height: var(--vvh-px, 100dvh);
 
@@ -322,7 +308,6 @@ a:hover {
   animation: orbit-spin 64s linear infinite;
   z-index: 0;
 }
-
 @keyframes orbit-spin {
   from {
     transform: translate(-50%, -50%) rotate(0deg);
@@ -362,7 +347,6 @@ a:hover {
   transform-origin: 50% 30%;
   z-index: 0;
 }
-
 @keyframes golden-breath {
   0% {
     opacity: 0.42;
@@ -485,7 +469,6 @@ a:hover {
   animation: brand-sheen calc(var(--breath) * 2) ease-in-out infinite;
   opacity: 0.55;
 }
-
 @keyframes brand-sheen {
   0% {
     transform: rotate(18deg) translateX(-55%);
@@ -507,131 +490,108 @@ a:hover {
   display: grid;
   gap: 0.12rem;
 }
-.brand__title{
-  /* your base */
+
+.brand__title {
   font-size: clamp(0.96rem, 0.78rem + 0.7vw, 1.28rem);
   font-weight: 860;
   letter-spacing: 0.018em;
   line-height: 1.05;
 
-  /* make the TEXT be the glass */
   color: transparent;
   -webkit-text-fill-color: transparent;
   -webkit-background-clip: text;
   background-clip: text;
 
-  /* neon atlantean prism inside letters */
-  background-image:
-    linear-gradient(
-      115deg,
-      rgba(255, 80, 190, 0.98) 0%,
-      rgba(120, 130, 255, 0.98) 18%,
-      rgba(80, 220, 255, 0.98) 36%,
-      rgba(120, 255, 210, 0.98) 54%,
-      rgba(255, 245, 120, 0.98) 72%,
-      rgba(255, 130, 70,  0.98) 86%,
-      rgba(255, 80, 190, 0.98) 100%
-    );
-
+  background-image: linear-gradient(
+    115deg,
+    rgba(255, 80, 190, 0.98) 0%,
+    rgba(120, 130, 255, 0.98) 18%,
+    rgba(80, 220, 255, 0.98) 36%,
+    rgba(120, 255, 210, 0.98) 54%,
+    rgba(255, 245, 120, 0.98) 72%,
+    rgba(255, 130, 70, 0.98) 86%,
+    rgba(255, 80, 190, 0.98) 100%
+  );
   background-size: 320% 320%;
   background-position: 0% 50%;
 
-  /* etched micro-shimmer (still INSIDE text) */
-  text-shadow:
-    0 0 0.06em rgba(255,255,255,0.32),
-    0 0 0.22em rgba(120,255,240,0.32),
-    0 0 0.55em rgba(120,130,255,0.18);
+  text-shadow: 0 0 0.06em rgba(255, 255, 255, 0.32),
+    0 0 0.22em rgba(120, 255, 240, 0.32),
+    0 0 0.55em rgba(120, 130, 255, 0.18);
 
-  filter:
-    saturate(1.55)
-    brightness(1.06)
-    drop-shadow(0 0 0.45em rgba(120,255,240,0.18))
-    drop-shadow(0 0 0.85em rgba(120,130,255,0.14))
-    drop-shadow(0 0 1.15em rgba(255,80,190,0.10));
+  filter: saturate(1.55) brightness(1.06)
+    drop-shadow(0 0 0.45em rgba(120, 255, 240, 0.18))
+    drop-shadow(0 0 0.85em rgba(120, 130, 255, 0.14))
+    drop-shadow(0 0 1.15em rgba(255, 80, 190, 0.1));
 
   transform-origin: left center;
   will-change: background-position, filter, text-shadow, transform;
 
-  /* φ breath + real-time rainbow drift */
-  animation:
-    brandTextPhiBreath 5.236s ease-in-out infinite,
+  animation: brandTextPhiBreath 5.236s ease-in-out infinite,
     brandTextRainbow 13.09s linear infinite;
 }
 
-/* φ inhale/exhale: subtle scale + glow modulation (TEXT only) */
-@keyframes brandTextPhiBreath{
-  0%{
+@keyframes brandTextPhiBreath {
+  0% {
     transform: translateZ(0) scale(1);
-    filter:
-      saturate(1.45)
-      brightness(1.02)
-      drop-shadow(0 0 0.34em rgba(120,255,240,0.14))
-      drop-shadow(0 0 0.70em rgba(120,130,255,0.10))
-      drop-shadow(0 0 0.95em rgba(255,80,190,0.08));
-    text-shadow:
-      0 0 0.05em rgba(255,255,255,0.26),
-      0 0 0.18em rgba(120,255,240,0.24),
-      0 0 0.46em rgba(120,130,255,0.14);
+    filter: saturate(1.45) brightness(1.02)
+      drop-shadow(0 0 0.34em rgba(120, 255, 240, 0.14))
+      drop-shadow(0 0 0.7em rgba(120, 130, 255, 0.1))
+      drop-shadow(0 0 0.95em rgba(255, 80, 190, 0.08));
+    text-shadow: 0 0 0.05em rgba(255, 255, 255, 0.26),
+      0 0 0.18em rgba(120, 255, 240, 0.24),
+      0 0 0.46em rgba(120, 130, 255, 0.14);
   }
-  38.2%{
-    transform: translateZ(0) scale(1.010);
-    filter:
-      saturate(1.62)
-      brightness(1.10)
-      drop-shadow(0 0 0.46em rgba(120,255,240,0.22))
-      drop-shadow(0 0 0.92em rgba(120,130,255,0.16))
-      drop-shadow(0 0 1.28em rgba(255,80,190,0.12));
-    text-shadow:
-      0 0 0.07em rgba(255,255,255,0.34),
-      0 0 0.26em rgba(120,255,240,0.34),
-      0 0 0.70em rgba(120,130,255,0.22);
+  38.2% {
+    transform: translateZ(0) scale(1.01);
+    filter: saturate(1.62) brightness(1.1)
+      drop-shadow(0 0 0.46em rgba(120, 255, 240, 0.22))
+      drop-shadow(0 0 0.92em rgba(120, 130, 255, 0.16))
+      drop-shadow(0 0 1.28em rgba(255, 80, 190, 0.12));
+    text-shadow: 0 0 0.07em rgba(255, 255, 255, 0.34),
+      0 0 0.26em rgba(120, 255, 240, 0.34),
+      0 0 0.7em rgba(120, 130, 255, 0.22);
   }
-  61.8%{
+  61.8% {
     transform: translateZ(0) scale(1.018);
-    filter:
-      saturate(1.78)
-      brightness(1.18)
-      drop-shadow(0 0 0.58em rgba(120,255,240,0.28))
-      drop-shadow(0 0 1.10em rgba(120,130,255,0.20))
-      drop-shadow(0 0 1.55em rgba(255,80,190,0.15));
-    text-shadow:
-      0 0 0.085em rgba(255,255,255,0.40),
-      0 0 0.34em rgba(120,255,240,0.42),
-      0 0 0.92em rgba(120,130,255,0.28);
+    filter: saturate(1.78) brightness(1.18)
+      drop-shadow(0 0 0.58em rgba(120, 255, 240, 0.28))
+      drop-shadow(0 0 1.1em rgba(120, 130, 255, 0.2))
+      drop-shadow(0 0 1.55em rgba(255, 80, 190, 0.15));
+    text-shadow: 0 0 0.085em rgba(255, 255, 255, 0.4),
+      0 0 0.34em rgba(120, 255, 240, 0.42),
+      0 0 0.92em rgba(120, 130, 255, 0.28);
   }
-  100%{
+  100% {
     transform: translateZ(0) scale(1);
-    filter:
-      saturate(1.45)
-      brightness(1.02)
-      drop-shadow(0 0 0.34em rgba(120,255,240,0.14))
-      drop-shadow(0 0 0.70em rgba(120,130,255,0.10))
-      drop-shadow(0 0 0.95em rgba(255,80,190,0.08));
-    text-shadow:
-      0 0 0.05em rgba(255,255,255,0.26),
-      0 0 0.18em rgba(120,255,240,0.24),
-      0 0 0.46em rgba(120,130,255,0.14);
+    filter: saturate(1.45) brightness(1.02)
+      drop-shadow(0 0 0.34em rgba(120, 255, 240, 0.14))
+      drop-shadow(0 0 0.7em rgba(120, 130, 255, 0.1))
+      drop-shadow(0 0 0.95em rgba(255, 80, 190, 0.08));
+    text-shadow: 0 0 0.05em rgba(255, 255, 255, 0.26),
+      0 0 0.18em rgba(120, 255, 240, 0.24),
+      0 0 0.46em rgba(120, 130, 255, 0.14);
+  }
+}
+@keyframes brandTextRainbow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
   }
 }
 
-/* real-time evolving rainbow inside the glyphs */
-@keyframes brandTextRainbow{
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-/* optional: “etched frost” texture INSIDE the letters */
-@supports (-webkit-text-fill-color: transparent){
-  .brand__title{
-    background-image:
-      /* fine frost lines */
-      repeating-linear-gradient(
+@supports (-webkit-text-fill-color: transparent) {
+  .brand__title {
+    background-image: repeating-linear-gradient(
         115deg,
-        rgba(255,255,255,0.14) 0 1px,
-        rgba(255,255,255,0.00) 1px 7px
+        rgba(255, 255, 255, 0.14) 0 1px,
+        rgba(255, 255, 255, 0) 1px 7px
       ),
-      /* prismatic core */
       linear-gradient(
         115deg,
         rgba(255, 80, 190, 0.98) 0%,
@@ -639,7 +599,7 @@ a:hover {
         rgba(80, 220, 255, 0.98) 36%,
         rgba(120, 255, 210, 0.98) 54%,
         rgba(255, 245, 120, 0.98) 72%,
-        rgba(255, 130, 70,  0.98) 86%,
+        rgba(255, 130, 70, 0.98) 86%,
         rgba(255, 80, 190, 0.98) 100%
       );
     background-size: 120% 120%, 320% 320%;
@@ -648,33 +608,30 @@ a:hover {
   }
 }
 
-/* reduced motion */
-@media (prefers-reduced-motion: reduce){
-  .brand__title{ animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .brand__title {
+    animation: none;
+  }
 }
 
-.brand__subtitle{
-  /* clean, sovereign smallcaps vibe */
+.brand__subtitle {
   font-size: clamp(0.74rem, 0.66rem + 0.35vw, 0.92rem);
   font-weight: 720;
   letter-spacing: 0.11em;
   text-transform: uppercase;
   line-height: 1.15;
 
-  /* airy “frosted” clarity */
   color: rgba(210, 245, 245, 0.72);
-  text-shadow:
-    0 0 0.18em rgba(120, 255, 240, 0.12),
+  text-shadow: 0 0 0.18em rgba(120, 255, 240, 0.12),
     0 0 0.55em rgba(120, 130, 255, 0.08);
 
-  /* subtle inner-prism (inside letters, not a badge) */
   background-image: linear-gradient(
     105deg,
-    rgba(255,255,255,0.86) 0%,
-    rgba(160,255,244,0.84) 28%,
-    rgba(150,205,255,0.78) 58%,
-    rgba(210,170,255,0.72) 86%,
-    rgba(255,255,255,0.82) 100%
+    rgba(255, 255, 255, 0.86) 0%,
+    rgba(160, 255, 244, 0.84) 28%,
+    rgba(150, 205, 255, 0.78) 58%,
+    rgba(210, 170, 255, 0.72) 86%,
+    rgba(255, 255, 255, 0.82) 100%
   );
   background-size: 240% 240%;
   background-position: 0% 50%;
@@ -682,36 +639,53 @@ a:hover {
   background-clip: text;
   -webkit-text-fill-color: transparent;
 
-  /* “alive but restrained” — slower than the title */
   will-change: background-position, filter;
   filter: saturate(1.12) brightness(1.02);
   animation: brandSubtitleDrift 10.472s linear infinite;
 }
-
-@keyframes brandSubtitleDrift{
-  0%{ background-position: 0% 50%; }
-  50%{ background-position: 100% 50%; }
-  100%{ background-position: 0% 50%; }
+@keyframes brandSubtitleDrift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand__subtitle {
+    animation: none;
+  }
 }
 
-@media (prefers-reduced-motion: reduce){
-  .brand__subtitle{ animation: none; }
-}
-
-/* LIVE indicator (top right) */
+/* LIVE indicator (top right) — works as <a> or <button> */
 .topbar-live {
+  appearance: none;
+  -webkit-appearance: none;
+
   display: flex;
   align-items: center;
   gap: 12px;
+
   padding: 8px 12px;
   border-radius: 999px;
+
   border: 1px solid rgba(0, 255, 160, 0.22);
   background: rgba(10, 14, 24, 0.45);
-  backdrop-filter: blur(10px);
-}
 
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+}
 .topbar-live:focus-visible {
-  box-shadow: var(--ring);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.14),
+    0 0 0 6px rgba(120, 220, 255, 0.1);
 }
 
 .live-orb {
@@ -723,7 +697,6 @@ a:hover {
     0 0 26px rgba(0, 255, 160, 0.35);
   animation: liveOrbPulse var(--breath-s, 5.236s) ease-in-out infinite;
 }
-
 @keyframes liveOrbPulse {
   0%,
   100% {
@@ -745,12 +718,10 @@ a:hover {
   flex-direction: column;
   line-height: 1.05;
 }
-
 .live-title {
   font-weight: 800;
   letter-spacing: 0.12em;
 }
-
 .live-meta {
   opacity: 0.9;
   font-size: 12px;
@@ -770,7 +741,6 @@ a:hover {
   align-items: center;
   justify-content: center;
 
-  /* ✅ tighter + safe-area aware padding */
   padding: var(--stage-pad);
   padding-bottom: calc(var(--stage-pad) + var(--safe-bottom));
 
@@ -815,12 +785,10 @@ a:hover {
   border-radius: calc(var(--radius-xl) - 2px);
   pointer-events: none;
 }
-
 .app-frame::before {
   border: 1px solid rgba(255, 255, 255, 0.09);
   opacity: 0.85;
 }
-
 .app-frame::after {
   background: linear-gradient(
     120deg,
@@ -836,7 +804,7 @@ a:hover {
 .app-frame-inner {
   position: relative;
   z-index: 1;
-  padding: var(--frame-pad); /* ✅ tighter via token */
+  padding: var(--frame-pad);
   border-radius: calc(var(--radius-xl) - 6px);
   background: radial-gradient(
       circle at 10% 0%,
@@ -858,17 +826,17 @@ a:hover {
   height: 100%;
 }
 
-/* ✅ Workspace: atrium topbar (chart) + atrium body (nav+panel) */
+/* Workspace: atrium topbar (chart) + atrium body (nav+panel) */
 .app-workspace {
   display: grid;
   grid-template-columns: 320px 1fr;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: var(--workspace-gap); /* ✅ tighter chart↔atrium spacing */
+  gap: var(--workspace-gap);
   height: 100%;
   min-height: 0;
 }
 
-/* ✅ Atrium-level chart bar (spans both columns; NOT inside the verifier panel) */
+/* Atrium-level chart bar */
 .workspace-topbar {
   grid-column: 1 / -1;
   border-radius: var(--radius-lg);
@@ -890,7 +858,6 @@ a:hover {
   position: relative;
   padding: 0.68rem 0.75rem 0.75rem;
 }
-
 .workspace-topbar > * {
   width: 100%;
   min-width: 0;
@@ -936,7 +903,6 @@ a:hover {
   text-transform: uppercase;
   color: rgba(245, 247, 255, 0.92);
 }
-
 .nav-head__sub {
   margin-top: 0.22rem;
   font-size: 0.82rem;
@@ -947,7 +913,7 @@ a:hover {
   padding: 0.7rem;
   display: grid;
   gap: 0.5rem;
-  overflow: hidden; /* ✅ no scrolling in nav rail on desktop */
+  overflow: hidden;
 }
 
 .nav-item {
@@ -971,7 +937,6 @@ a:hover {
   font-weight: 900;
   letter-spacing: 0.03em;
 }
-
 .nav-item__desc {
   margin-top: 0.16rem;
   font-size: 0.82rem;
@@ -1027,7 +992,6 @@ a:hover {
   color: rgba(245, 247, 255, 0.72);
   line-height: 1.35;
 }
-
 .nav-foot__line + .nav-foot__line {
   margin-top: 0.35rem;
 }
@@ -1097,7 +1061,7 @@ a:hover {
   text-transform: uppercase;
 }
 
-/* ✅ PANEL BODY */
+/* PANEL BODY */
 .panel-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -1109,42 +1073,7 @@ a:hover {
   scroll-padding-bottom: calc(1.05rem + var(--safe-bottom));
   scrollbar-gutter: stable both-edges;
   position: relative;
-}
 
-.app-shell[data-panel-scroll="1"] .panel-body::after {
-  content: "";
-  display: block;
-  height: var(--bottom-actions-reserve);
-  width: 100%;
-}
-
-.panel-body--locked {
-  overscroll-behavior: contain;
-}
-
-.panel-body--scroll {
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-}
-
-.panel-center {
-  width: 100%;
-  min-width: 0;
-  min-height: 100%;
-  display: flex;
-}
-
-.panel-center > * {
-  width: 100%;
-  max-width: 920px;
-  min-width: 0;
-  margin: auto;
-  max-height: none;
-  min-height: 0;
-}
-
-.panel-body {
   scrollbar-width: thin;
   scrollbar-color: rgba(170, 241, 255, 0.18) transparent;
 }
@@ -1164,7 +1093,39 @@ a:hover {
   background: rgba(170, 241, 255, 0.28);
 }
 
-/* Footer (dock) — ALWAYS VISIBLE, SAFE-AREA SAFE */
+/* extra reach space only when AppChrome says so */
+.app-shell[data-panel-scroll="1"] .panel-body::after {
+  content: "";
+  display: block;
+  height: var(--bottom-actions-reserve);
+  width: 100%;
+}
+
+.panel-body--locked {
+  overscroll-behavior: contain;
+}
+.panel-body--scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.panel-center {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  display: flex;
+}
+.panel-center > * {
+  width: 100%;
+  max-width: 920px;
+  min-width: 0;
+  margin: auto;
+  max-height: none;
+  min-height: 0;
+}
+
+/* Footer (dock) */
 .panel-foot {
   flex: 0 0 auto;
   padding: 0.72rem 1.1rem calc(0.72rem + var(--safe-bottom));
@@ -1211,22 +1172,18 @@ a:hover {
   letter-spacing: 0.05em;
   line-height: 1;
 }
-
 .notfound__title {
   margin-top: 0.35rem;
   font-size: 1.1rem;
   font-weight: 900;
 }
-
 .notfound__hint {
   margin-top: 0.5rem;
   color: rgba(245, 247, 255, 0.72);
 }
-
 .notfound__actions {
   margin-top: 1.15rem;
 }
-
 .notfound__cta {
   display: inline-flex;
   align-items: center;
@@ -1253,7 +1210,6 @@ a:hover {
     0 0 0 1px rgba(255, 255, 255, 0.1) inset;
   transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
-
 .notfound__cta:hover {
   text-decoration: none;
   transform: translateY(-1px);
@@ -1263,7 +1219,7 @@ a:hover {
 }
 
 /* ────────────────────────────────────────────────────────────────
-   11) Responsive — mobile becomes “mission control”
+   9) Responsive — mobile becomes “mission control”
    ─────────────────────────────────────────────────────────────── */
 
 @media (max-width: 980px) {
@@ -1284,7 +1240,7 @@ a:hover {
     padding: 0.95rem;
   }
 
-  /* ✅ Now: topbar (chart) + nav + panel */
+  /* topbar (chart) + nav + panel */
   .app-workspace {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto minmax(0, 1fr);
@@ -1298,9 +1254,8 @@ a:hover {
     height: auto;
   }
 
-  /* ✅ MOBILE NAV TILES — 2 visible, horizontal swipe for the rest */
+  /* MOBILE NAV TILES — 2 visible, horizontal swipe */
   .nav-list {
-    /* switch from grid to horizontal rail */
     display: flex;
     flex-wrap: nowrap;
     gap: 0.5rem;
@@ -1313,24 +1268,20 @@ a:hover {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
 
-    /* “official” feel: snap like a vault carousel */
     scroll-snap-type: x mandatory;
     scroll-padding-left: 0.7rem;
     scroll-padding-right: 0.7rem;
 
-    /* no ugly bars (still scrollable) */
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* old Edge */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     position: relative;
     isolation: isolate;
     touch-action: pan-x;
   }
-
   .nav-list::-webkit-scrollbar {
-    height: 0px; /* WebKit hide */
+    height: 0px;
   }
 
-  /* edge fades to imply scroll */
   .nav-list::before,
   .nav-list::after {
     content: "";
@@ -1359,7 +1310,6 @@ a:hover {
   }
 
   .nav-item {
-    /* exactly 2 tiles in view (gap accounted) */
     flex: 0 0 calc((100% - 0.5rem) / 2);
     min-width: 0;
 
@@ -1424,7 +1374,7 @@ a:hover {
   }
 }
 
-/* ✅ HEIGHT-BASED SAFETY: short screens / landscape phones */
+/* HEIGHT-BASED SAFETY: short screens / landscape phones */
 @media (max-height: 820px) {
   :root {
     --workspace-gap: 0.7rem;
@@ -1487,14 +1437,10 @@ a:hover {
 }
 
 /* ────────────────────────────────────────────────────────────────
-   Explorer full-screen portal (PhiStream / ExplorerRoute)
-   ✅ FULL SCREEN WIDTH + ✅ SCROLLABLE BODY
-   - NO header text (content is full-bleed)
-   - Close “X” is a floating vault control (top-right)
-   - Above EVERYTHING
-──────────────────────────────────────────────────────────────── */
+   10) Explorer full-screen portal (ΦStream / ExplorerRoute)
+   ─────────────────────────────────────────────────────────────── */
 
-/* Backdrop (FULL SCREEN; stretches, no centering card constraints) */
+/* Backdrop (FULL SCREEN) */
 .explorer-pop {
   position: fixed;
   inset: 0;
@@ -1502,8 +1448,6 @@ a:hover {
 
   display: grid;
   place-items: stretch;
-
-  /* FULLSCREEN = no outer padding */
   padding: 0;
 
   background: radial-gradient(
@@ -1524,7 +1468,6 @@ a:hover {
   overscroll-behavior: contain;
   isolation: isolate;
 }
-
 @supports not ((backdrop-filter: blur(1px))) {
   .explorer-pop {
     background: rgba(0, 0, 0, 0.78);
@@ -1534,10 +1477,8 @@ a:hover {
 /* Panel (FULL SCREEN WIDTH/HEIGHT) */
 .explorer-pop__panel {
   position: relative;
-
   width: 100%;
   height: 100%;
-
   border-radius: 0px;
   overflow: hidden;
 
@@ -1577,7 +1518,6 @@ a:hover {
   border: 1px solid rgba(255, 255, 255, 0.1);
   opacity: 0.75;
 }
-
 .explorer-pop__panel::after {
   content: "";
   position: absolute;
@@ -1594,7 +1534,6 @@ a:hover {
   opacity: 0.45;
   mix-blend-mode: soft-light;
 }
-
 @keyframes explorerSheen {
   0% {
     transform: rotate(18deg) translateX(-58%);
@@ -1612,27 +1551,21 @@ a:hover {
   }
 }
 
-/* ✅ SCROLLABLE BODY (this was the blocker: overflow: hidden) */
+/* SCROLLABLE BODY */
 .explorer-pop__body {
   position: relative;
   min-height: 0;
   height: 100%;
-
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   touch-action: pan-y;
 
-  /* keep content off the iOS home indicator + allow close button overlay at top */
   padding-bottom: env(safe-area-inset-bottom, 0px);
   scroll-padding-bottom: env(safe-area-inset-bottom, 0px);
 
-  /* optional: stable gutters */
   scrollbar-gutter: stable both-edges;
-}
 
-/* scrollbars */
-.explorer-pop__body {
   scrollbar-width: thin;
   scrollbar-color: rgba(170, 241, 255, 0.18) transparent;
 }
@@ -1652,22 +1585,13 @@ a:hover {
   background: rgba(170, 241, 255, 0.28);
 }
 
-/* ────────────────────────────────────────────────────────────────
-   ✅ OMG WOW CLOSE “X” — Prismatic Vault Control (PhiExplorer)
-   - Pixel-perfect centered glyph (no font weirdness)
-   - Breath-synced halo + orbit
-   - iOS-safe, huge tap target, always visible
-   - Works whether button contains "×" directly OR a <span>
-──────────────────────────────────────────────────────────────── */
-
+/* CLOSE “X” — Explorer */
 .explorer-pop__close {
-  /* sizing */
   --x-size: 44px;
   --x-pad: 14px;
   --x-top: calc(var(--x-pad) + env(safe-area-inset-top, 0px));
   --x-right: calc(var(--x-pad) + env(safe-area-inset-right, 0px));
 
-  /* aura */
   --x-border: rgba(170, 241, 255, 0.26);
   --x-border-hot: rgba(51, 246, 255, 0.42);
   --x-ink: rgba(245, 247, 255, 0.92);
@@ -1690,14 +1614,19 @@ a:hover {
 
   border: 1px solid var(--x-border);
 
-  /* “glass core” */
-  background:
-    radial-gradient(18px 18px at 28% 22%, rgba(255, 255, 255, 0.18), transparent 62%),
-    radial-gradient(28px 26px at 78% 84%, rgba(51, 246, 255, 0.14), transparent 64%),
+  background: radial-gradient(
+      18px 18px at 28% 22%,
+      rgba(255, 255, 255, 0.18),
+      transparent 62%
+    ),
+    radial-gradient(
+      28px 26px at 78% 84%,
+      rgba(51, 246, 255, 0.14),
+      transparent 64%
+    ),
     linear-gradient(180deg, rgba(10, 20, 48, 0.78), rgba(3, 6, 16, 0.84));
 
-  box-shadow:
-    0 18px 44px rgba(0, 0, 0, 0.62),
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.62),
     0 0 0 1px rgba(255, 255, 255, 0.06) inset,
     0 0 28px rgba(51, 246, 255, 0.12);
 
@@ -1707,7 +1636,6 @@ a:hover {
   z-index: 20;
   isolation: isolate;
 
-  /* glyph */
   color: var(--x-ink);
   font-weight: 950;
   font-size: 19px;
@@ -1716,26 +1644,20 @@ a:hover {
   text-rendering: geometricPrecision;
   -webkit-font-smoothing: antialiased;
 
-  text-shadow:
-    0 12px 28px rgba(0, 0, 0, 0.68),
+  text-shadow: 0 12px 28px rgba(0, 0, 0, 0.68),
     0 0 18px rgba(51, 246, 255, 0.22),
     0 0 36px rgba(155, 91, 255, 0.12);
 
   will-change: transform, filter, box-shadow, border-color;
   transform: translateZ(0);
 
-  transition:
-    transform var(--transition-fast),
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast),
-    background var(--transition-fast),
-    filter var(--transition-fast);
+  transition: transform var(--transition-fast),
+    border-color var(--transition-fast), box-shadow var(--transition-fast),
+    background var(--transition-fast), filter var(--transition-fast);
 
-  /* breath gives it “alive” authority (subtle, not gimmicky) */
   animation: xBreath var(--breath, 5.236s) ease-in-out infinite;
 }
 
-/* If old markup used <span>, keep it perfect too */
 .explorer-pop__close > span {
   display: block;
   line-height: 1;
@@ -1745,12 +1667,6 @@ a:hover {
   transform: translateY(-0.5px);
 }
 
-/* If new markup uses raw “×” text, nudge via font metrics (button itself) */
-.explorer-pop__close:not(:has(span)) {
-  padding-bottom: 1px; /* tiny baseline correction for × on some fonts */
-}
-
-/* Prismatic orbit halo (outside the button) */
 .explorer-pop__close::before {
   content: "";
   position: absolute;
@@ -1758,15 +1674,14 @@ a:hover {
   border-radius: 999px;
   pointer-events: none;
 
-  background:
-    conic-gradient(
-      from 220deg,
-      rgba(38, 255, 196, 0.30),
-      rgba(51, 246, 255, 0.02),
-      rgba(155, 91, 255, 0.32),
-      rgba(255, 217, 121, 0.18),
-      rgba(38, 255, 196, 0.30)
-    );
+  background: conic-gradient(
+    from 220deg,
+    rgba(38, 255, 196, 0.3),
+    rgba(51, 246, 255, 0.02),
+    rgba(155, 91, 255, 0.32),
+    rgba(255, 217, 121, 0.18),
+    rgba(38, 255, 196, 0.3)
+  );
 
   filter: blur(10px);
   opacity: 0.62;
@@ -1775,8 +1690,6 @@ a:hover {
   animation: xOrbit calc(var(--breath, 5.236s) * 6) linear infinite;
   transform-origin: 50% 50%;
 }
-
-/* Inner sheen sweep (inside the glass) */
 .explorer-pop__close::after {
   content: "";
   position: absolute;
@@ -1784,19 +1697,17 @@ a:hover {
   border-radius: 999px;
   pointer-events: none;
 
-  background:
-    linear-gradient(
-      120deg,
-      rgba(255, 255, 255, 0.22),
-      transparent 38%,
-      transparent 66%,
-      rgba(51, 246, 255, 0.14)
-    );
+  background: linear-gradient(
+    120deg,
+    rgba(255, 255, 255, 0.22),
+    transparent 38%,
+    transparent 66%,
+    rgba(51, 246, 255, 0.14)
+  );
 
   opacity: 0.42;
   mix-blend-mode: soft-light;
 
-  /* micro-motion sheen (classy) */
   animation: xSheen calc(var(--breath, 5.236s) * 2) ease-in-out infinite;
 }
 
@@ -1805,64 +1716,64 @@ a:hover {
   100% {
     transform: translateZ(0) scale(1);
     filter: brightness(1.02) saturate(1.12);
-    box-shadow:
-      0 18px 44px rgba(0, 0, 0, 0.62),
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.62),
       0 0 0 1px rgba(255, 255, 255, 0.06) inset,
       0 0 28px rgba(51, 246, 255, 0.12);
   }
   50% {
     transform: translateZ(0) scale(1.03);
-    filter: brightness(1.10) saturate(1.24);
-    box-shadow:
-      0 22px 54px rgba(0, 0, 0, 0.68),
-      0 0 0 1px rgba(51, 246, 255, 0.10) inset,
+    filter: brightness(1.1) saturate(1.24);
+    box-shadow: 0 22px 54px rgba(0, 0, 0, 0.68),
+      0 0 0 1px rgba(51, 246, 255, 0.1) inset,
       0 0 46px rgba(51, 246, 255, 0.18),
-      0 0 54px rgba(155, 91, 255, 0.10);
+      0 0 54px rgba(155, 91, 255, 0.1);
   }
 }
-
 @keyframes xOrbit {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
-
 @keyframes xSheen {
-  0%   { opacity: 0.30; filter: blur(0px); }
-  38%  { opacity: 0.48; filter: blur(0.2px); }
-  62%  { opacity: 0.52; filter: blur(0.2px); }
-  100% { opacity: 0.30; filter: blur(0px); }
+  0% {
+    opacity: 0.3;
+    filter: blur(0px);
+  }
+  38% {
+    opacity: 0.48;
+    filter: blur(0.2px);
+  }
+  62% {
+    opacity: 0.52;
+    filter: blur(0.2px);
+  }
+  100% {
+    opacity: 0.3;
+    filter: blur(0px);
+  }
 }
 
 .explorer-pop__close:hover {
   transform: translateZ(0) translateY(-1px);
   border-color: var(--x-border-hot);
   filter: brightness(1.12);
-
-  box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.70),
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7),
     0 0 0 1px rgba(51, 246, 255, 0.12) inset,
     0 0 52px rgba(51, 246, 255, 0.18);
 }
-
-.explorer-pop__close:hover::before {
-  opacity: 0.82;
-  filter: blur(9px);
-}
-
 .explorer-pop__close:active {
   transform: translateZ(0) scale(0.98);
   filter: brightness(1.04);
 }
-
 .explorer-pop__close:focus-visible {
   outline: none;
-  box-shadow:
-    var(--ring),
-    0 24px 60px rgba(0, 0, 0, 0.70),
+  box-shadow: var(--ring), 0 24px 60px rgba(0, 0, 0, 0.7),
     0 0 52px rgba(51, 246, 255, 0.18);
 }
 
-/* touch devices: don’t “jump” on hover emulation */
 @media (hover: none) and (pointer: coarse) {
   .explorer-pop__close:hover {
     transform: translateZ(0);
@@ -1873,13 +1784,11 @@ a:hover {
   .explorer-pop__panel::after {
     animation: none !important;
   }
-  .explorer-pop__close {
-    animation: none !important;
-    transition: none !important;
-  }
+  .explorer-pop__close,
   .explorer-pop__close::before,
   .explorer-pop__close::after {
     animation: none !important;
+    transition: none !important;
   }
 }
 
@@ -1892,13 +1801,12 @@ a:hover {
 }
 
 /* ────────────────────────────────────────────────────────────────
-   12) FULL-PAGE routes (SigilPage + SigilFeedPage): scrollable
+   11) FULL-PAGE routes (SigilPage + SigilFeedPage): scrollable
    ─────────────────────────────────────────────────────────────── */
 
 .fullpage-scroll {
   position: fixed;
-  left: 0;
-  top: 0;
+  inset: 0;
   width: 100%;
   height: 100dvh;
   max-height: 100dvh;
@@ -1925,19 +1833,16 @@ a:hover {
     linear-gradient(145deg, var(--bg-0), var(--bg-1), var(--bg-2));
   color: var(--text-main);
 }
-
 @supports not (height: 100dvh) {
   .fullpage-scroll {
     height: 100vh;
     max-height: 100vh;
   }
 }
-
 .fullpage-scroll > * {
   max-width: 1180px;
   margin: 0 auto;
 }
-
 .fullpage-scroll::-webkit-scrollbar {
   width: 10px;
 }
@@ -1955,62 +1860,44 @@ a:hover {
 }
 
 /* ───────────────────────────────────────────────────────────────
-   MOBILE VISIBILITY GUARANTEE — Sovereign Declarations trigger
-   GOAL (this version):
-   - ❌ NO floating / NO fixed positioning
-   - ✅ Stays in normal nav flow (where you placed it)
-   - ✅ Always reachable on mobile by making SPACE + enabling nav scroll
-   - ✅ Prevents “unreachable footer” when the app locks document scrolling
-   Paste LAST (last wins).
-──────────────────────────────────────────────────────────────── */
+   12) MOBILE VISIBILITY GUARANTEE — Sovereign Declarations trigger
+   ─────────────────────────────────────────────────────────────── */
 
 @media (max-width: 980px), (max-height: 720px) {
-  /* 1) Keep the trigger visible & interactive */
   .nav-foot {
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
     pointer-events: auto !important;
 
-    /* ✅ NOT floating */
     position: static !important;
-    left: auto !important;
-    right: auto !important;
-    bottom: auto !important;
 
-    /* ✅ SUPER TIGHT (≈90% reduction) */
     margin-top: 6px !important;
     margin-bottom: calc(2px + var(--safe-bottom, 0px)) !important;
     z-index: auto !important;
   }
 
-  /* 2) Keep centered/full-width */
   .nav-foot__toggle {
     width: min(720px, 100%);
     margin: 0 auto;
   }
 
-  /* 3) Nav scroll + minimal reserved space */
   .app-nav {
     overflow-y: auto !important;
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch !important;
     overscroll-behavior: contain !important;
 
-    /* ✅ SUPER TIGHT reserved space (≈90% reduction) */
     padding-bottom: calc(4px + var(--safe-bottom, 0px) + 2px) !important;
-
     min-height: 0 !important;
   }
 
-  /* 4) Ensure the nav content can actually shrink/scroll in a flex layout */
   .app-workspace,
   .app-frame,
   .app-frame-inner {
     min-height: 0 !important;
   }
 
-  /* 5) Remove horizontal clip only */
   .app-nav,
   .app-workspace,
   .app-frame,
@@ -2035,5 +1922,244 @@ a:hover {
   .nav-foot__chev {
     padding: 2px 5px !important;
     font-size: 7.75px !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   13) Eternal KaiKlok Popover — TRUE FULLSCREEN + HUGE STAGE
+   (Refactored: single source of truth; X is always clickable)
+   ───────────────────────────────────────────────────────────── */
+
+.klock-pop {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: grid;
+  place-items: stretch;
+  padding: 0;
+
+  width: 100vw;
+  height: 100vh;
+  background: radial-gradient(
+      1400px 900px at 18% 8%,
+      rgba(255, 220, 140, 0.18),
+      transparent 64%
+    ),
+    radial-gradient(
+      1200px 820px at 82% 16%,
+      rgba(120, 220, 255, 0.16),
+      transparent 62%
+    ),
+    radial-gradient(
+      900px 700px at 50% 110%,
+      rgba(190, 130, 255, 0.1),
+      transparent 60%
+    ),
+    rgba(2, 4, 8, 0.72);
+
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
+  overscroll-behavior: contain;
+  isolation: isolate;
+}
+@supports (height: 100dvh) {
+  .klock-pop {
+    height: 100dvh;
+  }
+}
+
+.klock-pop__panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  overflow: hidden;
+
+  border: 1px solid rgba(255, 255, 255, 0.1);
+
+  box-shadow: inset 0 0 0 1px rgba(255, 216, 120, 0.1),
+    inset 0 0 0 2px rgba(120, 220, 255, 0.06), 0 40px 120px rgba(0, 0, 0, 0.55);
+
+  background: radial-gradient(
+      1600px 900px at 12% 6%,
+      rgba(255, 210, 120, 0.16),
+      transparent 68%
+    ),
+    radial-gradient(
+      1400px 900px at 88% 10%,
+      rgba(120, 220, 255, 0.12),
+      transparent 66%
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+/* breath shimmer layer */
+.klock-pop__panel::before {
+  content: "";
+  position: absolute;
+  inset: -25%;
+  background: radial-gradient(
+      closest-side at 30% 30%,
+      rgba(255, 231, 160, 0.16),
+      transparent 62%
+    ),
+    radial-gradient(
+      closest-side at 70% 40%,
+      rgba(120, 220, 255, 0.12),
+      transparent 60%
+    );
+  transform: translateZ(0);
+  animation: klock-breathe var(--klock-breath, var(--breath-s, 5.236s))
+    ease-in-out infinite;
+  pointer-events: none;
+  opacity: 0.95;
+  filter: saturate(1.08) contrast(1.02);
+}
+
+/* ultra-light rune-grid / glass grain layer */
+.klock-pop__panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background: linear-gradient(transparent, rgba(255, 255, 255, 0.05)),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.05) 0 1px,
+      transparent 1px 36px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.04) 0 1px,
+      transparent 1px 44px
+    );
+  mix-blend-mode: overlay;
+}
+
+@keyframes klock-breathe {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: saturate(1) brightness(1);
+  }
+  50% {
+    transform: translate3d(0, -1.2%, 0) scale(1.03);
+    filter: saturate(1.08) brightness(1.06);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: saturate(1) brightness(1);
+  }
+}
+
+/* ✅ CLOSE BUTTON (FIXED): always above body/stage */
+.klock-pop__close {
+  position: absolute;
+  top: calc(14px + env(safe-area-inset-top));
+  right: calc(14px + env(safe-area-inset-right));
+
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+
+  display: grid;
+  place-items: center;
+
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(255, 225, 150, 0.12);
+
+  border: 1px solid var(--klock-border-strong, rgba(255, 231, 160, 0.62));
+  background: rgba(8, 12, 20, 0.46);
+  color: rgba(240, 246, 255, 0.96);
+
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+
+  z-index: 50; /* ← THE KEY FIX: above .klock-pop__body (z=1) */
+}
+
+.klock-pop__close:focus-visible {
+  outline: none;
+  box-shadow: var(--klock-ring, 0 0 0 2px rgba(255, 225, 150, 0.22)),
+    0 18px 60px rgba(0, 0, 0, 0.55);
+}
+
+/* BODY = stage owner (no accidental overlap with close button) */
+.klock-pop__body {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+}
+
+/* Fullscreen stage that centers the component */
+.klock-stage {
+  height: 100%;
+  width: 100%;
+  display: grid;
+  place-items: center;
+
+  /* safe-area + reserve for close button */
+  padding: calc(18px + env(safe-area-inset-top) + 64px)
+    calc(18px + env(safe-area-inset-right))
+    calc(18px + env(safe-area-inset-bottom))
+    calc(18px + env(safe-area-inset-left));
+}
+
+/* Big square the clock must occupy */
+.klock-stage__inner {
+  width: min(92vmin, 980px);
+  height: min(92vmin, 980px);
+  aspect-ratio: 1 / 1;
+
+  display: grid;
+  place-items: center;
+
+  filter: drop-shadow(0 30px 90px rgba(0, 0, 0, 0.55));
+}
+
+/* Force EternalKlock root to fill the hero square */
+.klock-stage__inner > * {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+}
+.klock-stage__inner :where(svg, canvas, img) {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  display: block;
+}
+.klock-stage__inner :where(.wrap, .container, .root) {
+  height: 100% !important;
+}
+
+@media (max-width: 720px) {
+  .klock-stage {
+    padding: calc(12px + env(safe-area-inset-top) + 62px)
+      calc(12px + env(safe-area-inset-right))
+      calc(12px + env(safe-area-inset-bottom))
+      calc(12px + env(safe-area-inset-left));
+  }
+  .klock-stage__inner {
+    width: min(96vmin, 980px);
+    height: min(96vmin, 980px);
+  }
+}
+
+/* motion-safe */
+@media (prefers-reduced-motion: reduce) {
+  .klock-pop__panel::before {
+    animation: none;
   }
 }

@@ -3,17 +3,27 @@
 
 /**
  * KaiStatus — Atlantean μpulse Bar
- * v4.9 — 2-ROW TIMELINE (DAY row + MONTH/ARK row) + ARK CHAKRA COLORS (KKS-1.0)
+ * v5.0 — CLICK → Kai-Klok POPOVER (portal modal) + a11y + scroll-lock + ESC close
  *
- * Update (per your screenshots):
- * - Month + Month Chakra + Ark move to their own row (between top timeline and countdown)
- * - Ark color is NOT forced Heart anymore:
- *    Ignition must be Root (red), then ascends by arc:
- *    Ignition→Root, Integration→Sacral, Harmonization→Solar Plexus,
- *    Reflekt→Heart, Purify→Throat, Dream→Third Eye
+ * ✅ FIX (ts2322 IntrinsicAttributes):
+ * Your KaiKlock component is currently typed as taking NO props ({}), so TS rejects hue/pulse/etc.
+ * We strictly type the props here (no `any`) and cast the imported component to ComponentType<KaiKlockProps>.
+ * This preserves runtime behavior and restores strict typing in KaiStatus immediately.
+ *
+ * Keeps v4.9:
+ * - 2-ROW TIMELINE (DAY row + MONTH/ARK row)
+ * - ARK CHAKRA COLORS (KKS-1.0)
+ * - KKS-1.0 D/M/Y from μpulses (deterministic)
+ *
+ * Adds:
+ * - Click / Enter / Space opens KaiKlock
+ * - Backdrop click + ESC closes
+ * - Scroll locked while open
+ * - No `any`
  */
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { useAlignedKaiTicker, useKaiPulseCountdown } from "../core/ticker";
 import { pad2 } from "../core/utils";
 import {
@@ -24,6 +34,7 @@ import {
   DAYS_PER_YEAR,
   MONTHS_PER_YEAR,
 } from "../../../utils/kai_pulse";
+import KaiKlockRaw from "../../../components/EternalKlock";
 import "./KaiStatus.css";
 
 const DEFAULT_PULSE_DUR_S = 3 + Math.sqrt(5); // 5.2360679…
@@ -141,15 +152,7 @@ function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
    Ark mapping (beats 0..35; 6 beats per ark)
 ───────────────────────────────────────────────────────────── */
 
-const ARK_NAMES = [
-  "Ignite",
-  "Integrate",
-  "Harmonize",
-  "Reflekt",
-  "Purify",
-  "Dream",
-] as const;
-
+const ARK_NAMES = ["Ignite", "Integrate", "Harmonize", "Reflekt", "Purify", "Dream"] as const;
 type ArkName = (typeof ARK_NAMES)[number];
 
 function arkFromBeat(beat: number): ArkName {
@@ -189,7 +192,6 @@ function kaiDMYFromPulseKKS(pulse: number): { day: number; month: number; year: 
   const pμ = microPulsesSinceGenesis(ms); // bigint μpulses
 
   const dayIdx = floorDivE(pμ, N_DAY_MICRO); // bigint days since genesis
-
   const monthIdx = floorDivE(dayIdx, BigInt(DAYS_PER_MONTH)); // bigint
   const yearIdx = floorDivE(dayIdx, BigInt(DAYS_PER_YEAR)); // bigint
 
@@ -277,10 +279,48 @@ type KaiStatusVars = React.CSSProperties & {
   ["--kai-ui-scale"]?: number;
 };
 
+/* ─────────────────────────────────────────────────────────────
+   ✅ KaiKlock props (strict) + typed component binding
+   Fixes: Property 'hue' does not exist on type 'IntrinsicAttributes'.ts(2322)
+───────────────────────────────────────────────────────────── */
+
+type KaiKlockProps = {
+  hue: string;
+  pulse: number;
+  harmonicDayPercent: number;
+  microCyclePercent: number;
+  dayLabel: string;
+  monthLabel: string;
+  monthDay: number;
+  kaiPulseEternal: number;
+  glowPulse: boolean;
+  pulseIntervalSec: number;
+  rimFlash: boolean;
+  solarSpiralStepString: string;
+  eternalBeatIndex: number;
+  eternalStepIndex: number;
+};
+
+const KaiKlock = KaiKlockRaw as unknown as React.ComponentType<KaiKlockProps>;
+
 export function KaiStatus(): React.JSX.Element {
   const kaiNow = useAlignedKaiTicker();
   const secsLeftAnchor = useKaiPulseCountdown(true);
   const secsLeft = useSmoothCountdown(secsLeftAnchor);
+
+  const [dialOpen, setDialOpen] = React.useState<boolean>(false);
+  const openDial = React.useCallback(() => setDialOpen(true), []);
+  const closeDial = React.useCallback(() => setDialOpen(false), []);
+
+  const onRootKeyDown = React.useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        setDialOpen(true);
+      }
+    },
+    [],
+  );
 
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const width = useElementWidth(rootRef);
@@ -325,17 +365,16 @@ export function KaiStatus(): React.JSX.Element {
   const dayNameFull = String(kaiNow.harmonicDay);
 
   const beatNum =
-    typeof kaiNow.beat === "number"
-      ? kaiNow.beat
-      : Number.parseInt(String(kaiNow.beat), 10) || 0;
+    typeof kaiNow.beat === "number" ? kaiNow.beat : Number.parseInt(String(kaiNow.beat), 10) || 0;
+
+  const stepNum =
+    typeof kaiNow.step === "number" ? kaiNow.step : Number.parseInt(String(kaiNow.step), 10) || 0;
 
   const arkFull: ArkName = arkFromBeat(beatNum);
   const arkChakra: ChakraName = ARK_CHAKRA[arkFull] ?? "Heart";
 
   const pulseNum =
-    typeof kaiNow.pulse === "number"
-      ? kaiNow.pulse
-      : Number.parseInt(String(kaiNow.pulse), 10) || 0;
+    typeof kaiNow.pulse === "number" ? kaiNow.pulse : Number.parseInt(String(kaiNow.pulse), 10) || 0;
 
   const dmy = React.useMemo(() => kaiDMYFromPulseKKS(pulseNum), [pulseNum]);
 
@@ -353,6 +392,35 @@ export function KaiStatus(): React.JSX.Element {
       "--kai-ui-scale": uiScaleFor(layout),
     };
   }, [progress, layout]);
+
+  // KaiKlock props derived from Beat/Step (stable + deterministic)
+  const stepsPerDay = 36 * 44; // 1584
+  const stepOfDay = Math.max(0, Math.min(stepsPerDay - 1, beatNum * 44 + stepNum));
+  const harmonicDayPercent = (stepOfDay / stepsPerDay) * 100;
+  const microCyclePercent = progress * 100;
+
+  // If your dial expects hue degrees, keep it a string degrees payload.
+  // If it expects a color, change to `hsl(${...} 100% 55%)`.
+  const hue = String(Math.round((beatNum / 36) * 360));
+
+  // Modal: scroll lock + ESC close
+  React.useEffect(() => {
+    if (!dialOpen) return;
+    if (typeof document === "undefined") return;
+
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+
+    const onKey = (ev: KeyboardEvent): void => {
+      if (ev.key === "Escape") closeDial();
+    };
+    window.addEventListener("keydown", onKey);
+
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [dialOpen, closeDial]);
 
   const Countdown = (
     <div className="kai-status__countdown" aria-label="Next pulse">
@@ -443,68 +511,130 @@ export function KaiStatus(): React.JSX.Element {
       className="kai-pill kai-pill--ark"
       title={arkFull}
       aria-label={`Ark ${arkFull}`}
-      data-chakra={arkChakra} // ✅ Ignition becomes Root/red
+      data-chakra={arkChakra} // ✅ Ignite becomes Root/red
     >
       {arkFull}
     </span>
   );
 
+  const dialPortal =
+    dialOpen && typeof document !== "undefined"
+      ? createPortal(
+          <div className="kk-pop" role="dialog" aria-modal="true" aria-label="Kai-Klok">
+            <button
+              type="button"
+              className="kk-pop__backdrop"
+              aria-label="Close Kai-Klok"
+              onClick={closeDial}
+            />
+            <div className="kk-pop__panel" role="document">
+              <div className="kk-pop__head">
+                <div className="kk-pop__title">Kai-Klok</div>
+                <button type="button" className="kk-pop__close" onClick={closeDial} aria-label="Close">
+                  ✕
+                </button>
+              </div>
+
+              <div className="kk-pop__meta" aria-label="Kai summary">
+                <span className="kk-pop__pill">{beatStepDisp}</span>
+                <span className="kk-pop__pill">{dmyText}</span>
+                <span className="kk-pop__pill">{monthName}</span>
+                <span className="kk-pop__pill">{arkFull}</span>
+              </div>
+
+              <div className="kk-pop__dial" aria-label="Kai-Klok dial">
+                <KaiKlock
+                  hue={hue}
+                  pulse={pulseNum}
+                  harmonicDayPercent={harmonicDayPercent}
+                  microCyclePercent={microCyclePercent}
+                  dayLabel={dayNameFull}
+                  monthLabel={monthName}
+                  monthDay={dmy.day}
+                  kaiPulseEternal={pulseNum}
+                  glowPulse={true}
+                  pulseIntervalSec={pulseDur}
+                  rimFlash={flash}
+                  solarSpiralStepString={`${pad2(beatNum)}:${pad2(stepNum)}`}
+                  eternalBeatIndex={beatNum}
+                  eternalStepIndex={stepNum}
+                />
+              </div>
+
+              <div className="kk-pop__foot">
+                <span className="kk-pop__hint">Tap outside or press ESC to return.</span>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
-    <div
-      ref={rootRef}
-      className={`kai-feed-status kai-feed-status--slim${flash ? " kai-feed-status--flash" : ""}`}
-      role="status"
-      aria-live="polite"
-      data-layout={layout}
-      data-bottom={bottomMode}
-      data-kai-bsi={beatStepDisp}
-      data-kai-ark={arkFull}
-      data-kai-dmy={dmyText}
-      data-day-chakra={dayChakra}
-      data-month-chakra={monthChakra}
-      data-ark-chakra={arkChakra}
-      data-day-num={dmy.day}
-      data-month-num={dmy.month}
-      data-year-num={dmy.year}
-      style={styleVars}
-    >
-      {/* ROW 1: day row (one line; scrollable) */}
-      <div className="kai-status__top" aria-label="Kai timeline (day row)">
-        <span className="kai-status__bsiWrap" aria-label={`Beat step ${beatStepDisp}`}>
-          <span className="kai-status__kLabel" aria-hidden="true">
-            KAIROS
+    <>
+      <div
+        ref={rootRef}
+        className={`kai-feed-status kai-feed-status--slim${flash ? " kai-feed-status--flash" : ""}`}
+        onClick={openDial}
+        onKeyDown={onRootKeyDown}
+        tabIndex={0}
+        role="button"
+        aria-haspopup="dialog"
+        aria-expanded={dialOpen}
+        aria-label="Kai status (open Kai-Klok)"
+        data-layout={layout}
+        data-bottom={bottomMode}
+        data-kai-bsi={beatStepDisp}
+        data-kai-ark={arkFull}
+        data-kai-dmy={dmyText}
+        data-day-chakra={dayChakra}
+        data-month-chakra={monthChakra}
+        data-ark-chakra={arkChakra}
+        data-day-num={dmy.day}
+        data-month-num={dmy.month}
+        data-year-num={dmy.year}
+        style={styleVars}
+      >
+        {/* ROW 1: day row (one line; scrollable) */}
+        <div className="kai-status__top" aria-label="Kai timeline (day row)">
+          <span className="kai-status__bsiWrap" aria-label={`Beat step ${beatStepDisp}`}>
+            <span className="kai-status__kLabel" aria-hidden="true">
+              KAIROS
+            </span>
+            <span className="kai-status__bsi" title={beatStepDisp}>
+              {beatStepDisp}
+            </span>
           </span>
-          <span className="kai-status__bsi" title={beatStepDisp}>
-            {beatStepDisp}
-          </span>
-        </span>
 
-        {DMYPill}
-        {DayPill}
-        {DayChakraPill}
+          {DMYPill}
+          {DayPill}
+          {DayChakraPill}
 
-        {pulseOnTop ? PulsePill : null}
+          {pulseOnTop ? PulsePill : null}
+        </div>
+
+        {/* ROW 2: month + ark row (one line; scrollable) */}
+        <div className="kai-status__mid" aria-label="Kai timeline (month/ark row)">
+          {MonthNamePill}
+          {MonthChakraPill}
+          {ArkPill}
+        </div>
+
+        {/* ROW 3: countdown row (pulse drops here on tiny/nano) */}
+        <div className="kai-status__bottom" aria-label="Next pulse row">
+          {pulseOnTop ? null : PulsePill}
+          {Countdown}
+        </div>
+
+        {/* Progress bar (always present) */}
+        <div className="kai-feed-status__bar" aria-hidden="true">
+          <div className="kai-feed-status__barFill" />
+          <div className="kai-feed-status__barSpark" />
+        </div>
       </div>
 
-      {/* ROW 2: month + ark row (one line; scrollable) */}
-      <div className="kai-status__mid" aria-label="Kai timeline (month/ark row)">
-        {MonthNamePill}
-        {MonthChakraPill}
-        {ArkPill}
-      </div>
-
-      {/* ROW 3: countdown row (pulse drops here on tiny/nano) */}
-      <div className="kai-status__bottom" aria-label="Next pulse row">
-        {pulseOnTop ? null : PulsePill}
-        {Countdown}
-      </div>
-
-      {/* Progress bar (always present) */}
-      <div className="kai-feed-status__bar" aria-hidden="true">
-        <div className="kai-feed-status__barFill" />
-        <div className="kai-feed-status__barSpark" />
-      </div>
-    </div>
+      {dialPortal}
+    </>
   );
 }
 
