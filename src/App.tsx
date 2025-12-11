@@ -1139,7 +1139,7 @@ function AppChrome(): React.JSX.Element {
                     <span className="mono">V</span>{" "}
                     <a
                       className="mono"
-                      href="https://github.com/phinetwork"
+                      href="https://github.com/phinetwork/phi.network"
                       target="_blank"
                       rel="noreferrer"
                       aria-label="Version 26.6 (opens GitHub)"
