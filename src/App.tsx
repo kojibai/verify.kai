@@ -1,6 +1,6 @@
 /* ──────────────────────────────────────────────────────────────────────────────
    App.tsx · ΦNet Sovereign Gate Shell (KaiOS-style PWA)
-   v26.5.0 · Viewport Lock + Native-App Popovers + GitHub Footer Link
+   v26.6.0 · Viewport Lock + Native-App Popovers + GitHub Footer Link
    ──────────────────────────────────────────────────────────────────────────────
    ✅ New: useDisableZoom()
       - Blocks pinch-zoom (multi-touch)
@@ -1142,10 +1142,10 @@ function AppChrome(): React.JSX.Element {
                       href="https://github.com/kojibai/verify.kai"
                       target="_blank"
                       rel="noreferrer"
-                      aria-label="Version 26.5 (opens GitHub)"
+                      aria-label="Version 26.6 (opens GitHub)"
                       title="Open GitHub"
                     >
-                      26.5
+                      26.6
                     </a>
                   </div>
                 </footer>
