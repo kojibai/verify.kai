@@ -15,6 +15,8 @@
 
 :root {
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* Force dark theme everywhere (iOS + Android ignore system light mode) */
+  color-scheme: dark;
 }
 
 html,
@@ -115,18 +117,6 @@ canvas {
   --badge-neon-2: #6fe7ff;
   --badge-neon-3: #19bfff;
   --badge-ink: #061012;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f7f8ff;
-    --card: rgba(255, 255, 255, 0.8);
-    --glass: rgba(255, 255, 255, 0.85);
-    --ink: #0d1330;
-    --ink-dim: #4a527d;
-    --border: rgba(13, 19, 48, 0.08);
-    --shadow: 0 6px 24px rgba(8, 16, 40, 0.12), inset 0 0 0 1px var(--border);
-  }
 }
 
 /* ───────────────────────────────────────────────────────────────
@@ -286,7 +276,6 @@ canvas {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
-
 .toolbar-actions > * {
   white-space: nowrap;
   height: 34px;                 /* ✅ slimmer */
@@ -305,7 +294,6 @@ canvas {
   font-size: 0.78rem;           /* ✅ slightly smaller */
   line-height: 1;
 }
-
 
 /* ───────────────────────────────────────────────────────────────
    4) Buttons
@@ -977,7 +965,6 @@ dialog.glass-modal.fullscreen[data-open="true"] {
     max-height: calc(100dvh - 260px);
   }
 }
-
 
 /* ───────────────────────────────────────────────────────────────
    7a) Summary grid (NO TRUNCATION EVER)
@@ -1676,6 +1663,7 @@ dialog.glass-modal.fullscreen[data-open="true"] {
     transform: scale(1.05);
   }
 }
+
 .brand-lockup .glyph{
   animation: glyphBreath var(--kai-pulse) ease-in-out infinite;
   will-change: transform, filter, box-shadow;
@@ -1699,7 +1687,6 @@ dialog.glass-modal.fullscreen[data-open="true"] {
 @media (prefers-reduced-motion: reduce){
   .brand-lockup .glyph{ animation: none; }
 }
-
 
 /* Neon badge pill (no tooltip) */
 .chip.icon[data-badge]:not([data-tip])::after {
@@ -1916,6 +1903,7 @@ dialog.glass-modal.fullscreen[data-open="true"] {
 .valuation-inline-value-sub .usd-unit {
   color: rgba(190, 242, 100, 0.96);
 }
+
 /* ───────────────────────────────────────────────────────────────
    LIVE Kai Pulse Indicator (toolbar) · NOW label + pulse #
    - breath-synced glow (5.236s)
@@ -2031,6 +2019,7 @@ dialog.glass-modal.fullscreen[data-open="true"] {
     font-size: 0.74rem;
   }
 }
+
 /* ───────────────────────────────────────────────────────────────
    Upload ΦKey CTA — CENTER + “hug content”
    Fix: background pill stretches + button sits left
@@ -2070,6 +2059,7 @@ dialog.glass-modal.fullscreen[data-open="true"] {
   margin-inline: auto;           /* perfect center */
   padding-inline: 16px;          /* keeps it “button sized” */
 }
+
 /* Upload ΦKey — square icon box with φ logo */
 .toolbar-actions .upload-phikey{
   display: inline-flex;
@@ -2108,7 +2098,9 @@ dialog.glass-modal.fullscreen[data-open="true"] {
   filter:
     drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 60%, transparent))
     drop-shadow(0 0 10px color-mix(in srgb, var(--accent-2) 35%, transparent));
-}.phikey-label{
+}
+
+.phikey-label{
   display: inline-flex;
   align-items: center;
   gap: 0px;                 /* ✅ super tight */
@@ -2133,4 +2125,7 @@ dialog.glass-modal.fullscreen[data-open="true"] {
   letter-spacing: -0.01em;  /* ✅ pulls letters tighter */
   line-height: 1;
 }
-.ico{ filter: drop-shadow(0 0 10px color-mix(in srgb, currentColor 35%, transparent)); }
+
+.ico{
+  filter: drop-shadow(0 0 10px color-mix(in srgb, currentColor 35%, transparent));
+}
