@@ -1,11 +1,7 @@
 /* ───────────────────────────────────────────────────────────────
-   Sovereign Declarations — KAI VAULT POPOVER (v∞)
+   Sovereign Declarations — KAI VAULT POPOVER (v∞.1)
    Sleek • Refined • Glossy Crystal • Audit-Grade • Breath-Alive
-
-   ✅ Drop-in replacement (same class names)
-   ✅ Kai-breath sync: 5.236s (everything inhales/exhales together)
-   ✅ Center popover vault (not bottom sheet)
-   ✅ Internal scroll, safe-area friendly, reduced-motion safe
+   Android-stable: no flicker, same style + motion as iOS
 ──────────────────────────────────────────────────────────────── */
 
 /* ───────────────────────────────────────────────────────────────
@@ -64,6 +60,7 @@
   overflow: hidden;
   isolation: isolate;
   transform: translateZ(0);
+  will-change: transform, box-shadow, border-color;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   touch-action: manipulation;
@@ -101,10 +98,13 @@
     rgba(51, 246, 255, 0.00)
   );
 
-  filter: blur(10px);         /* slimmer aura */
+  filter: blur(10px);
   opacity: 0.56;
   z-index: 0;
   pointer-events: none;
+
+  transform: translateZ(0);
+  will-change: opacity, transform;
 
   animation:
     navAuroraSpin 26.18s linear infinite,
@@ -131,6 +131,9 @@
   z-index: 1;
   pointer-events: none;
 
+  transform: translateZ(0) translateX(-62%) skewX(-14deg);
+  will-change: opacity, transform;
+
   animation: navBreathSheen var(--kai-breath) var(--kai-breath-ease) infinite;
 }
 
@@ -147,7 +150,7 @@
 }
 
 .nav-foot__toggle:active {
-  transform: translateY(1px);
+  transform: translateY(1px) translateZ(0);
 }
 
 .nav-foot__toggle:focus-visible {
@@ -173,6 +176,9 @@
   box-shadow:
     0 10px 26px rgba(0, 0, 0, 0.48),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
+
+  transform: translateZ(0);
+  will-change: box-shadow;
 
   animation: navBreathBadge var(--kai-breath) var(--kai-breath-ease) infinite;
 }
@@ -307,6 +313,10 @@
     radial-gradient(900px 650px at 70% 30%, rgba(155, 91, 255, 0.08), rgba(0, 0, 0, 0) 62%),
     rgba(0, 0, 0, 0.66);
 
+  opacity: 0.96;
+  transform: translateZ(0);
+  will-change: opacity;
+
   animation: navBreathBackdrop var(--kai-breath) var(--kai-breath-ease) infinite;
 
   border: 0;
@@ -342,8 +352,10 @@
     0 0 0 1px rgba(51, 246, 255, 0.10),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
-  transform: translateY(10px) scale(0.985);
+  transform: translateY(10px) scale(0.985) translateZ(0);
   opacity: 0;
+
+  will-change: transform, opacity, box-shadow, border-color;
 
   animation:
     navVaultIn 220ms cubic-bezier(0.2, 0.9, 0.2, 1) forwards,
@@ -373,12 +385,17 @@
   z-index: 0;
   pointer-events: none;
 
+  transform: translateZ(0);
+  will-change: opacity, transform;
+
   animation:
     navAuroraSpin 26.18s linear infinite,
     navBreathAurora var(--kai-breath) var(--kai-breath-ease) infinite;
 }
 
-/* Audit grid + film + scanline pass (breath) */
+/* Audit grid + film + scanline pass (breath)
+   NOTE: we keep scanlines static on Android-safe path:
+   no animated background-position on full-screen layers. */
 .nav-footSheet__panel::after {
   content: "";
   position: absolute;
@@ -390,7 +407,6 @@
   background:
     linear-gradient(rgba(51, 246, 255, 0.06) 1px, rgba(0, 0, 0, 0) 1px) 0 0 / 28px 28px,
     linear-gradient(90deg, rgba(155, 91, 255, 0.05) 1px, rgba(0, 0, 0, 0) 1px) 0 0 / 28px 28px,
-
     repeating-linear-gradient(
       0deg,
       rgba(255, 255, 255, 0.018) 0px,
@@ -398,7 +414,6 @@
       rgba(0, 0, 0, 0) 3px,
       rgba(0, 0, 0, 0) 7px
     ),
-
     linear-gradient(
       180deg,
       rgba(255, 255, 255, 0) 0%,
@@ -421,9 +436,11 @@
   opacity: 0.58;
   mix-blend-mode: screen;
 
+  transform: translateZ(0);
+  will-change: opacity;
+
   animation:
-    navBreathGrid var(--kai-breath) var(--kai-breath-ease) infinite,
-    navScanline var(--kai-breath) var(--kai-breath-ease) infinite;
+    navBreathGrid var(--kai-breath) var(--kai-breath-ease) infinite;
 }
 
 /* ───────────────────────────────────────────────────────────────
@@ -521,11 +538,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.07);
 
   transform: translateZ(0);
-  transition:
-    border-color 160ms ease,
-    transform 120ms ease,
-    box-shadow 160ms ease,
-    filter 160ms ease;
+  will-change: transform, box-shadow, border-color;
 
   animation:
     navXBreath var(--kai-breath) var(--kai-breath-ease) infinite,
@@ -560,6 +573,8 @@
   filter:
     drop-shadow(0 0 10px rgba(51, 246, 255, 0.20))
     drop-shadow(0 0 18px rgba(155, 91, 255, 0.14));
+
+  will-change: opacity;
   animation: navXLines var(--kai-breath) var(--kai-breath-ease) infinite;
 }
 
@@ -575,7 +590,7 @@
     0 0 46px rgba(51, 246, 255, 0.08),
     0 0 36px rgba(155, 91, 255, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  transform: translateY(-1px) rotate(0.35deg);
+  transform: translateY(-1px) rotate(0.35deg) translateZ(0);
   filter: saturate(1.06) brightness(1.04);
 }
 
@@ -587,7 +602,7 @@
 }
 
 .nav-footSheet__close:active {
-  transform: translateY(0px) rotate(0deg);
+  transform: translateY(0px) rotate(0deg) translateZ(0);
   filter: brightness(1.02);
 }
 
@@ -646,6 +661,9 @@
   box-shadow:
     0 14px 34px rgba(0, 0, 0, 0.44),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+  transform: translateZ(0);
+  will-change: border-color;
 
   animation: navBreathCard var(--kai-breath) var(--kai-breath-ease) infinite;
 }
@@ -744,14 +762,14 @@
 }
 
 /* ───────────────────────────────────────────────────────────────
-   4) Animations (Kai Breath 5.236s)
+   4) Animations (Kai Breath 5.236s) — Android-stable variants
 ──────────────────────────────────────────────────────────────── */
 
 @keyframes navVaultIn {
-  to { transform: translateY(0) scale(1); opacity: 1; }
+  to { transform: translateY(0) scale(1) translateZ(0); opacity: 1; }
 }
 
-@keyframes navAuroraSpin { to { transform: rotate(360deg); } }
+@keyframes navAuroraSpin { to { transform: rotate(360deg) translateZ(0); } }
 
 /* fast hover shimmer (one-shot) */
 @keyframes navShimmer {
@@ -760,7 +778,7 @@
   100% { transform: translateX(140%) skewX(-14deg); opacity: 0.0; }
 }
 
-/* panel breath */
+/* panel breath: border + glow only (no animated filters) */
 @keyframes navBreathPanel {
   0% {
     border-color: rgba(120, 220, 255, 0.18);
@@ -768,7 +786,6 @@
       0 34px 120px rgba(0, 0, 0, 0.74),
       0 0 0 1px rgba(51, 246, 255, 0.08),
       inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    filter: saturate(1) brightness(1);
   }
   50% {
     border-color: rgba(120, 220, 255, 0.30);
@@ -777,7 +794,6 @@
       0 0 0 1px rgba(51, 246, 255, 0.16),
       0 0 70px rgba(51, 246, 255, 0.10),
       inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    filter: saturate(1.10) brightness(1.04);
   }
   100% {
     border-color: rgba(120, 220, 255, 0.18);
@@ -785,14 +801,14 @@
       0 34px 120px rgba(0, 0, 0, 0.74),
       0 0 0 1px rgba(51, 246, 255, 0.08),
       inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    filter: saturate(1) brightness(1);
   }
 }
 
+/* aurora: only opacity breath (blur is static) */
 @keyframes navBreathAurora {
-  0%   { opacity: 0.70; filter: blur(18px); }
-  50%  { opacity: 0.98; filter: blur(22px); }
-  100% { opacity: 0.70; filter: blur(18px); }
+  0%   { opacity: 0.70; }
+  50%  { opacity: 0.98; }
+  100% { opacity: 0.70; }
 }
 
 @keyframes navBreathGrid {
@@ -808,41 +824,66 @@
 }
 
 @keyframes navBreathBadge {
-  0% { box-shadow: 0 10px 26px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+  0% {
+    box-shadow:
+      0 10px 26px rgba(0, 0, 0, 0.48),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
   50% {
     box-shadow:
       0 14px 34px rgba(0, 0, 0, 0.58),
       0 0 30px rgba(51, 246, 255, 0.12),
       inset 0 1px 0 rgba(255, 255, 255, 0.10);
   }
-  100% { box-shadow: 0 10px 26px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+  100% {
+    box-shadow:
+      0 10px 26px rgba(0, 0, 0, 0.48),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
 }
 
 @keyframes navBreathCard {
-  0%   { transform: translateZ(0); border-color: rgba(120, 220, 255, 0.12); }
-  50%  { transform: translateZ(0); border-color: rgba(120, 220, 255, 0.18); }
-  100% { transform: translateZ(0); border-color: rgba(120, 220, 255, 0.12); }
+  0%   { border-color: rgba(120, 220, 255, 0.12); }
+  50%  { border-color: rgba(120, 220, 255, 0.18); }
+  100% { border-color: rgba(120, 220, 255, 0.12); }
 }
 
+/* CTA breath: shadow glow, no filter-animation */
 @keyframes navBreathCTA {
-  0%   { filter: brightness(1); }
-  50%  { filter: brightness(1.06); }
-  100% { filter: brightness(1); }
+  0% {
+    box-shadow:
+      0 16px 38px rgba(0, 0, 0, 0.56),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+  50% {
+    box-shadow:
+      0 18px 44px rgba(0, 0, 0, 0.62),
+      0 0 24px rgba(51, 246, 255, 0.20),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  100% {
+    box-shadow:
+      0 16px 38px rgba(0, 0, 0, 0.56),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
 }
 
+/* Backdrop breath: opacity only (no animated filters) */
 @keyframes navBreathBackdrop {
-  0%   { filter: brightness(1) saturate(1); }
-  50%  { filter: brightness(1.04) saturate(1.06); }
-  100% { filter: brightness(1) saturate(1); }
+  0%   { opacity: 0.94; }
+  50%  { opacity: 1.0; }
+  100% { opacity: 0.94; }
 }
 
+/* Scanline keyframes kept for reference but not applied on panel::after
+   to avoid Android flicker on giant layered backgrounds. */
 @keyframes navScanline {
   0%   { background-position: 0 0, 0 0, 0 0, 0 -120%; }
   50%  { background-position: 0 0, 0 0, 0 0, 0 20%; }
   100% { background-position: 0 0, 0 0, 0 0, 0 140%; }
 }
 
-/* Close button: breath + evolving sheen */
+/* Close button: breath (no animated filters) */
 @keyframes navXBreath {
   0% {
     border-color: rgba(120, 220, 255, 0.14);
@@ -850,7 +891,6 @@
       0 14px 34px rgba(0, 0, 0, 0.58),
       0 0 0 1px rgba(51, 246, 255, 0.06),
       inset 0 1px 0 rgba(255, 255, 255, 0.07);
-    filter: brightness(1) saturate(1);
   }
   50% {
     border-color: rgba(120, 220, 255, 0.24);
@@ -859,7 +899,6 @@
       0 0 52px rgba(51, 246, 255, 0.10),
       0 0 36px rgba(155, 91, 255, 0.08),
       inset 0 1px 0 rgba(255, 255, 255, 0.09);
-    filter: brightness(1.05) saturate(1.08);
   }
   100% {
     border-color: rgba(120, 220, 255, 0.14);
@@ -867,20 +906,21 @@
       0 14px 34px rgba(0, 0, 0, 0.58),
       0 0 0 1px rgba(51, 246, 255, 0.06),
       inset 0 1px 0 rgba(255, 255, 255, 0.07);
-    filter: brightness(1) saturate(1);
   }
 }
 
+/* Close button sheen: background-position only on tiny element (safe) */
 @keyframes navXSheen {
   0%   { background-position: 0 0, 0 0, 0 0, 0 0, 0% 55%; }
   50%  { background-position: 0 0, 0 0, 0 0, 0 0, 120% 35%; }
   100% { background-position: 0 0, 0 0, 0 0, 0 0, 240% 55%; }
 }
 
+/* X beam glow: opacity only (filter is static on the element) */
 @keyframes navXLines {
-  0%   { opacity: 0.84; filter: drop-shadow(0 0 8px rgba(51, 246, 255, 0.16)) drop-shadow(0 0 14px rgba(155, 91, 255, 0.10)); }
-  50%  { opacity: 1.00; filter: drop-shadow(0 0 14px rgba(51, 246, 255, 0.26)) drop-shadow(0 0 22px rgba(155, 91, 255, 0.16)); }
-  100% { opacity: 0.84; filter: drop-shadow(0 0 8px rgba(51, 246, 255, 0.16)) drop-shadow(0 0 14px rgba(155, 91, 255, 0.10)); }
+  0%   { opacity: 0.84; }
+  50%  { opacity: 1.00; }
+  100% { opacity: 0.84; }
 }
 
 /* ───────────────────────────────────────────────────────────────
