@@ -178,7 +178,8 @@ function base64DecodeUtf8(b64urlOrB64: string): string {
 
   const g = globalThis as unknown as { atob?: unknown; TextDecoder?: unknown };
   if (typeof g.atob !== "function") throw new Error("Base64 decode failure: atob() unavailable");
-  if (typeof g.TextDecoder === "undefined") throw new Error("Base64 decode failure: TextDecoder unavailable");
+  if (typeof g.TextDecoder === "undefined")
+    throw new Error("Base64 decode failure: TextDecoder unavailable");
 
   try {
     const binary = (g.atob as (s: string) => string)(normalized);
@@ -200,10 +201,12 @@ function parseJson<T>(text: string): T {
   }
 }
 
+/* ---------- token extraction (THE FIX) ---------- */
+
 function extractFromPath(pathname: string): string | null {
-  // /p~TOKEN (tilde may be encoded)
+  // /p~TOKEN or /p~/TOKEN (tilde may be encoded)
   {
-    const m = pathname.match(/\/p(?:~|%7[Ee])([^/?#]+)/);
+    const m = pathname.match(/\/p(?:~|%7[Ee])\/?([^/?#]+)/);
     if (m?.[1]) return m[1];
   }
   // /stream/p/TOKEN or /feed/p/TOKEN
@@ -217,6 +220,19 @@ function extractFromPath(pathname: string): string | null {
     if (m?.[1]) return m[1];
   }
   return null;
+}
+
+/**
+ * Hash-router support:
+ *  - "#/p~TOKEN"
+ *  - "#p~TOKEN"
+ *  - "#/p~/TOKEN"
+ */
+function extractFromHashPath(hashRaw: string): string | null {
+  const h = stripEdgePunct(hashRaw);
+  const s = h.startsWith("#") ? h.slice(1) : h; // "/p~TOKEN" | "p~TOKEN" | "/p~/TOKEN"
+  const m = s.match(/\/?p(?:~|%7[Ee])\/?([^/?#]+)/);
+  return m?.[1] ?? null;
 }
 
 function getFirstParam(
@@ -250,11 +266,14 @@ function extractTokenCandidates(rawUrl: string, depth = 0): string[] {
   const u = tryParseUrl(raw);
   if (!u) return out;
 
+  // ✅ FIX: hash-router path (e.g. "#/p~TOKEN") is NOT query params
+  push(extractFromHashPath(u.hash));
+
   const hashStr = u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : u.hash;
   const hash = new URLSearchParams(hashStr);
   const search = u.searchParams;
 
-  const keys = ["p", "t", "token", "capsule"];
+  const keys = ["p", "t", "token", "capsule"] as const;
   push(getFirstParam(search, hash, keys));
 
   // support multiple occurrences too
@@ -304,7 +323,7 @@ export function decodeSigilUrl(url: string): DecodeResult {
       return {
         ok: false,
         error:
-          "No capsule token found (expected /p~<token>, /stream/p/<token>, ?p=, #t=, or a raw token).",
+          "No capsule token found (expected /p~<token>, /stream/p/<token>, ?p=, #t=, #/p~<token>, or a raw token).",
       };
     }
 

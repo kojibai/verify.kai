@@ -154,9 +154,9 @@ function isLikelyToken(s: string): boolean {
 }
 
 function extractFromPath(pathname: string): string | null {
-  // Legacy p-tilde path, including percent-encoded tilde
+  // Legacy p-tilde path (allow /p~TOKEN and /p~/TOKEN), including percent-encoded tilde
   {
-    const m = pathname.match(/\/p(?:\u007e|%7[Ee])([^/?#]+)/);
+    const m = pathname.match(/\/p(?:\u007e|%7[Ee])\/?([^/?#]+)/);
     if (m?.[1]) return m[1];
   }
   // /stream/p/TOKEN or /feed/p/TOKEN
@@ -172,6 +172,7 @@ function extractFromPath(pathname: string): string | null {
   return null;
 }
 
+
 function tryParseUrl(raw: string): URL | null {
   const t = raw.trim();
   try {
@@ -184,6 +185,7 @@ function tryParseUrl(raw: string): URL | null {
     }
   }
 }
+
 
 /** Extract token candidates from a raw URL (also tries nested add= urls once). */
 function extractTokenCandidates(rawUrl: string, depth = 0): string[] {
@@ -895,3 +897,4 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
 };
 
 export default FeedCard;
+ 

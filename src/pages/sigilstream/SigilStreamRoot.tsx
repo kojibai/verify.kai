@@ -1423,9 +1423,8 @@ const onKopy = useCallback(() => {
   const token = tokenRaw ? normalizeIncomingToken(tokenRaw) : null;
   if (!token) return;
 
-  // ✅ Sealed: copy canonical stream URL (never /p~)
-  // ✅ Public: keep human-friendly /p~ when short
-  const share = isSealed ? canonicalizeCurrentStreamUrl(token) : preferredShareUrl(token);
+  // ✅ ALWAYS copy canonical stream URL (never /p~)
+  const share = canonicalizeCurrentStreamUrl(token);
 
   const okSync = tryCopyExecCommand(share);
   if (okSync) {
@@ -1452,7 +1451,8 @@ const onKopy = useCallback(() => {
   }
 
   toasts.push("warn", "Remember failed. Select the address bar.");
-}, [activeToken, isSealed, toasts]);
+}, [activeToken, toasts]);
+
 
   /** ---------- Derived list: show payload first if present ---------- */
   const urls: string[] = useMemo(() => {
