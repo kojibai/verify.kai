@@ -3,7 +3,7 @@
 
 /**
  * SigilStreamRoot — Memory Stream Shell
- * v7.7.0 — KKS-1.0 Kai display + universal token/URL normalization
+ * v7.8.0 — KKS-1.0 Kai display + universal token/URL normalization + INFINITE replies
  *
  * ✅ Critical KKS-1.0 fix:
  *    - payload.pulse is already correct (authoritative)
@@ -23,6 +23,18 @@
  *    - canonicalizeCurrentStreamUrl(...) → /stream/p/<token> (or /stream#t= for huge)
  *    - preferredShareUrl(...) → /p~<token> when short, /stream?p=<token> when huge
  *    - All forms round-trip cleanly and are registered via registerSigilUrl(...)
+ *
+ * ✅ NEW: Browser-canonical load:
+ *    - On entry, normalizes address bar to canonical:
+ *        • short:  /stream/p/<token>
+ *        • huge:   /stream?<...>&add=...#t=<token>
+ *      while preserving existing add= reply chain params.
+ *
+ * ✅ NEW: Infinite replies:
+ *    - Ingests add= links from:
+ *        • current location (every navigation)
+ *        • every known stream URL in the list (recursive / closure scan)
+ *    - Deduped, persisted, and registered (registerSigilUrl + localStorage).
  *
  * ✅ Keeps v7 features:
  *    - extractPayloadTokenFromLocation (ALL token forms)
@@ -264,7 +276,7 @@ function normalizeChakraLabel(s: string): string {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
-/** ✅ ONLY CHANGE: display label translation (manual → Sovereign) */
+/** ✅ ONLY CHANGE: display label translation (manual → Proof of Memory™) */
 function normalizeFeedSourceLabel(s: string): string {
   const t = s.trim();
   if (!t) return t;
@@ -310,17 +322,20 @@ function sessionTokenKey(token: string): string {
   return `${token.slice(0, 96)}:${token.slice(-32)}`;
 }
 
+function originFallback(): string {
+  const o = globalThis.location?.origin;
+  return o && typeof o === "string" && o.length ? o : "https://kaiklok.com";
+}
+
 function canonicalizeCurrentStreamUrl(token: string): string {
-  const origin = globalThis.location?.origin ?? "https://kaiklok.com";
-  const base = origin.replace(/\/+$/, "");
+  const base = originFallback().replace(/\/+$/, "");
   return token.length <= TOKEN_HARD_LIMIT
     ? `${base}/stream/p/${encodeURIComponent(token)}`
     : `${base}/stream#t=${token}`;
 }
 
 function legacyStreamQueryUrl(token: string): string {
-  const origin = globalThis.location?.origin ?? "https://kaiklok.com";
-  const base = origin.replace(/\/+$/, "");
+  const base = originFallback().replace(/\/+$/, "");
   // This is what the Sigil-Glyph capsule decoder expects right now
   return `${base}/stream?p=${encodeURIComponent(token)}`;
 }
@@ -332,14 +347,11 @@ function legacyStreamQueryUrl(token: string): string {
  *   (the Sigil-Glyph decoder understands ?p=)
  */
 function preferredShareUrl(token: string): string {
-  return token.length <= TOKEN_HARD_LIMIT
-    ? shortAliasUrl(token) // e.g. https://kaiklok.com/p~<token>
-    : legacyStreamQueryUrl(token); // e.g. https://kaiklok.com/stream?p=<token>
+  return token.length <= TOKEN_HARD_LIMIT ? shortAliasUrl(token) : legacyStreamQueryUrl(token);
 }
 
 function shortAliasUrl(token: string): string {
-  const origin = globalThis.location?.origin ?? "https://kaiklok.com";
-  const base = origin.replace(/\/+$/, "");
+  const base = originFallback().replace(/\/+$/, "");
   return `${base}/p~${token}`;
 }
 
@@ -391,6 +403,150 @@ function normalizeIncomingToken(raw: string): string {
   }
 
   return t;
+}
+
+/** base64url-ish token guard */
+function isLikelyToken(s: string): boolean {
+  return /^[A-Za-z0-9_-]{16,}$/.test(s);
+}
+
+function tryParseUrlLike(raw: string): URL | null {
+  const t = raw.trim();
+  try {
+    return new URL(t);
+  } catch {
+    try {
+      return new URL(t, originFallback());
+    } catch {
+      return null;
+    }
+  }
+}
+
+function extractTokenFromUrlLike(raw: string): string | null {
+  const s = raw.trim();
+  if (!s) return null;
+
+  // bare token
+  if (isLikelyToken(s)) return s;
+
+  const u = tryParseUrlLike(s);
+  if (!u) return null;
+
+  const hashStr = u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : "";
+  const hash = new URLSearchParams(hashStr);
+  const search = u.searchParams;
+
+  const got =
+    hash.get("t") ??
+    hash.get("p") ??
+    hash.get("token") ??
+    hash.get("capsule") ??
+    search.get("t") ??
+    search.get("p") ??
+    search.get("token") ??
+    search.get("capsule");
+
+  if (got && got.trim().length) return got.trim();
+
+  // /p~TOKEN
+  if (u.pathname.includes("/p~")) {
+    const idx = u.pathname.indexOf("/p~");
+    const tail = u.pathname.slice(idx + 3); // "/p~".length = 3
+    if (tail && tail.length) return tail.startsWith("/") ? tail.slice(1) : tail;
+  }
+
+  // /stream/p/TOKEN or /p/TOKEN
+  {
+    const m = u.pathname.match(/\/stream\/p\/([^/?#]+)/);
+    if (m?.[1]) return m[1];
+  }
+  {
+    const m = u.pathname.match(/\/p\/([^/?#]+)/);
+    if (m?.[1]) return m[1];
+  }
+
+  return null;
+}
+
+/**
+ * Canonicalize current address bar for browser reload:
+ * - short: /stream/p/<token>
+ * - huge:  /stream?<kept params>&add=...#t=<token>
+ * Preserves:
+ * - all existing non-token search params
+ * - all add= params (from search+hash), normalized
+ * - all existing non-token hash params (short only), or merged into huge hash after t=
+ */
+function canonicalizeLocationRel(token: string): string {
+  if (typeof window === "undefined") return `/stream/p/${encodeURIComponent(token)}`;
+
+  const searchNow = new URLSearchParams(window.location.search);
+  const hashNow = new URLSearchParams(
+    window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash,
+  );
+
+  // collect add= from both, normalize, dedupe
+  const addsRaw = [...searchNow.getAll("add"), ...hashNow.getAll("add")];
+  const adds = addsRaw
+    .map(normalizeAddParam)
+    .filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+
+  const addsNorm: string[] = [];
+  for (const a of adds) {
+    const normalized = normalizeStreamishUrlForBrowser(a);
+    if (!addsNorm.includes(normalized)) addsNorm.push(normalized);
+  }
+
+  // keep all non-token search params
+  const keepSearch = new URLSearchParams();
+  for (const [k, v] of searchNow.entries()) {
+    if (k === "p" || k === "t" || k === "token" || k === "capsule") continue;
+    if (k === "add") continue; // we re-add normalized add chain
+    keepSearch.append(k, v);
+  }
+  for (const a of addsNorm) keepSearch.append("add", a);
+
+  // keep non-token hash params (only if short; for huge, hash is reserved for t= token)
+  const keepHash = new URLSearchParams();
+  for (const [k, v] of hashNow.entries()) {
+    if (k === "p" || k === "t" || k === "token" || k === "capsule") continue;
+    if (k === "add") continue;
+    keepHash.append(k, v);
+  }
+
+  const short = token.length <= TOKEN_HARD_LIMIT;
+  const pathname = short ? `/stream/p/${encodeURIComponent(token)}` : "/stream";
+  const search = keepSearch.toString();
+  const searchPart = search.length ? `?${search}` : "";
+
+  if (short) {
+    const hashStr = keepHash.toString();
+    const hashPart = hashStr.length ? `#${hashStr}` : "";
+    return `${pathname}${searchPart}${hashPart}`;
+  }
+
+  // huge: put token in hash, and merge keepHash extras after t=
+  const hugeHash = new URLSearchParams();
+  hugeHash.set("t", token);
+  for (const [k, v] of keepHash.entries()) hugeHash.append(k, v);
+
+  return `${pathname}${searchPart}#${hugeHash.toString()}`;
+}
+
+/** Convert stream-ish URLs / tokens into browser-canonical /stream/p/<token> when possible. */
+function normalizeStreamishUrlForBrowser(raw: string): string {
+  const t = raw.trim();
+  if (!t) return t;
+
+  const tok = extractTokenFromUrlLike(t);
+  if (!tok) {
+    const u = tryParseUrlLike(t);
+    return u ? u.toString() : t;
+  }
+
+  const token = normalizeIncomingToken(tok);
+  return canonicalizeCurrentStreamUrl(token);
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -526,10 +682,10 @@ function renderMarkdownToSafeHtml(md: string): string {
   html = html
     .split(/\n{2,}/g)
     .map((blk) => {
-      const t = blk.trim();
-      if (!t) return "";
-      if (t.startsWith("<h") || t.startsWith("<pre>")) return t;
-      return `<p>${t.replace(/\n/g, "<br/>")}</p>`;
+      const tt = blk.trim();
+      if (!tt) return "";
+      if (tt.startsWith("<h") || tt.startsWith("<pre>")) return tt;
+      return `<p>${tt.replace(/\n/g, "<br/>")}</p>`;
     })
     .filter(Boolean)
     .join("\n");
@@ -872,7 +1028,7 @@ function PayloadCard(props: {
     pickString((payload as unknown as { meta?: unknown }).meta, ["mode", "source", "origin"]) ??
     "Manual";
 
-  // ✅ ONLY CHANGE: translate "manual" → "Sovereign" for display
+  // ✅ translate "manual" → Proof of Memory™ for display
   const modeLabel = normalizeFeedSourceLabel(modeLabelRaw);
 
   useEffect(() => {
@@ -942,7 +1098,7 @@ function PayloadCard(props: {
                   type="button"
                   className="sf-seal__btn"
                   onClick={handleUnsealPress}
-                  disabled={unsealState.status === "opening"} // ✅ only disable while opening
+                  disabled={unsealState.status === "opening"}
                   aria-label="Unseal private content"
                 >
                   {unsealLabel}
@@ -1002,7 +1158,6 @@ function PayloadCard(props: {
         </div>
       ) : null}
 
-      {/* If sealed and not open, do NOT render body/attachments (lock-screen view). */}
       {!locked ? (
         <>
           <PostBodyView body={body} caption={caption} isSealed={false} />
@@ -1047,6 +1202,9 @@ function SigilStreamInner(): React.JSX.Element {
   /** ---------- Sources list (seed + storage + ?add ingestion) ---------- */
   const [sources, setSources] = useState<Source[]>([]);
 
+  // Track which source URLs we have already scanned for add= links (infinite replies)
+  const scannedForAddsRef = useRef<Set<string>>(new Set<string>());
+
   useEffect(() => {
     (async () => {
       try {
@@ -1065,8 +1223,13 @@ function SigilStreamInner(): React.JSX.Element {
     })().catch((e) => report("initial seed load outer", e));
   }, []);
 
+  /**
+   * Ingest add= links from CURRENT location every time it changes (router navigation).
+   * This is the “front door” for reply chains (including those appended by the Composer).
+   */
   useEffect(() => {
     if (typeof window === "undefined") return;
+
     try {
       const search = new URLSearchParams(window.location.search);
       const hash = new URLSearchParams(
@@ -1074,7 +1237,11 @@ function SigilStreamInner(): React.JSX.Element {
       );
 
       const addsRaw = [...search.getAll("add"), ...hash.getAll("add")];
-      const adds = addsRaw.map(normalizeAddParam).filter((x): x is string => Boolean(x));
+      const adds = addsRaw
+        .map(normalizeAddParam)
+        .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+        .map(normalizeStreamishUrlForBrowser);
+
       if (adds.length === 0) return;
 
       setSources((prev) => {
@@ -1088,9 +1255,71 @@ function SigilStreamInner(): React.JSX.Element {
         return prev;
       });
     } catch (e) {
-      report("add ingestion", e);
+      report("add ingestion (location)", e);
     }
-  }, []);
+  }, [loc.pathname, loc.search, loc.hash]);
+
+  /**
+   * Infinite replies closure scan:
+   * - Whenever sources grows, scan NEW/UNSCANNED source URLs for add= links
+   * - Ingest those add= links too (dedupe + persist)
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const scanned = scannedForAddsRef.current;
+    const newlyDiscovered: string[] = [];
+
+    const pushNew = (u: string) => {
+      if (!u.trim().length) return;
+      if (!newlyDiscovered.includes(u)) newlyDiscovered.push(u);
+    };
+
+    for (const s of sources) {
+      const url = s.url;
+      if (!url || scanned.has(url)) continue;
+      scanned.add(url);
+
+      const parsed = tryParseUrlLike(url);
+      if (!parsed) continue;
+
+      const hashStr = parsed.hash && parsed.hash.startsWith("#") ? parsed.hash.slice(1) : "";
+      const hash = new URLSearchParams(hashStr);
+      const search = parsed.searchParams;
+
+      const addsRaw = [...search.getAll("add"), ...hash.getAll("add")];
+      if (addsRaw.length === 0) continue;
+
+      const adds = addsRaw
+        .map(normalizeAddParam)
+        .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+        .map(normalizeStreamishUrlForBrowser);
+
+      for (const a of adds) pushNew(a);
+    }
+
+    if (newlyDiscovered.length === 0) return;
+
+    setSources((prev) => {
+      const seen = new Set(prev.map((p) => p.url));
+      const fresh = newlyDiscovered.filter((u) => !seen.has(u));
+      if (!fresh.length) return prev;
+
+      try {
+        prependUniqueToStorage(fresh);
+      } catch (e) {
+        report("prependUniqueToStorage (infinite replies)", e);
+      }
+      for (const u of fresh) {
+        try {
+          registerSigilUrl(u);
+        } catch (e) {
+          report("registerSigilUrl (infinite replies)", e);
+        }
+      }
+      return [...fresh.map((u) => ({ url: u })), ...prev];
+    });
+  }, [sources]);
 
   /** ---------- Payload (decoded from token) ---------- */
   const [activeToken, setActiveToken] = useState<string | null>(null);
@@ -1118,6 +1347,19 @@ function SigilStreamInner(): React.JSX.Element {
     const raw = extractPayloadTokenFromLocation();
     const token = raw ? normalizeIncomingToken(raw) : null;
 
+    // ✅ browser-canonical load (preserve add= chain; strip token query/hash forms)
+    if (token) {
+      try {
+        const canonRel = canonicalizeLocationRel(token);
+        const currentRel = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        if (canonRel !== currentRel) {
+          window.history.replaceState(null, "", canonRel);
+        }
+      } catch (e) {
+        report("canonicalizeLocationRel", e);
+      }
+    }
+
     setActiveToken(token);
 
     if (!token) {
@@ -1127,10 +1369,10 @@ function SigilStreamInner(): React.JSX.Element {
       return;
     }
 
+    // register canonical + preferred share forms (always)
     try {
       const canon = canonicalizeCurrentStreamUrl(token);
-     const share = isSealed ? canonicalizeCurrentStreamUrl(token) : preferredShareUrl(token);
-
+      const share = preferredShareUrl(token);
       registerSigilUrl(canon);
       if (share !== canon) registerSigilUrl(share);
     } catch (e) {
@@ -1418,41 +1660,40 @@ function SigilStreamInner(): React.JSX.Element {
     };
   }, []);
 
-const onKopy = useCallback(() => {
-  const tokenRaw = activeToken ?? (typeof window !== "undefined" ? extractPayloadTokenFromLocation() : null);
-  const token = tokenRaw ? normalizeIncomingToken(tokenRaw) : null;
-  if (!token) return;
+  const onKopy = useCallback(() => {
+    const tokenRaw = activeToken ?? (typeof window !== "undefined" ? extractPayloadTokenFromLocation() : null);
+    const token = tokenRaw ? normalizeIncomingToken(tokenRaw) : null;
+    if (!token) return;
 
-  // ✅ ALWAYS copy canonical stream URL (never /p~)
-  const share = canonicalizeCurrentStreamUrl(token);
+    // ✅ ALWAYS copy canonical stream URL (never /p~)
+    const share = canonicalizeCurrentStreamUrl(token);
 
-  const okSync = tryCopyExecCommand(share);
-  if (okSync) {
-    setCopied(true);
-    if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
-    copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
-    toasts.push("success", "Remembered");
-    return;
-  }
+    const okSync = tryCopyExecCommand(share);
+    if (okSync) {
+      setCopied(true);
+      if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+      copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
+      toasts.push("success", "Remembered");
+      return;
+    }
 
-  const p = clipboardWriteTextPromise(share);
-  if (p) {
-    setCopied(true);
-    if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
-    copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
-    toasts.push("success", "Remembered");
+    const p = clipboardWriteTextPromise(share);
+    if (p) {
+      setCopied(true);
+      if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+      copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
+      toasts.push("success", "Remembered");
 
-    p.catch((e: unknown) => {
-      report("kopy clipboard.writeText", e);
-      setCopied(false);
-      toasts.push("warn", "Remember failed. Select the address bar.");
-    });
-    return;
-  }
+      p.catch((e: unknown) => {
+        report("kopy clipboard.writeText", e);
+        setCopied(false);
+        toasts.push("warn", "Remember failed. Select the address bar.");
+      });
+      return;
+    }
 
-  toasts.push("warn", "Remember failed. Select the address bar.");
-}, [activeToken, toasts]);
-
+    toasts.push("warn", "Remember failed. Select the address bar.");
+  }, [activeToken, toasts]);
 
   /** ---------- Derived list: show payload first if present ---------- */
   const urls: string[] = useMemo(() => {
@@ -1517,14 +1758,12 @@ const onKopy = useCallback(() => {
 
         <IdentityBar phiKey={composerPhiKey} kaiSignature={composerKaiSig} />
 
-        {/* ✅ Sigil stage wrapper (keeps SVG big/centered) */}
         {sigilBlock?.node ? (
           <section className="sf-sigilWrap" aria-label="Sigil stage">
             <div className="sf-sigilWrap__inner">{sigilBlock.node}</div>
           </section>
         ) : null}
 
-        {/* 🔒 For sealed posts: hide Reply until unlocked (lock-screen flow). */}
         {payload && !lockedSealedView ? (
           <section className="sf-reply" aria-labelledby="reply-title">
             <h2 id="reply-title" className="sf-reply-title">

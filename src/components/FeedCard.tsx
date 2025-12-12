@@ -3,15 +3,29 @@
 
 /**
  * FeedCard — Sigil-Glyph Capsule Renderer
- * v4.1.3 — FIX: Proof of Memory™ shown ONCE (top kind chip only)
+ * v4.1.4 — FIX: Proof of Memory™ shown ONCE (top kind chip only)
  *          + Open button label stays “Memory” for manual capsules
  *          + Sigil-body title (above the URL) becomes “Proof of Memory™” (not “Memory”)
+ *          + Remember NEVER copies /p~ (ever)
+ *          + Remember ALWAYS copies canonical /stream/p/<token> when a token exists
+ *          + Browser open is always /stream/p/<token> (or /stream#t=… for huge tokens)
  *
  * ✅ Manual marker rendering:
  *    - Any displayed string equal to "manual" becomes "Proof of Memory™"
  *    - If a nested previous/reply payload contains "manual", the card kind label becomes Proof of Memory™
  *    - NO duplicate Proof of Memory™ chip (source chip hidden if it matches kind chip)
  *    - Sigil-body title above the URL becomes "Proof of Memory™"
+ *
+ * ✅ Decode hardening:
+ *    - Accepts /p~<token>, /p#t=<token>, /p?t=<token>, /p#p=<token>, /p?p=<token>
+ *    - Accepts /stream/p/<token>, /stream#t=<token>, /stream?p=<token>
+ *    - Accepts full URLs, relative URLs, or bare tokens
+ *    - Strips trailing punctuation, decodes %xx, normalizes base64 -> base64url (-/_ no '=')
+ *    - If a “wrapper” link contains add=… (nested URLs), will also try decoding those
+ *
+ * ✅ KKS-1.0 correctness:
+ *    - pulse is authoritative
+ *    - beat/step/chakra are derived from pulse (never trust payload heuristics)
  *
  * ✅ Lint/TS hardening:
  *    - No `.toUpperCase()` called on a value that TS might narrow to `never`
@@ -40,6 +54,7 @@ import type {
   ReactionPayload,
 } from "../utils/sigilDecode";
 import "./FeedCard.css";
+import { TOKEN_HARD_LIMIT } from "../utils/feedPayload";
 
 type Props = { url: string };
 
@@ -62,6 +77,24 @@ const isNonEmpty = (val: unknown): val is string =>
 
 /** Uppercase without type drama (guards union→never narrowing) */
 const upper = (v: unknown): string => String(v ?? "").toUpperCase();
+
+const TOKEN_HARD_LIMIT_SAFE =
+  typeof TOKEN_HARD_LIMIT === "number" && Number.isFinite(TOKEN_HARD_LIMIT) && TOKEN_HARD_LIMIT > 0
+    ? TOKEN_HARD_LIMIT
+    : 140;
+
+function makeStreamOpenUrlFromToken(tokenRaw: string): string {
+  const base = originFallback().replace(/\/+$/g, "");
+  const t = normalizeToken(tokenRaw);
+
+  // ✅ SHORT: server-safe path form
+  if (t.length <= TOKEN_HARD_LIMIT_SAFE) {
+    return `${base}/stream/p/${encodeURIComponent(t)}`;
+  }
+
+  // ✅ HUGE: hash form (never hits server, always reloads)
+  return `${base}/stream#t=${t}`;
+}
 
 /* ─────────────────────────────────────────────────────────────
    Manual marker → Proof of Memory™
@@ -172,7 +205,6 @@ function extractFromPath(pathname: string): string | null {
   return null;
 }
 
-
 function tryParseUrl(raw: string): URL | null {
   const t = raw.trim();
   try {
@@ -185,7 +217,6 @@ function tryParseUrl(raw: string): URL | null {
     }
   }
 }
-
 
 /** Extract token candidates from a raw URL (also tries nested add= urls once). */
 function extractTokenCandidates(rawUrl: string, depth = 0): string[] {
@@ -256,9 +287,7 @@ function isSPayloadUrl(raw: string): boolean {
 
 /** Always build browser-openable URL (never return legacy paths). */
 function makeBrowserOpenUrlFromToken(tokenRaw: string): string {
-  const base = originFallback().replace(/\/+$/g, "");
-  const t = normalizeToken(tokenRaw);
-  return `${base}/stream/p/${t}`;
+  return makeStreamOpenUrlFromToken(tokenRaw);
 }
 
 /** Normalize any non-/s URL into /stream/p/<token> when possible (supports nested add=). */
@@ -267,7 +296,7 @@ function normalizeResolvedUrlForBrowser(rawUrl: string): string {
   if (isSPayloadUrl(raw)) return raw;
 
   const tok = extractTokenCandidates(raw)[0];
-  return tok ? makeBrowserOpenUrlFromToken(tok) : raw;
+  return tok ? makeStreamOpenUrlFromToken(tok) : raw;
 }
 
 /** Build canonical url candidates to satisfy whatever decodeSigilUrl already supports. */
@@ -856,7 +885,7 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
 
           {!post && !message && !share && !reaction && (
             <section className="fc-bodywrap" aria-label="Sigil body">
-              {/* ✅ THIS is the line you wanted changed (above the URL) */}
+              {/* ✅ ABOVE the URL: Proof of Memory™ for manual, otherwise Proof Of Breath™ */}
               <h3 className="fc-title">{manualMarkerPresent ? PROOF_OF_MEMORY : PROOF_OF_BREATH}</h3>
 
               <a
@@ -897,4 +926,3 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
 };
 
 export default FeedCard;
- 
