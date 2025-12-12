@@ -1142,10 +1142,10 @@ function AppChrome(): React.JSX.Element {
                       href="https://github.com/phinetwork/phi.network"
                       target="_blank"
                       rel="noreferrer"
-                      aria-label="Version 26.8 (opens GitHub)"
+                      aria-label="Version 26.9 (opens GitHub)"
                       title="Open GitHub"
                     >
-                      26.8
+                      26.9
                     </a>
                   </div>
                 </footer>
@@ -1188,10 +1188,10 @@ export default function App(): React.JSX.Element {
         <Route path="feed" element={<SigilFeedPage />} />
         <Route path="feed/p/:token" element={<SigilFeedPage />} />
         <Route path="p~:token" element={<SigilFeedPage />} />
+        <Route path="p~:token/*" element={<PShort />} />
         <Route path="token" element={<SigilFeedPage />} />
         <Route path="p~token" element={<SigilFeedPage />} />
         <Route path="p" element={<PShort />} />
-
         <Route element={<AppChrome />}>
           <Route index element={<VerifierStamper />} />
           <Route path="mint" element={<SigilMintRoute />} />

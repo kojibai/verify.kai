@@ -3,6 +3,7 @@
 
 import React, {
   useCallback,
+  useEffect,
   useId,
   useMemo,
   useRef,
@@ -41,6 +42,8 @@ import {
   type FeedPostPayload,
   type AttachmentItem as PayloadAttachmentItem,
   encodeFeedPayload,
+  decodeFeedPayload,
+  extractPayloadTokenFromLocation,
 } from "../../../utils/feedPayload";
 
 type ComposerProps = {
@@ -48,6 +51,12 @@ type ComposerProps = {
   svgText: string | null;
   onUseDifferentKey?: () => void;
   inlineLimitBytes?: number;
+};
+
+type ParentPreview = {
+  author?: string;
+  url: string;
+  snippet: string;
 };
 
 export function Composer({
@@ -100,6 +109,57 @@ export function Composer({
   const [replyBusy, setReplyBusy] = useState(false);
   const [replyUrl, setReplyUrl] = useState("");
   const [copiedReply, setCopiedReply] = useState(false);
+
+  // Parent payload (previous message) for "Replying to" context
+  const [parentPayload, setParentPayload] = useState<FeedPostPayload | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const token = extractPayloadTokenFromLocation(window.location);
+      if (!token) return;
+      const decoded = decodeFeedPayload(token);
+      if (decoded) {
+        setParentPayload(decoded);
+      }
+    } catch {
+      // Silent: if we can't decode, we just omit the preview
+    }
+  }, []);
+
+  const parentPreview: ParentPreview | null = useMemo(() => {
+    if (!parentPayload) return null;
+
+    const body = parentPayload.body;
+    let rawText = parentPayload.caption ?? "";
+
+    if (body) {
+      if (body.kind === "text") rawText = body.text;
+      else if (body.kind === "md") rawText = body.md;
+      else if (body.kind === "code") rawText = body.code;
+      else if (body.kind === "html") rawText = body.html;
+    }
+
+    const trimmed = rawText.trim();
+    if (!trimmed) {
+      return {
+        author: parentPayload.author,
+        url: parentPayload.url,
+        snippet: "(Previous memory has no visible text content.)",
+      };
+    }
+
+    const maxLen = 280;
+    const snippet =
+      trimmed.length > maxLen ? `${trimmed.slice(0, maxLen - 1)}…` : trimmed;
+
+    return {
+      author: parentPayload.author,
+      url: parentPayload.url,
+      snippet,
+    };
+  }, [parentPayload]);
 
   // ────────────────────────────────────────────────────────────────
   // ATTACHMENTS
@@ -179,7 +239,7 @@ export function Composer({
   };
 
   // ────────────────────────────────────────────────────────────────
-  // EXHALE (Create v3 Brotli Payload)
+  // EXHALE (Create v2 Feed Payload + chain to parent)
   // ────────────────────────────────────────────────────────────────
 
   const onGenerateReply = async (): Promise<void> => {
@@ -192,36 +252,41 @@ export function Composer({
         toasts.push("info", "No sigil URL detected; using fallback.");
       }
 
-      /* Convert linkItems → v3 url attachments */
+      const replyTextTrimmed = replyText.trim();
+      const replyAuthorTrimmed = replyAuthor.trim();
+
+      /* Convert linkItems → url attachments */
       const linkAsAttachments: PayloadAttachmentItem[] = linkItems.map((it) =>
         makeUrlAttachment({ url: it.url, title: it.title }),
       );
 
       /* Convert file attachments → v3 file attachments */
-      const fileAsAttachments: PayloadAttachmentItem[] = composerAtt.items.map((it) => {
-        if (it.kind === "file-ref") {
-          return makeFileRefAttachment({
-            sha256: it.sha256,
-            name: it.name,
-            type: it.type,
-            size: it.size,
-            url: undefined, // local selection; no remote URL here
-          });
-        }
+      const fileAsAttachments: PayloadAttachmentItem[] = composerAtt.items.map(
+        (it) => {
+          if (it.kind === "file-ref") {
+            return makeFileRefAttachment({
+              sha256: it.sha256,
+              name: it.name,
+              type: it.type,
+              size: it.size,
+              url: undefined, // local selection; no remote URL here
+            });
+          }
 
-        if (it.kind === "file-inline") {
-          return makeInlineAttachment({
-            name: it.name,
-            type: it.type,
-            size: it.size,
-            data_b64url: it.data_b64url,
-            thumbnail_b64: undefined, // keep deterministic; only include if your manifest defines it
-          });
-        }
+          if (it.kind === "file-inline") {
+            return makeInlineAttachment({
+              name: it.name,
+              type: it.type,
+              size: it.size,
+              data_b64url: it.data_b64url,
+              thumbnail_b64: undefined, // deterministic; no UI-only thumbnails
+            });
+          }
 
-        // If some other kind slips in, pass through structurally.
-        return it as unknown as PayloadAttachmentItem;
-      });
+          // If some other kind slips in (future-proof), pass through structurally.
+          return it as unknown as PayloadAttachmentItem;
+        },
+      );
 
       const allAttachments: PayloadAttachmentItem[] = [
         ...linkAsAttachments,
@@ -233,27 +298,41 @@ export function Composer({
 
       const pulseNow = computeLocalKai(new Date()).pulse;
 
+      // Canonical parent / origin
+      const parentRaw = currentPayloadUrl();
+      const parentUrl = parentRaw
+        ? expandShortAliasToCanonical(parentRaw)
+        : undefined;
+      const originUrl = parentUrl ?? undefined;
+
+      const payloadBody =
+        replyTextTrimmed.length > 0
+          ? { kind: "text", text: replyTextTrimmed } as const
+          : undefined;
+
       const payloadObj: FeedPostPayload = makeBasePayload({
         url: actionUrl || canonicalBase().origin,
         pulse: pulseNow,
-        caption: replyText.trim() || undefined,
-        author: replyAuthor.trim() || undefined,
-        source: "manual",
+        caption: replyTextTrimmed || undefined,
+        body: payloadBody,
+        author: replyAuthorTrimmed || undefined,
         sigilId: undefined,
         phiKey: composerPhiKey ?? undefined,
         kaiSignature: composerKaiSig ?? undefined,
+        parent: parentUrl,
+        parentUrl,
+        originUrl,
         ts: Date.now(),
         attachments,
       });
 
-      const token = await encodeFeedPayload(payloadObj);
+      const token = encodeFeedPayload(payloadObj);
 
       let share = buildStreamUrl(token);
 
-      const parent = currentPayloadUrl();
-      if (parent) {
+      if (parentUrl) {
         const u = new URL(share);
-        u.searchParams.append("add", parent);
+        u.searchParams.append("add", parentUrl);
         share = u.toString();
       }
 
@@ -275,11 +354,29 @@ export function Composer({
 
   return (
     <section className="sf-reply" aria-labelledby="reply-title">
+      {/* Reply context: previous message card */}
+      {parentPreview && (
+        <aside
+          className="sf-reply-context"
+          aria-label="Replying to previous memory"
+        >
+          <div className="sf-reply-context-header">
+            <span className="sf-pill">Replying to</span>
+            {parentPreview.author && (
+              <span className="sf-reply-context-author">
+                {parentPreview.author}
+              </span>
+            )}
+          </div>
+          <p className="sf-reply-context-body">{parentPreview.snippet}</p>
+        </aside>
+      )}
+
       {/* Attach Section */}
       <div className="sf-reply-row">
         <label className="sf-label">Attach</label>
 
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        <div className="sf-reply-row-inline">
           <label className="sf-btn" htmlFor={cameraInputId}>
             Record Memory
           </label>
@@ -319,10 +416,11 @@ export function Composer({
               >
                 <AttachmentCard item={it} />
                 <button
-                  className="sf-btn"
+                  className="sf-btn sf-btn--icon"
                   onClick={() => removeAttachmentAt(i)}
                   style={{ position: "absolute", top: 8, right: 8 }}
                   type="button"
+                  aria-label="Remove attachment"
                 >
                   ✕
                 </button>
@@ -336,7 +434,7 @@ export function Composer({
       <div className="sf-reply-row">
         <label className="sf-label">Add links</label>
 
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div className="sf-reply-row-inline">
           <input
             className="sf-input"
             type="url"
@@ -344,7 +442,11 @@ export function Composer({
             value={linkField}
             onChange={(e) => setLinkField(e.target.value)}
           />
-          <button className="sf-btn" onClick={() => onAddLink(linkField)} type="button">
+          <button
+            className="sf-btn"
+            onClick={() => onAddLink(linkField)}
+            type="button"
+          >
             Add
           </button>
         </div>
@@ -359,10 +461,11 @@ export function Composer({
               >
                 <AttachmentCard item={it} />
                 <button
-                  className="sf-btn"
+                  className="sf-btn sf-btn--icon"
                   onClick={() => onRemoveLink(i)}
                   style={{ position: "absolute", top: 8, right: 8 }}
                   type="button"
+                  aria-label="Remove link"
                 >
                   ✕
                 </button>
@@ -380,6 +483,7 @@ export function Composer({
           type="text"
           value={replyAuthor}
           onChange={(e) => setReplyAuthor(e.target.value)}
+          placeholder="@you"
         />
       </div>
 
@@ -391,6 +495,7 @@ export function Composer({
           rows={3}
           value={replyText}
           onChange={(e) => setReplyText(e.target.value)}
+          placeholder="What do you want this moment to remember?"
         />
       </div>
 
@@ -406,7 +511,11 @@ export function Composer({
         </button>
 
         {onUseDifferentKey && (
-          <button className="sf-btn sf-btn--ghost" onClick={onUseDifferentKey} type="button">
+          <button
+            className="sf-btn sf-btn--ghost"
+            onClick={onUseDifferentKey}
+            type="button"
+          >
             Use a different ΦKey
           </button>
         )}
@@ -425,7 +534,12 @@ export function Composer({
           />
 
           <div className="sf-reply-actions">
-            <a className="sf-link" href={replyUrl} target="_blank" rel="noreferrer">
+            <a
+              className="sf-link"
+              href={replyUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
               Open →
             </a>
 
@@ -434,7 +548,9 @@ export function Composer({
               type="button"
               onClick={async () => {
                 try {
-                  await navigator.clipboard.writeText(expandShortAliasToCanonical(replyUrl));
+                  await navigator.clipboard.writeText(
+                    expandShortAliasToCanonical(replyUrl),
+                  );
                   toasts.push("success", "Link remembered.");
                   setCopiedReply(true);
                   window.setTimeout(() => setCopiedReply(false), 1200);

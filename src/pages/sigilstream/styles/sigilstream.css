@@ -1084,6 +1084,84 @@ body{
 
 /* tighten spacing when card is link-only */
 .sf-att-card > .sf-att-head:last-child{ padding-bottom: 12px; }
+/* ========== 17A) REPLY CONTEXT (previous message preview) ====== */
+
+.sf-reply-context {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  background:
+    radial-gradient(520px 220px at 10% 0%,
+      rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.18),
+      transparent 60%),
+    rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(var(--glass), 0.16);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.40), var(--inset-1);
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Soft bottom fade so the clamp feels natural */
+.sf-reply-context::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 32px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(10, 14, 22, 0) 0%,
+    rgba(10, 14, 22, 0.72) 60%,
+    rgba(10, 14, 22, 0.96) 100%
+  );
+}
+
+/* Header row: pill + author */
+.sf-reply-context-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  min-width: 0;
+}
+
+.sf-reply-context-author {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  opacity: 0.8;
+}
+
+/* Body: clamp to 3–4 lines, never let links make it 3 screens tall */
+.sf-reply-context-body {
+  font-size: 0.86rem;
+  line-height: 1.4;
+  opacity: 0.95;
+  min-width: 0;
+
+  /* Line clamp */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;       /* 👈 adjust if you want more/less height */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+
+  /* Long URLs: break smart, but not one-char per line */
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* If the previous message actually contains link text, keep it inline + ellipsized */
+.sf-reply-context-body a {
+  color: rgba(255, 255, 255, 0.95);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  max-width: 100%;
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ========== 19) STREAM LIST / EMPTY ============================ */
 .sf-list{ margin: 1rem 0; display:grid; gap: .75rem; min-width:0; }

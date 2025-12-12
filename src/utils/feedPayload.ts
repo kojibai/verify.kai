@@ -457,17 +457,20 @@ function hexOf(bytes: ArrayBufferLike): string {
 
 async function sha256Hex(bytes: ArrayBufferLike): Promise<string> {
   const ab = toArrayBuffer(bytes);
+
+  // WebCrypto (browser + modern node runtimes that expose crypto.subtle)
   if (typeof globalThis.crypto !== "undefined" && "subtle" in globalThis.crypto) {
     const digest = await globalThis.crypto.subtle.digest("SHA-256", ab);
     return hexOf(digest);
   }
+
   // Node fallback (dynamic to avoid bundling in browser)
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   const { createHash } = await import("crypto");
-  return createHash("sha256")
-    .update(Buffer.from(new Uint8Array(ab)))
-    .digest("hex");
+
+  // ✅ No Buffer reference (avoids requiring @types/node / Buffer polyfills)
+  return createHash("sha256").update(new Uint8Array(ab)).digest("hex");
 }
 
 function mimeToBlob(bytes: ArrayBufferLike, type?: string): Blob {
@@ -497,7 +500,7 @@ export function computeAttachmentStats(p: { attachments?: Attachments }): { tota
       total += it.size ?? 0;
     } else if (it.kind === "file-inline") {
       total += it.size ?? 0;
-      inline += (it.data_b64url.length ?? 0) * 0.75; // b64 expansion ≈ 4/3; inverse ≈ ×0.75
+      inline += it.data_b64url.length * 0.75; // b64 expansion ≈ 4/3; inverse ≈ ×0.75
       if (it.thumbnail_b64) inline += it.thumbnail_b64.length * 0.75;
     }
   }
@@ -558,7 +561,7 @@ export function dropInlineFiles(p: FeedPostPayload): FeedPostPayload {
  * - Stores blobs under /att/<sha> (cache-only URL)
  * - Converts each file-inline → file-ref with the derived sha and url
  * - Prunes thumbnails
- * If CacheStorage is unavailable, inline files are dropped (never left in token).
+ * If CacheStorage is unavailable, inline files are NOT dropped here (truthful + deterministic).
  */
 export async function materializeInlineToCache(
   p: FeedPostPayload,
@@ -661,21 +664,31 @@ export function normalizePayloadToken(raw: string): string {
     }
   }
 
-  // '+' sometimes arrives as space in legacy query transport
-  if (t.includes(" ")) t = t.replaceAll(" ", "+");
+  // '+' sometimes arrives as space in legacy query transport (URLSearchParams)
+  if (t.includes(" ")) t = t.replace(/ /g, "+");
 
   // normalize standard base64 -> base64url
   if (/[+/=]/.test(t)) {
-    t = t.replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
+    t = t.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
   }
 
   return t;
 }
 
-export function extractPayloadTokenFromLocation(loc: Location = window.location): string | null {
+/** DOM-free shape so this file can compile in non-DOM contexts too. */
+export type LocationLike = { hash: string; search: string; pathname: string };
+
+export function extractPayloadTokenFromLocation(loc?: LocationLike): string | null {
   try {
-    const hashParams = new URLSearchParams(loc.hash.startsWith("#") ? loc.hash.slice(1) : loc.hash);
-    const searchParams = new URLSearchParams(loc.search);
+    const L: LocationLike | null =
+      loc ?? (typeof window !== "undefined" && window.location ? window.location : null);
+    if (!L) return null;
+
+    const hashRaw = L.hash.startsWith("#") ? L.hash.slice(1) : L.hash;
+    const searchRaw = L.search.startsWith("?") ? L.search.slice(1) : L.search;
+
+    const hashParams = new URLSearchParams(hashRaw);
+    const searchParams = new URLSearchParams(searchRaw);
 
     const fromHash = hashParams.get("t") ?? hashParams.get("p") ?? hashParams.get("token");
     if (fromHash) return normalizePayloadToken(fromHash);
@@ -683,12 +696,12 @@ export function extractPayloadTokenFromLocation(loc: Location = window.location)
     const fromSearch = searchParams.get("t") ?? searchParams.get("p") ?? searchParams.get("token");
     if (fromSearch) return normalizePayloadToken(fromSearch);
 
-    // /stream/p/<token> or /feed/p/<token>
-    const m1 = loc.pathname.match(/\/(?:stream|feed)\/p\/([^/]+)$/);
+    // /stream/p/<token> or /feed/p/<token> (allow trailing slash)
+    const m1 = L.pathname.match(/^\/(?:stream|feed)\/p\/([^/?#]+)\/?$/);
     if (m1?.[1]) return normalizePayloadToken(m1[1]);
 
-    // /p~<token>
-    const m2 = loc.pathname.match(/\/p~(.+)$/);
+    // /p~<token> (allow trailing slash)
+    const m2 = L.pathname.match(/^\/p~([^/?#]+)\/?$/);
     if (m2?.[1]) return normalizePayloadToken(m2[1]);
 
     return null;
@@ -699,10 +712,27 @@ export function extractPayloadTokenFromLocation(loc: Location = window.location)
 
 /** Extract token from an arbitrary pathname string. */
 export function extractPayloadToken(pathname: string): string | null {
-  const mTilde = pathname.match(/\/p~([^/?#]+)/);
-  if (mTilde) return decodeURIComponent(mTilde[1]);
-  const m = pathname.match(/^\/(?:stream|feed)\/p\/([^/]+)$/);
-  return m ? decodeURIComponent(m[1]) : null;
+  const raw = (pathname ?? "").trim();
+  if (!raw) return null;
+
+  // Strip query/hash defensively
+  const pathOnly = raw.split("?")[0].split("#")[0];
+
+  const safeDecode = (s: string) => {
+    try {
+      return decodeURIComponent(s);
+    } catch {
+      return s;
+    }
+  };
+
+  const mTilde = pathOnly.match(/^\/p~([^/?#]+)\/?$/);
+  if (mTilde?.[1]) return normalizePayloadToken(safeDecode(mTilde[1]));
+
+  const m = pathOnly.match(/^\/(?:stream|feed)\/p\/([^/?#]+)\/?$/);
+  if (m?.[1]) return normalizePayloadToken(safeDecode(m[1]));
+
+  return null;
 }
 
 /** Build a URL using hash as the default (safest): `${origin}/stream#t=<token>` */
@@ -894,7 +924,13 @@ export function makeInlineAttachment(params: {
   };
 }
 
-export function makeFileRefAttachment(params: { sha256: string; name?: string; type?: string; size?: number; url?: string }): AttachmentFileRef {
+export function makeFileRefAttachment(params: {
+  sha256: string;
+  name?: string;
+  type?: string;
+  size?: number;
+  url?: string;
+}): AttachmentFileRef {
   if (!/^[0-9a-f]{64}$/.test(params.sha256)) {
     throw new Error("sha256 must be 64 hex chars");
   }

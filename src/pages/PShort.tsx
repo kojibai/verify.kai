@@ -1,51 +1,75 @@
 // src/pages/PShort.tsx
-import { useEffect } from "react";
+"use client";
 
-export default function PShort() {
-  useEffect(() => {
+import React, { useEffect } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+
+function stripEdgePunct(s: string): string {
+  let t = s.trim();
+  t = t.replace(/[)\].,;:!?]+$/g, "");
+  t = t.replace(/^[([{"'`]+/g, "");
+  return t.trim();
+}
+
+function normalizeToken(raw: string): string {
+  let t = stripEdgePunct(raw);
+
+  // decode %xx if present
+  if (/%[0-9A-Fa-f]{2}/.test(t)) {
     try {
-      const u = new URL(window.location.href);
-      const hash = u.hash.startsWith("#") ? u.hash.slice(1) : u.hash;
-      const qp = new URLSearchParams(hash);
-      const t = qp.get("t"); // token
-      const add = qp.get("add"); // optional parent (may be short alias too)
-
-      if (!t) {
-        // fallback to home
-        window.location.replace("/");
-        return;
-      }
-
-      // Rebuild canonical URL
-      const dest = new URL(u.origin);
-      dest.pathname = `/feed/p/${t}`;
-
-      if (add) {
-        // Allow both full URLs and short /p#t=... aliases as parent
-        const addUrl = (() => {
-          try {
-            // full absolute?
-            const maybe = new URL(add);
-            return maybe.toString();
-          } catch {
-            // short alias like /p#t=... or just #t=...
-            if (add.startsWith("/p#t=")) {
-              return `${u.origin}${add}`;
-            }
-            if (add.startsWith("#t=")) {
-              return `${u.origin}/p${add}`;
-            }
-            return add; // as-is
-          }
-        })();
-        dest.searchParams.set("add", addUrl);
-      }
-
-      window.location.replace(dest.toString());
+      t = decodeURIComponent(t);
     } catch {
-      window.location.replace("/");
+      /* ignore */
     }
-  }, []);
+  }
 
-  return null;
+  // spaces back to + (some transports)
+  if (t.includes(" ")) t = t.replaceAll(" ", "+");
+
+  // base64 -> base64url
+  t = t.replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
+  return stripEdgePunct(t);
+}
+
+export default function PShort(): React.JSX.Element {
+  const nav = useNavigate();
+  const loc = useLocation();
+  const params = useParams();
+
+  useEffect(() => {
+    // 1) token from /p~<head>/<tail...>
+    const head = typeof params.token === "string" ? params.token : "";
+    const tail = typeof params["*"] === "string" ? params["*"] : "";
+    const joined = head && tail ? `${head}/${tail}` : head || tail;
+
+    // 2) also accept query/hash variants as fallback
+    const search = new URLSearchParams(loc.search);
+    const hash = new URLSearchParams(
+      loc.hash.startsWith("#") ? loc.hash.slice(1) : loc.hash,
+    );
+
+    const q =
+      search.get("t") ||
+      search.get("p") ||
+      search.get("token") ||
+      hash.get("t") ||
+      hash.get("p") ||
+      hash.get("token") ||
+      "";
+
+    const raw = joined || q;
+    if (!raw) return;
+
+    const safe = normalizeToken(raw);
+
+    // Redirect into the canonical SMS-safe alias
+    nav(`/p~${safe}`, { replace: true });
+  }, [nav, loc.search, loc.hash, params]);
+
+  return (
+    <div className="notfound" role="region" aria-label="Redirecting">
+      <div className="notfound__title">Redirecting…</div>
+      <div className="notfound__hint">Normalizing payload token.</div>
+    </div>
+  );
 }

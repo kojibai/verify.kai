@@ -3,13 +3,26 @@
 
 /**
  * SigilStreamRoot — Memory Stream Shell
- * v7.6.0 — FIX: KKS-1.0 deterministic Kai display for payload
+ * v7.7.0 — KKS-1.0 Kai display + universal token/URL normalization
  *
- * ✅ Critical fix:
+ * ✅ Critical KKS-1.0 fix:
  *    - payload.pulse is already correct (authoritative)
- *    - beat:step, weekday, and chakra MUST be derived from pulse using KKS-1.0
+ *    - beat:step, weekday, ark, and chakra MUST be derived from pulse using KKS-1.0
  *    - uses 17,491.270421 breaths per day (continuous), not 17,424 grid pulses
  *    - preserves 36 beats/day + 44 steps/beat (beat/step are computed by day-fraction)
+ *
+ * ✅ Token / URL handling (backward + forward compatible):
+ *    - Accepts raw tokens OR full URLs in all known forms:
+ *        • /stream/p/<token>
+ *        • /stream?p=<token>
+ *        • /stream#t=<token>
+ *        • /p?t=<token>
+ *        • /p#t=<token>
+ *        • /p~<token>   (short alias, SMS-safe)
+ *    - normalizeIncomingToken(...) extracts, decodes, and base64url-normalizes
+ *    - canonicalizeCurrentStreamUrl(...) → /stream/p/<token> (or /stream#t= for huge)
+ *    - preferredShareUrl(...) → /p~<token> when short, /stream?p=<token> when huge
+ *    - All forms round-trip cleanly and are registered via registerSigilUrl(...)
  *
  * ✅ Keeps v7 features:
  *    - extractPayloadTokenFromLocation (ALL token forms)
@@ -114,66 +127,7 @@ const KKS_WEEKS_PER_MONTH = 7;
 const KKS_MONTHS_PER_YEAR = 8;
 
 const KKS_DAYS_PER_MONTH = KKS_DAYS_PER_WEEK * KKS_WEEKS_PER_MONTH; // 42
-const KKS_DAYS_PER_YEAR = KKS_DAYS_PER_MONTH * KKS_MONTHS_PER_YEAR; // 336
-
-function pulseToDMY(pulse: number): { d: number; m: number; y: number } {
-  const day = pulseToDayIndex(pulse); // absolute day index (0-based)
-  const y = Math.floor(day / KKS_DAYS_PER_YEAR); // base-0 year
-  const dayOfYear = safeModulo(day, KKS_DAYS_PER_YEAR); // 0..335 (euclidean)
-  const m0 = Math.floor(dayOfYear / KKS_DAYS_PER_MONTH); // 0..7
-  const d0 = dayOfYear % KKS_DAYS_PER_MONTH; // 0..41
-  return { d: d0 + 1, m: m0 + 1, y };
-}
-
-
-const WEEKDAYS: readonly string[] = [
-  "Solhara",
-  "Aquaris",
-  "Flamora",
-  "Verdari",
-  "Sonari",
-  "Kaelith",
-] as const;
-
-const CHAKRAS: readonly string[] = [
-  "Root",
-  "Sacral",
-  "Solar",
-  "Heart",
-  "Throat",
-  "Third Eye",
-  "Crown",
-] as const;
-
-function normalizeWeekdayLabel(s: string): string {
-  const t = s.trim();
-  if (!t) return t;
-  if (/^caelith$/i.test(t)) return "Kaelith";
-  if (/^kaelith$/i.test(t)) return "Kaelith";
-  return t.charAt(0).toUpperCase() + t.slice(1);
-}
-
-function normalizeChakraLabel(s: string): string {
-  const t = s.trim();
-  if (!t) return t;
-  const u = t.toLowerCase();
-  if (u === "third-eye" || u === "third eye" || u === "ajna") return "Third Eye";
-  if (u === "solar plexus" || u === "solar-plexus" || u === "solar") return "Solar";
-  if (u === "root") return "Root";
-  if (u === "sacral") return "Sacral";
-  if (u === "heart") return "Heart";
-  if (u === "throat") return "Throat";
-  if (u === "crown") return "Krown";
-  return t.charAt(0).toUpperCase() + t.slice(1);
-}
-
-/** ✅ ONLY CHANGE: display label translation (manual → Sovereign) */
-function normalizeFeedSourceLabel(s: string): string {
-  const t = s.trim();
-  if (!t) return t;
-  if (/^manual$/i.test(t)) return "Proof of Memory™";
-  return t.charAt(0).toUpperCase() + t.slice(1);
-}
+const KKS_DAYS_PER_YEAR = KKS_DAYS_PER_MONTH * KKS_MONTHS_PER_YEAR; // 336;
 
 function safeModulo(n: number, m: number): number {
   const r = n % m;
@@ -193,7 +147,6 @@ function readPulse(pulse: number): number {
 /** KKS day index (0-based) from continuous pulse count. */
 function pulseToDayIndex(pulse: number): number {
   const p = readPulse(pulse);
-  
   // floor() is correct for negative too (creates consistent day bins)
   return Math.floor(p / KKS_PULSES_PER_DAY);
 }
@@ -230,6 +183,34 @@ function pulseToBeatStep(pulse: number): { beat: number; step: number } {
   return { beat, step };
 }
 
+function pulseToDMY(pulse: number): { d: number; m: number; y: number } {
+  const day = pulseToDayIndex(pulse); // absolute day index (0-based)
+  const y = Math.floor(day / KKS_DAYS_PER_YEAR); // base-0 year
+  const dayOfYear = safeModulo(day, KKS_DAYS_PER_YEAR); // 0..335 (euclidean)
+  const m0 = Math.floor(dayOfYear / KKS_DAYS_PER_MONTH); // 0..7
+  const d0 = dayOfYear % KKS_DAYS_PER_MONTH; // 0..41
+  return { d: d0 + 1, m: m0 + 1, y };
+}
+
+const WEEKDAYS: readonly string[] = [
+  "Solhara",
+  "Aquaris",
+  "Flamora",
+  "Verdari",
+  "Sonari",
+  "Kaelith",
+] as const;
+
+const CHAKRAS: readonly string[] = [
+  "Root",
+  "Sacral",
+  "Solar",
+  "Heart",
+  "Throat",
+  "Third Eye",
+  "Crown",
+] as const;
+
 function pulseToWeekday(pulse: number): string {
   const day = pulseToDayIndex(pulse);
   return WEEKDAYS[safeModulo(day, WEEKDAYS.length)] ?? "Kaelith";
@@ -240,6 +221,7 @@ function pulseToChakraDay(pulse: number): string {
   const day = pulseToDayIndex(pulse);
   return CHAKRAS[safeModulo(day, CHAKRAS.length)] ?? "Crown";
 }
+
 const KKS_MONTH_NAMES: readonly string[] = [
   "Aethon",
   "Virelai",
@@ -258,9 +240,66 @@ function pulseToMonthName(pulse: number): string {
   return KKS_MONTH_NAMES[m0] ?? `Month ${m0 + 1}`;
 }
 
+/* Display label normalizers */
+
+function normalizeWeekdayLabel(s: string): string {
+  const t = s.trim();
+  if (!t) return t;
+  if (/^caelith$/i.test(t)) return "Kaelith";
+  if (/^kaelith$/i.test(t)) return "Kaelith";
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+function normalizeChakraLabel(s: string): string {
+  const t = s.trim();
+  if (!t) return t;
+  const u = t.toLowerCase();
+  if (u === "third-eye" || u === "third eye" || u === "ajna") return "Third Eye";
+  if (u === "solar plexus" || u === "solar-plexus" || u === "solar") return "Solar";
+  if (u === "root") return "Root";
+  if (u === "sacral") return "Sacral";
+  if (u === "heart") return "Heart";
+  if (u === "throat") return "Throat";
+  if (u === "crown") return "Krown";
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/** ✅ ONLY CHANGE: display label translation (manual → Sovereign) */
+function normalizeFeedSourceLabel(s: string): string {
+  const t = s.trim();
+  if (!t) return t;
+  if (/^manual$/i.test(t)) return "Proof of Memory™";
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+const KKS_ARKS_PER_DAY = 6;
+const KKS_BEATS_PER_ARK = KKS_BEATS_PER_DAY / KKS_ARKS_PER_DAY; // 6
+
+const ARKS: readonly string[] = [
+  "Ignite",
+  "Integrate",
+  "Harmonize",
+  "Reflekt",
+  "Purify",
+  "Dream",
+] as const;
+
+function pulseToArkIndex(pulse: number): number {
+  const { beat } = pulseToBeatStep(pulse); // 0..35
+  const idx = Math.floor(beat / KKS_BEATS_PER_ARK); // 0..5
+  if (idx < 0) return 0;
+  if (idx >= ARKS.length) return ARKS.length - 1;
+  return idx;
+}
+
+function pulseToArkName(pulse: number): string {
+  return ARKS[pulseToArkIndex(pulse)] ?? "Dream";
+}
+
 /* ────────────────────────────────────────────────────────────────
    URL helpers
 ──────────────────────────────────────────────────────────────── */
+
 function pad2(n: number): string {
   const v = Number.isFinite(n) ? Math.trunc(n) : 0;
   return String(v).padStart(2, "0");
@@ -279,16 +318,39 @@ function canonicalizeCurrentStreamUrl(token: string): string {
     : `${base}/stream#t=${token}`;
 }
 
+function legacyStreamQueryUrl(token: string): string {
+  const origin = globalThis.location?.origin ?? "https://kaiklok.com";
+  const base = origin.replace(/\/+$/, "");
+  // This is what the Sigil-Glyph capsule decoder expects right now
+  return `${base}/stream?p=${encodeURIComponent(token)}`;
+}
+
+/**
+ * Preferred share URL for humans / capsules:
+ * - Uses /p~<token> when short (SMS-safe, no ? or =)
+ * - Falls back to /stream?p=<token> for huge payloads
+ *   (the Sigil-Glyph decoder understands ?p=)
+ */
+function preferredShareUrl(token: string): string {
+  return token.length <= TOKEN_HARD_LIMIT
+    ? shortAliasUrl(token) // e.g. https://kaiklok.com/p~<token>
+    : legacyStreamQueryUrl(token); // e.g. https://kaiklok.com/stream?p=<token>
+}
+
 function shortAliasUrl(token: string): string {
   const origin = globalThis.location?.origin ?? "https://kaiklok.com";
   const base = origin.replace(/\/+$/, "");
   return `${base}/p~${token}`;
 }
 
-function preferredShareUrl(token: string): string {
-  return token.length <= TOKEN_HARD_LIMIT ? shortAliasUrl(token) : canonicalizeCurrentStreamUrl(token);
-}
-
+/**
+ * Normalize ANY incoming representation to a base64url token:
+ * - Accepts:
+ *     • raw token (base64 or base64url)
+ *     • full URLs: /stream/p/<token>, /p~<token>, /stream?p=, /p?t=, /p#t=, /stream#t=
+ * - Restores '+' lost as spaces (old query-style)
+ * - Converts base64 → base64url
+ */
 function normalizeIncomingToken(raw: string): string {
   let t = raw.trim();
 
@@ -571,6 +633,10 @@ function PostBodyView({
   return <div className="sf-html" dangerouslySetInnerHTML={{ __html: cleaned }} />;
 }
 
+/* ────────────────────────────────────────────────────────────────
+   Generic helpers
+──────────────────────────────────────────────────────────────── */
+
 function pickString(obj: unknown, keys: readonly string[]): string | null {
   if (!obj || typeof obj !== "object") return null;
   const rec = obj as Record<string, unknown>;
@@ -594,31 +660,6 @@ function readNumberLoose(obj: unknown, key: string): number | null {
 
 function clamp255(n: number): number {
   return Math.max(0, Math.min(255, Math.round(n)));
-}
-const KKS_ARKS_PER_DAY = 6;
-const KKS_BEATS_PER_ARK = KKS_BEATS_PER_DAY / KKS_ARKS_PER_DAY; // 6
-
-const ARKS: readonly string[] = [
-  "Ignite",
-  "Integrate",
-  "Harmonize",
-  "Reflekt",
-  "Purify",
-  "Dream",
-] as const;
-
-
-
-function pulseToArkIndex(pulse: number): number {
-  const { beat } = pulseToBeatStep(pulse); // 0..35
-  const idx = Math.floor(beat / KKS_BEATS_PER_ARK); // 0..5
-  if (idx < 0) return 0;
-  if (idx >= ARKS.length) return ARKS.length - 1;
-  return idx;
-}
-
-function pulseToArkName(pulse: number): string {
-  return ARKS[pulseToArkIndex(pulse)] ?? "Dream";
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -819,9 +860,7 @@ function PayloadCard(props: {
   const { d, m, y } = pulseToDMY(pulse);
   const monthName = pulseToMonthName(pulse);
   const weekday = normalizeWeekdayLabel(pulseToWeekday(pulse));
- const ark = pulseToArkName(pulse);
-
-
+  const ark = pulseToArkName(pulse);
 
   const phiKey =
     pickString(payload, ["userPhiKey", "phiKey", "phikey", "authorPhiKey"]) ??
@@ -876,15 +915,13 @@ function PayloadCard(props: {
       <div className="sf-payload-core">
         <span>☤Kai: {pulse}</span>
         <span className="sf-muted"> · </span>
-      <span className="sf-kai-label">
-  {pad2(beat)}:{pad2(step)} — D{d}/M{m}/Y{y} · {ark} 
-</span>
-
+        <span className="sf-kai-label">
+          {pad2(beat)}:{pad2(step)} — D{d}/M{m}/Y{y} · {ark}
+        </span>
         <span className="sf-muted"> · </span>
-        <span className="sf-kai-label"> {weekday} · {monthName} </span>
-<span className="sf-kai-label">
- 
-</span>
+        <span className="sf-kai-label">
+          {weekday} · {monthName}
+        </span>
       </div>
 
       {isSealed ? (
@@ -1091,13 +1128,17 @@ function SigilStreamInner(): React.JSX.Element {
     }
 
     try {
-      registerSigilUrl(canonicalizeCurrentStreamUrl(token));
+      const canon = canonicalizeCurrentStreamUrl(token);
+      const share = preferredShareUrl(token);
+      registerSigilUrl(canon);
+      if (share !== canon) registerSigilUrl(share);
     } catch (e) {
       report("register current stream url (pre-decode)", e);
     }
 
     try {
-      const decoded = (await decodeFeedPayload(token)) || (raw && raw !== token ? await decodeFeedPayload(raw) : null);
+      const decoded =
+        (await decodeFeedPayload(token)) || (raw && raw !== token ? await decodeFeedPayload(raw) : null);
 
       if (!decoded) {
         setPayload(null);
@@ -1225,11 +1266,14 @@ function SigilStreamInner(): React.JSX.Element {
   const rawSigilAuth = useSigilAuth() as unknown;
   const authLike = useMemo(() => coerceAuth(rawSigilAuth), [rawSigilAuth]);
 
-  const composerMeta = useMemo(() => (verifiedThisSession ? authLike.meta : null), [verifiedThisSession, authLike.meta]);
-  const composerSvgText = useMemo(() => (verifiedThisSession ? authLike.svgText : null), [
-    verifiedThisSession,
-    authLike.svgText,
-  ]);
+  const composerMeta = useMemo(
+    () => (verifiedThisSession ? authLike.meta : null),
+    [verifiedThisSession, authLike.meta],
+  );
+  const composerSvgText = useMemo(
+    () => (verifiedThisSession ? authLike.svgText : null),
+    [verifiedThisSession, authLike.svgText],
+  );
 
   const composerPhiKey = useMemo(
     () => (composerMeta ? readStringProp(composerMeta, "userPhiKey") : undefined),
@@ -1336,7 +1380,10 @@ function SigilStreamInner(): React.JSX.Element {
     }
   }, [payload, verifiedThisSession, composerMeta, composerSvgText, toasts]);
 
-  const lockedSealedView = useMemo(() => isSealed && unsealState.status !== "open", [isSealed, unsealState.status]);
+  const lockedSealedView = useMemo(
+    () => isSealed && unsealState.status !== "open",
+    [isSealed, unsealState.status],
+  );
 
   /** ---------- Manifest/body/caption source (unsealed overrides) ---------- */
   const effectiveBody = useMemo<PostBody | undefined>(() => {
@@ -1375,8 +1422,8 @@ function SigilStreamInner(): React.JSX.Element {
     const token = tokenRaw ? normalizeIncomingToken(tokenRaw) : null;
     if (!token) return;
 
-    // ✅ FIX: Always copy the canonical /stream/p link (hash fallback if oversized).
-    const share = canonicalizeCurrentStreamUrl(token);
+    // ✅ Use human + capsule-friendly share URL (p~ or ?p=)
+    const share = preferredShareUrl(token);
 
     // 1) Prefer sync copy: keeps toast-sound inside the click gesture (v6.1 behavior)
     const okSync = tryCopyExecCommand(share);

@@ -1,6 +1,25 @@
 // src/components/FeedCard.tsx
 "use client";
 
+/**
+ * FeedCard — Sigil-Glyph Capsule Renderer
+ * v4.0.0 — FIX: flawless decode for ALL token/url forms + KKS-1.0 pulse-authoritative display
+ *
+ * ✅ Decode hardening:
+ *    - Accepts /p~<token>, /p#t=<token>, /p?t=<token>, /p#p=<token>, /p?p=<token>
+ *    - Accepts /stream/p/<token>, /stream#t=<token>, /stream?p=<token>
+ *    - Accepts full URLs, relative URLs, or bare tokens
+ *    - Strips trailing punctuation, decodes %xx, normalizes base64 -> base64url (-/_ no '=')
+ *    - If a “wrapper” link contains add=… (nested URLs), will also try decoding those
+ *
+ * ✅ KKS-1.0 correctness:
+ *    - pulse is authoritative
+ *    - beat/step/chakra are derived from pulse (never trust payload heuristics)
+ *
+ * ✅ Copy hardening:
+ *    - Sync copy attempt first; async clipboard write without awaiting (gesture-safe)
+ */
+
 import React, { useCallback, useMemo, useState } from "react";
 import KaiSigil from "../components/KaiSigil";
 import { decodeSigilUrl } from "../utils/sigilDecode";
@@ -44,12 +63,223 @@ const isNonEmpty = (val: unknown): val is string =>
   typeof val === "string" && val.trim().length > 0;
 
 /* ─────────────────────────────────────────────────────────────
+   Decode normalization (ALL url/token forms)
+   ───────────────────────────────────────────────────────────── */
+
+type DecodeResult = ReturnType<typeof decodeSigilUrl>;
+type SmartDecode = { decoded: DecodeResult; resolvedUrl: string };
+
+function originFallback(): string {
+  if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
+  return "https://kaiklok.com";
+}
+
+/** Remove trailing punctuation often introduced by chat apps / markdown */
+function stripEdgePunct(s: string): string {
+  let t = s.trim();
+  // common trailing punctuation
+  t = t.replace(/[)\].,;:!?]+$/g, "");
+  // common leading punctuation
+  t = t.replace(/^[([{"'`]+/g, "");
+  return t.trim();
+}
+
+/** Normalize token: decode %xx, restore +, normalize base64 -> base64url, strip '=' */
+function normalizeToken(raw: string): string {
+  let t = stripEdgePunct(raw);
+
+  if (/%[0-9A-Fa-f]{2}/.test(t)) {
+    try {
+      t = decodeURIComponent(t);
+    } catch {
+      /* keep raw */
+    }
+  }
+
+  // query/base64 legacy: '+' may come through as space
+  if (t.includes(" ")) t = t.replaceAll(" ", "+");
+
+  // base64 -> base64url
+  if (/[+/=]/.test(t)) {
+    t = t.replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
+  }
+
+  // final trim again
+  return stripEdgePunct(t);
+}
+
+function isLikelyToken(s: string): boolean {
+  // base64url-ish token (avoid tiny strings)
+  return /^[A-Za-z0-9_-]{16,}$/.test(s);
+}
+
+function extractFromPath(pathname: string): string | null {
+  // /p~TOKEN
+  {
+    const m = pathname.match(/\/p~([^/?#]+)/);
+    if (m?.[1]) return m[1];
+  }
+  // /stream/p/TOKEN or /feed/p/TOKEN
+  {
+    const m = pathname.match(/\/(?:stream|feed)\/p\/([^/?#]+)/);
+    if (m?.[1]) return m[1];
+  }
+  // /p/TOKEN (older)
+  {
+    const m = pathname.match(/\/p\/([^/?#]+)/);
+    if (m?.[1]) return m[1];
+  }
+  return null;
+}
+
+
+function tryParseUrl(raw: string): URL | null {
+  const t = raw.trim();
+  try {
+    return new URL(t);
+  } catch {
+    try {
+      return new URL(t, originFallback());
+    } catch {
+      return null;
+    }
+  }
+}
+
+/** Extract token candidates from a raw URL (also tries nested add= urls once). */
+function extractTokenCandidates(rawUrl: string, depth = 0): string[] {
+  const out: string[] = [];
+  const push = (v: string | null | undefined) => {
+    if (!v) return;
+    const tok = normalizeToken(v);
+    if (!tok) return;
+    if (!isLikelyToken(tok)) return;
+    if (!out.includes(tok)) out.push(tok);
+  };
+
+  const raw = stripEdgePunct(rawUrl);
+
+  // bare token support
+  if (isLikelyToken(raw)) push(raw);
+
+  const u = tryParseUrl(raw);
+  if (!u) return out;
+
+  // hash params
+  const hashStr = u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : "";
+  const hash = new URLSearchParams(hashStr);
+
+  // search params
+  const search = u.searchParams;
+
+  // common token keys
+  const keys = ["t", "p", "token", "capsule"];
+  for (const k of keys) {
+    push(hash.get(k));
+    push(search.get(k));
+  }
+
+  // path forms
+  push(extractFromPath(u.pathname));
+
+  // If the full pathname itself is /p~TOKEN (no slash separator), regex already handles.
+  // Now: nested add= urls (common in reply/share wrappers)
+  if (depth < 1) {
+    const adds = [...search.getAll("add"), ...hash.getAll("add")];
+    for (const a of adds) {
+      const maybeUrl = stripEdgePunct(a);
+      if (!maybeUrl) continue;
+
+      // add may be percent-encoded url
+      let decoded = maybeUrl;
+      if (/%[0-9A-Fa-f]{2}/.test(decoded)) {
+        try {
+          decoded = decodeURIComponent(decoded);
+        } catch {
+          /* ignore */
+        }
+      }
+      for (const tok of extractTokenCandidates(decoded, depth + 1)) push(tok);
+    }
+  }
+
+  return out;
+}
+
+/** Build canonical url candidates to satisfy whatever decodeSigilUrl already supports. */
+const OPEN_URL_HARD_LIMIT = 3500; // match feedPayload.ts TOKEN_HARD_LIMIT
+
+function buildDecodeUrlCandidates(token: string): string[] {
+  const base = originFallback().replace(/\/+$/g, "");
+  const t = normalizeToken(token);
+
+  return [
+    t, // some decoders accept raw token
+    `${base}/stream/p/${t}`,
+    `${base}/stream#t=${t}`,
+    `${base}/stream?t=${t}`,
+    // still accept legacy/alt inputs for decode (but NOT our output)
+    `${base}/p#t=${t}`,
+    `${base}/p?t=${t}`,
+    `${base}/p#p=${t}`,
+    `${base}/p?p=${t}`,
+    `${base}/p#token=${t}`,
+    `${base}/p?token=${t}`,
+    `${base}/p~${t}`, // decode-only support
+  ];
+}
+function canonicalOpenUrlFromToken(token: string): string {
+  const base = originFallback().replace(/\/+$/g, "");
+  const t = normalizeToken(token);
+  // If absurdly large, use hash (router-safe, request-line safe)
+  return t.length <= OPEN_URL_HARD_LIMIT ? `${base}/stream/p/${t}` : `${base}/stream#t=${t}`;
+}
+
+
+/** Smart decode: try raw url, then extracted tokens across multiple canonical forms. */
+function decodeSigilUrlSmart(rawUrl: string): SmartDecode {
+  const tried = new Set<string>();
+
+  const attempt = (candidate: string): DecodeResult | null => {
+    const c = candidate.trim();
+    if (!c || tried.has(c)) return null;
+    tried.add(c);
+    const r = decodeSigilUrl(c);
+    return r.ok ? r : null;
+  };
+
+  const rawTrim = stripEdgePunct(rawUrl);
+
+  // 1) raw first
+  const rawOk = attempt(rawTrim);
+  if (rawOk) {
+    // If raw was /p~... or any wrapper, canonicalize output to /stream/p/<token>
+    const toks = extractTokenCandidates(rawTrim);
+    if (toks[0]) return { decoded: rawOk, resolvedUrl: canonicalOpenUrlFromToken(toks[0]) };
+    return { decoded: rawOk, resolvedUrl: rawTrim };
+  }
+
+  // 2) tokens from raw url
+  const tokens = extractTokenCandidates(rawTrim);
+  for (const tok of tokens) {
+    for (const cand of buildDecodeUrlCandidates(tok)) {
+      const ok = attempt(cand);
+      if (ok) {
+        return { decoded: ok, resolvedUrl: canonicalOpenUrlFromToken(tok) };
+      }
+    }
+  }
+
+  // 3) last resort: return original decoder result (raw)
+  return { decoded: decodeSigilUrl(rawTrim), resolvedUrl: rawTrim };
+}
+
+/* ─────────────────────────────────────────────────────────────
    KKS-1.0: D/M/Y from μpulses (exact, deterministic)
    dayOfMonth: 1..42
    month:      1..8
    year:       1.. (yearIndex + 1)
    ───────────────────────────────────────────────────────────── */
-
 
 /** Euclidean mod (always 0..m-1) */
 const modE = (a: bigint, m: bigint): bigint => {
@@ -62,7 +292,7 @@ const floorDivE = (a: bigint, d: bigint): bigint => {
   if (d === 0n) throw new Error("Division by zero");
   const q = a / d;
   const r = a % d;
-  return r === 0n ? q : (a >= 0n ? q : q - 1n);
+  return r === 0n ? q : a >= 0n ? q : q - 1n;
 };
 
 const toSafeNumber = (x: bigint): number => {
@@ -75,25 +305,23 @@ const toSafeNumber = (x: bigint): number => {
 
 /** Exact KKS calendar indices from a pulse (no payload heuristics). */
 function kaiDMYFromPulseKKS(pulse: number): { day: number; month: number; year: number } {
-  // Bridge pulse -> epoch ms (φ-exact) -> μpulses (φ-exact) to match engine behavior.
   const ms = epochMsFromPulse(pulse); // bigint
   const pμ = microPulsesSinceGenesis(ms); // bigint μpulses
 
   const dayIdx = floorDivE(pμ, N_DAY_MICRO); // bigint days since genesis (can be negative)
-
   const monthIdx = floorDivE(dayIdx, BigInt(DAYS_PER_MONTH)); // bigint
   const yearIdx = floorDivE(dayIdx, BigInt(DAYS_PER_YEAR)); // bigint
 
   const dayOfMonth = toSafeNumber(modE(dayIdx, BigInt(DAYS_PER_MONTH))) + 1; // 1..42
   const month = toSafeNumber(modE(monthIdx, BigInt(MONTHS_PER_YEAR))) + 1; // 1..8
-  const year = toSafeNumber(yearIdx); // display year
+  const year = toSafeNumber(yearIdx); // display year (0-based is allowed; keep exact)
 
   return { day: dayOfMonth, month, year };
 }
 
 /**
  * Chakra coercion:
- * - KaiSigil’s CHAKRAS map expects "Crown" (not "Krown")
+ * - KaiSigil expects "Crown" internally
  * - UI should DISPLAY "Krown"
  */
 function toChakra(value: unknown, fallback: ChakraDay): ChakraDay {
@@ -142,10 +370,10 @@ function buildKaiMetaLineZero(
   year: number,
 ): { arc: string; label: string; line: string } {
   const arc = arcFromBeat(beatZ);
-  const label = `${pad2(beatZ)}:${pad2(stepZ)}`; // zero-based, two-digit BB:SS
+  const label = `${pad2(beatZ)}:${pad2(stepZ)}`;
   const d = Math.max(1, Math.floor(day));
   const m = Math.max(1, Math.floor(month));
-  const y = Math.floor(year); // year may be <=0 for pre-genesis; keep exact
+  const y = Math.floor(year);
   const line = `☤KAI:${pulse} • ${label} D${d}/M${m}/Y${y}`;
   return { arc, label, line };
 }
@@ -178,21 +406,86 @@ function legacySourceFromData(data: unknown): string | undefined {
   return undefined;
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Clipboard helpers (gesture-safe)
+   ───────────────────────────────────────────────────────────── */
+
+function tryCopyExecCommand(text: string): boolean {
+  if (typeof document === "undefined") return false;
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "true");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    ta.style.top = "0";
+    document.body.appendChild(ta);
+
+    const prevFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    ta.focus();
+    ta.select();
+
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    if (prevFocus) prevFocus.focus();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+function clipboardWriteTextPromise(text: string): Promise<void> | null {
+  if (typeof window === "undefined") return null;
+  const nav = window.navigator;
+  const canClipboard =
+    typeof nav !== "undefined" &&
+    typeof nav.clipboard !== "undefined" &&
+    typeof nav.clipboard.writeText === "function" &&
+    window.isSecureContext;
+  if (!canClipboard) return null;
+  return nav.clipboard.writeText(text);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Component
+   ───────────────────────────────────────────────────────────── */
+
 export const FeedCard: React.FC<Props> = ({ url }) => {
   const [copied, setCopied] = useState(false);
 
-  const onCopy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(url);
+  // ✅ Smart decode (handles /p~, #t=, ?t=, stream wrappers, nested add=)
+  const smart = useMemo(() => decodeSigilUrlSmart(url), [url]);
+  const decoded = smart.decoded;
+  const openUrl = smart.resolvedUrl;
+
+  const onCopy = useCallback(() => {
+    const text = openUrl || url;
+
+    // 1) sync attempt (best for gesture constraints)
+    const okSync = tryCopyExecCommand(text);
+    if (okSync) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1100);
-    } catch (e: unknown) {
-      // eslint-disable-next-line no-console
-      console.warn("Remember failed:", e);
+      return;
     }
-  }, [url]);
 
-  const decoded = useMemo(() => decodeSigilUrl(url), [url]);
+    // 2) async clipboard (do NOT await)
+    const p = clipboardWriteTextPromise(text);
+    if (p) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1100);
+      p.catch((e: unknown) => {
+        // eslint-disable-next-line no-console
+        console.warn("Remember failed:", e);
+        setCopied(false);
+      });
+      return;
+    }
+
+    // 3) total failure
+    // eslint-disable-next-line no-console
+    console.warn("Remember failed: no clipboard available");
+  }, [openUrl, url]);
 
   if (!decoded.ok) {
     return (
@@ -210,7 +503,7 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
           </header>
 
           <div className="fc-error" role="alert">
-            {decoded.error}
+            {"error" in decoded ? (decoded as { error?: string }).error : "Decode failed."}
           </div>
 
           <footer className="fc-actions" role="group" aria-label="Actions">
@@ -239,22 +532,17 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
 
   const pulse = typeof data.pulse === "number" && Number.isFinite(data.pulse) ? data.pulse : 0;
 
-  // Single source of truth: derive moment from pulse
+  // ✅ Single source of truth: derive moment from pulse (KKS-1.0)
   const m = momentFromPulse(pulse);
 
-  const beatRaw = typeof data.beat === "number" && Number.isFinite(data.beat) ? data.beat : m.beat;
-  const stepRaw =
-    typeof data.stepIndex === "number" && Number.isFinite(data.stepIndex)
-      ? data.stepIndex
-      : m.stepIndex;
+  // ✅ Never trust capsule beat/step/chakra; derive from pulse
+  const beatZ = Math.max(0, Math.floor(m.beat));
+  const stepZ = Math.max(0, Math.floor(m.stepIndex));
 
   // INTERNAL chakra value (what KaiSigil expects)
-  const chakraDay: ChakraDay = toChakra(data.chakraDay, m.chakraDay);
+  const chakraDay: ChakraDay = toChakra(m.chakraDay, m.chakraDay);
   // DISPLAY chakra value (what user sees)
   const chakraDayDisplay = chakraDay === "Crown" ? "Krown" : String(chakraDay);
-
-  const beatZ = Math.max(0, Math.floor(beatRaw));
-  const stepZ = Math.max(0, Math.floor(stepRaw));
 
   // ✅ Exact KKS v1.0 D/M/Y (1-based day & month)
   const { day, month, year } = kaiDMYFromPulseKKS(pulse);
@@ -471,14 +759,14 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
           {!post && !message && !share && !reaction && (
             <section className="fc-bodywrap" aria-label="Sigil body">
               <h3 className="fc-title">Proof Of Breath™</h3>
-              <a className="fc-link" href={url} target="_blank" rel="noreferrer" title={url}>
-                {hostOf(url) ?? url}
+              <a className="fc-link" href={openUrl} target="_blank" rel="noreferrer" title={openUrl}>
+                {hostOf(openUrl) ?? openUrl}
               </a>
             </section>
           )}
 
           <footer className="fc-actions" role="group" aria-label="Actions">
-            <a className="fc-btn" href={url} target="_blank" rel="noreferrer" title="Open original sigil">
+            <a className="fc-btn" href={openUrl} target="_blank" rel="noreferrer" title="Open sigil">
               ↗ Sigil-Glyph
             </a>
 
