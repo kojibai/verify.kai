@@ -16,7 +16,6 @@ import { computeLocalKai } from "../core/kai_time";
 
 import {
   canonicalBase,
-  currentPayloadUrl,
   expandShortAliasToCanonical,
   isLikelySigilUrl,
   buildStreamUrl,
@@ -58,6 +57,154 @@ type ParentPreview = {
   url: string;
   snippet: string;
 };
+
+const ADD_CHAIN_MAX = 512;
+
+function safeDecodeURIComponent(v: string): string {
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    return v;
+  }
+}
+
+/** Parse add= from BOTH query and hash, normalize to canonical URL strings. */
+function extractAddChainFromHref(href: string): string[] {
+  try {
+    const u = new URL(href, canonicalBase().origin);
+    const hashStr = u.hash.startsWith("#") ? u.hash.slice(1) : "";
+    const hashParams = new URLSearchParams(hashStr);
+
+    const addsRaw = [...u.searchParams.getAll("add"), ...hashParams.getAll("add")];
+
+    const out: string[] = [];
+    for (const a of addsRaw) {
+      const decoded = safeDecodeURIComponent(String(a)).trim();
+      if (!decoded) continue;
+
+      try {
+        const canon = expandShortAliasToCanonical(decoded);
+        if (canon && !out.includes(canon)) out.push(canon);
+      } catch {
+        // ignore
+      }
+    }
+
+    return out.slice(-ADD_CHAIN_MAX);
+  } catch {
+    return [];
+  }
+}
+
+function extractPayloadTokenFromUrlString(rawUrl: string): string | null {
+  const base = canonicalBase().origin;
+  const t = rawUrl.trim();
+  if (!t) return null;
+
+  let u: URL;
+  try {
+    u = new URL(t);
+  } catch {
+    try {
+      u = new URL(t, base);
+    } catch {
+      return null;
+    }
+  }
+
+  const path = u.pathname || "";
+
+  // /stream/p/<token> | /feed/p/<token>
+  {
+    const m = path.match(/\/(?:stream|feed)\/p\/([^/?#]+)/);
+    if (m?.[1]) return m[1];
+  }
+
+  // /p/<token>
+  {
+    const m = path.match(/\/p\/([^/?#]+)/);
+    if (m?.[1]) return m[1];
+  }
+
+  // /p~TOKEN or /p~/TOKEN (and %7E)
+  {
+    const m = path.match(/\/p(?:\u007e|%7[Ee])\/?([^/?#]+)/);
+    if (m?.[1]) return m[1];
+  }
+
+  const hashStr = u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : "";
+  const hashParams = new URLSearchParams(hashStr);
+
+  const keys = ["t", "p", "token", "capsule"] as const;
+  for (const k of keys) {
+    const hv = hashParams.get(k);
+    if (hv) return hv;
+    const sv = u.searchParams.get(k);
+    if (sv) return sv;
+  }
+
+  return null;
+}
+
+/** Add add= entries into the URL *hash* (never query) so servers/proxies never see them. */
+function withHashAdds(baseUrl: string, adds: readonly string[]): string {
+  const u = new URL(baseUrl, canonicalBase().origin);
+
+  // preserve existing hash params (ex: t=...); just rewrite add=
+  const hashStr = u.hash.startsWith("#") ? u.hash.slice(1) : "";
+  const h = new URLSearchParams(hashStr);
+  h.delete("add");
+
+  for (const a of adds) h.append("add", a);
+
+  // IMPORTANT: keep query empty so we never hit 414
+  u.search = "";
+  const nextHash = h.toString();
+  u.hash = nextHash ? `#${nextHash}` : "";
+  return u.toString();
+}
+
+type ReplyContext = {
+  replyToUrl: string | null; // immediate parent (most recent message)
+  originUrl: string | null; // thread root if known
+  addChain: string[]; // ancestor chain excluding replyToUrl (root..parent-of-parent)
+};
+
+function computeReplyContextFromWindow(): ReplyContext {
+  if (typeof window === "undefined") return { replyToUrl: null, originUrl: null, addChain: [] };
+
+  const addChain = extractAddChainFromHref(window.location.href);
+
+  // If current location contains a payload token, that is the reply target.
+  const hereToken = extractPayloadTokenFromLocation(window.location);
+  const replyToFromHere = hereToken
+    ? (() => {
+        try {
+          return expandShortAliasToCanonical(buildStreamUrl(hereToken));
+        } catch {
+          return null;
+        }
+      })()
+    : null;
+
+  // Otherwise, the reply target is the last add=
+  const replyToFallback = !replyToFromHere && addChain.length ? addChain[addChain.length - 1] : null;
+
+  const replyTo = replyToFromHere ?? replyToFallback;
+
+  // Origin/root: first add= if present, else replyTo
+  const origin = addChain.length ? addChain[0] : replyTo;
+
+  // Ancestors: if replyTo came from last add=, ancestors are everything before it
+  const ancestors =
+    replyToFallback && addChain.length ? addChain.slice(0, -1) : addChain.slice(0);
+
+  return {
+    replyToUrl: replyTo,
+    originUrl: origin,
+    addChain: ancestors.slice(-ADD_CHAIN_MAX),
+  };
+}
 
 export function Composer({
   meta,
@@ -117,12 +264,17 @@ export function Composer({
     if (typeof window === "undefined") return;
 
     try {
-      const token = extractPayloadTokenFromLocation(window.location);
-      if (!token) return;
-      const decoded = decodeFeedPayload(token);
-      if (decoded) {
-        setParentPayload(decoded);
-      }
+      const ctx = computeReplyContextFromWindow();
+      if (!ctx.replyToUrl) return;
+
+      const tok =
+        extractPayloadTokenFromUrlString(ctx.replyToUrl) ??
+        extractPayloadTokenFromLocation(window.location);
+
+      if (!tok) return;
+
+      const decoded = decodeFeedPayload(tok);
+      if (decoded) setParentPayload(decoded);
     } catch {
       // Silent: if we can't decode, we just omit the preview
     }
@@ -151,8 +303,7 @@ export function Composer({
     }
 
     const maxLen = 280;
-    const snippet =
-      trimmed.length > maxLen ? `${trimmed.slice(0, maxLen - 1)}…` : trimmed;
+    const snippet = trimmed.length > maxLen ? `${trimmed.slice(0, maxLen - 1)}…` : trimmed;
 
     return {
       author: parentPayload.author,
@@ -183,6 +334,7 @@ export function Composer({
         ev.currentTarget.value = "";
         toasts.push("success", "Attached.");
       } catch (err) {
+        // eslint-disable-next-line no-console
         console.error("[Composer] onPickFiles:", err);
         toasts.push("error", "Attach failed.");
       }
@@ -200,8 +352,7 @@ export function Composer({
           ? (removed.size ?? 0)
           : 0;
 
-      const removedInlinedBytes =
-        removed && removed.kind === "file-inline" ? (removed.size ?? 0) : 0;
+      const removedInlinedBytes = removed && removed.kind === "file-inline" ? (removed.size ?? 0) : 0;
 
       return {
         version: 1,
@@ -239,7 +390,7 @@ export function Composer({
   };
 
   // ────────────────────────────────────────────────────────────────
-  // EXHALE (Create v2 Feed Payload + chain to parent)
+  // EXHALE (Create payload token + carry thread in hash add= witness chain)
   // ────────────────────────────────────────────────────────────────
 
   const onGenerateReply = async (): Promise<void> => {
@@ -255,61 +406,44 @@ export function Composer({
       const replyTextTrimmed = replyText.trim();
       const replyAuthorTrimmed = replyAuthor.trim();
 
-      /* Convert linkItems → url attachments */
       const linkAsAttachments: PayloadAttachmentItem[] = linkItems.map((it) =>
         makeUrlAttachment({ url: it.url, title: it.title }),
       );
 
-      /* Convert file attachments → v3 file attachments */
-      const fileAsAttachments: PayloadAttachmentItem[] = composerAtt.items.map(
-        (it) => {
-          if (it.kind === "file-ref") {
-            return makeFileRefAttachment({
-              sha256: it.sha256,
-              name: it.name,
-              type: it.type,
-              size: it.size,
-              url: undefined, // local selection; no remote URL here
-            });
-          }
+      const fileAsAttachments: PayloadAttachmentItem[] = composerAtt.items.map((it) => {
+        if (it.kind === "file-ref") {
+          return makeFileRefAttachment({
+            sha256: it.sha256,
+            name: it.name,
+            type: it.type,
+            size: it.size,
+            url: undefined,
+          });
+        }
 
-          if (it.kind === "file-inline") {
-            return makeInlineAttachment({
-              name: it.name,
-              type: it.type,
-              size: it.size,
-              data_b64url: it.data_b64url,
-              thumbnail_b64: undefined, // deterministic; no UI-only thumbnails
-            });
-          }
+        if (it.kind === "file-inline") {
+          return makeInlineAttachment({
+            name: it.name,
+            type: it.type,
+            size: it.size,
+            data_b64url: it.data_b64url,
+            thumbnail_b64: undefined,
+          });
+        }
 
-          // If some other kind slips in (future-proof), pass through structurally.
-          return it as unknown as PayloadAttachmentItem;
-        },
-      );
+        return it as unknown as PayloadAttachmentItem;
+      });
 
-      const allAttachments: PayloadAttachmentItem[] = [
-        ...linkAsAttachments,
-        ...fileAsAttachments,
-      ];
-
-      const attachments =
-        allAttachments.length > 0 ? makeAttachments(allAttachments) : undefined;
+      const allAttachments: PayloadAttachmentItem[] = [...linkAsAttachments, ...fileAsAttachments];
+      const attachments = allAttachments.length > 0 ? makeAttachments(allAttachments) : undefined;
 
       const pulseNow = computeLocalKai(new Date()).pulse;
 
-      // Canonical parent / origin
-      const parentRaw = currentPayloadUrl();
-      const parentUrl = parentRaw
-        ? expandShortAliasToCanonical(parentRaw)
-        : undefined;
-      const originUrl = parentUrl ?? undefined;
-
       const payloadBody =
-        replyTextTrimmed.length > 0
-          ? { kind: "text", text: replyTextTrimmed } as const
-          : undefined;
+        replyTextTrimmed.length > 0 ? ({ kind: "text", text: replyTextTrimmed } as const) : undefined;
 
+      // ✅ CRITICAL: do NOT embed parent/origin URLs inside the payload token.
+      // Thread context is carried in the *link hash* as add= witness chain.
       const payloadObj: FeedPostPayload = makeBasePayload({
         url: actionUrl || canonicalBase().origin,
         pulse: pulseNow,
@@ -319,28 +453,40 @@ export function Composer({
         sigilId: undefined,
         phiKey: composerPhiKey ?? undefined,
         kaiSignature: composerKaiSig ?? undefined,
-        parent: parentUrl,
-        parentUrl,
-        originUrl,
+        parent: undefined,
+        parentUrl: undefined,
+        originUrl: undefined,
         ts: Date.now(),
         attachments,
       });
 
       const token = encodeFeedPayload(payloadObj);
 
-      let share = buildStreamUrl(token);
+      // Base share URL (may be /stream/p/<token> or /stream#t=<token>)
+      const baseShare = buildStreamUrl(token);
 
-      if (parentUrl) {
-        const u = new URL(share);
-        u.searchParams.append("add", parentUrl);
-        share = u.toString();
+      // Build hash-based add= witness chain as TOKENS ONLY (not full URLs)
+      const ctx = computeReplyContextFromWindow();
+
+      const ancestorTokens: string[] = [];
+      for (const a of ctx.addChain) {
+        const t = extractPayloadTokenFromUrlString(a);
+        if (t && !ancestorTokens.includes(t)) ancestorTokens.push(t);
       }
+
+      const parentTok = ctx.replyToUrl ? extractPayloadTokenFromUrlString(ctx.replyToUrl) : null;
+
+      const adds: string[] = [...ancestorTokens];
+      if (parentTok && !adds.includes(parentTok)) adds.push(parentTok);
+
+      const share = adds.length ? withHashAdds(baseShare, adds.slice(-ADD_CHAIN_MAX)) : baseShare;
 
       await navigator.clipboard.writeText(share);
       toasts.push("success", "Link kopied. Kai-sealed.");
 
       setReplyUrl(share);
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error("[Composer] onGenerateReply:", err);
       toasts.push("error", "Could not seal reply.");
     } finally {
@@ -354,25 +500,18 @@ export function Composer({
 
   return (
     <section className="sf-reply" aria-labelledby="reply-title">
-      {/* Reply context: previous message card */}
       {parentPreview && (
-        <aside
-          className="sf-reply-context"
-          aria-label="Replying to previous memory"
-        >
+        <aside className="sf-reply-context" aria-label="Replying to previous memory">
           <div className="sf-reply-context-header">
             <span className="sf-pill">Replying to</span>
             {parentPreview.author && (
-              <span className="sf-reply-context-author">
-                {parentPreview.author}
-              </span>
+              <span className="sf-reply-context-author">{parentPreview.author}</span>
             )}
           </div>
           <p className="sf-reply-context-body">{parentPreview.snippet}</p>
         </aside>
       )}
 
-      {/* Attach Section */}
       <div className="sf-reply-row">
         <label className="sf-label">Attach</label>
 
@@ -409,11 +548,7 @@ export function Composer({
         {composerAtt.items.length > 0 && (
           <div className="sf-att-grid">
             {composerAtt.items.map((it, i) => (
-              <div
-                key={`${it.kind}:${i}`}
-                className="sf-att-item"
-                style={{ position: "relative" }}
-              >
+              <div key={`${it.kind}:${i}`} className="sf-att-item" style={{ position: "relative" }}>
                 <AttachmentCard item={it} />
                 <button
                   className="sf-btn sf-btn--icon"
@@ -430,7 +565,6 @@ export function Composer({
         )}
       </div>
 
-      {/* Links */}
       <div className="sf-reply-row">
         <label className="sf-label">Add links</label>
 
@@ -442,11 +576,7 @@ export function Composer({
             value={linkField}
             onChange={(e) => setLinkField(e.target.value)}
           />
-          <button
-            className="sf-btn"
-            onClick={() => onAddLink(linkField)}
-            type="button"
-          >
+          <button className="sf-btn" onClick={() => onAddLink(linkField)} type="button">
             Add
           </button>
         </div>
@@ -454,11 +584,7 @@ export function Composer({
         {linkItems.length > 0 && (
           <div className="sf-att-grid">
             {linkItems.map((it, i) => (
-              <div
-                key={`${it.kind}:${it.url}:${i}`}
-                className="sf-att-item"
-                style={{ position: "relative" }}
-              >
+              <div key={`${it.kind}:${it.url}:${i}`} className="sf-att-item" style={{ position: "relative" }}>
                 <AttachmentCard item={it} />
                 <button
                   className="sf-btn sf-btn--icon"
@@ -475,7 +601,6 @@ export function Composer({
         )}
       </div>
 
-      {/* Author */}
       <div className="sf-reply-row">
         <label className="sf-label">Author</label>
         <input
@@ -487,7 +612,6 @@ export function Composer({
         />
       </div>
 
-      {/* Memory */}
       <div className="sf-reply-row">
         <label className="sf-label">Memory</label>
         <textarea
@@ -499,47 +623,26 @@ export function Composer({
         />
       </div>
 
-      {/* Actions */}
       <div className="sf-reply-actions">
-        <button
-          className="sf-btn"
-          onClick={() => void onGenerateReply()}
-          disabled={replyBusy}
-          type="button"
-        >
+        <button className="sf-btn" onClick={() => void onGenerateReply()} disabled={replyBusy} type="button">
           {replyBusy ? "Sealing…" : "Exhale Reply"}
         </button>
 
         {onUseDifferentKey && (
-          <button
-            className="sf-btn sf-btn--ghost"
-            onClick={onUseDifferentKey}
-            type="button"
-          >
+          <button className="sf-btn sf-btn--ghost" onClick={onUseDifferentKey} type="button">
             Use a different ΦKey
           </button>
         )}
       </div>
 
-      {/* Result */}
       {replyUrl && (
         <div className="sf-reply-result">
           <label className="sf-label">Share this link</label>
 
-          <input
-            className="sf-input"
-            readOnly
-            value={replyUrl}
-            onFocus={(e) => e.currentTarget.select()}
-          />
+          <input className="sf-input" readOnly value={replyUrl} onFocus={(e) => e.currentTarget.select()} />
 
           <div className="sf-reply-actions">
-            <a
-              className="sf-link"
-              href={replyUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
+            <a className="sf-link" href={replyUrl} target="_blank" rel="noreferrer">
               Open →
             </a>
 
@@ -548,9 +651,7 @@ export function Composer({
               type="button"
               onClick={async () => {
                 try {
-                  await navigator.clipboard.writeText(
-                    expandShortAliasToCanonical(replyUrl),
-                  );
+                  await navigator.clipboard.writeText(replyUrl);
                   toasts.push("success", "Link remembered.");
                   setCopiedReply(true);
                   window.setTimeout(() => setCopiedReply(false), 1200);

@@ -1173,6 +1173,91 @@ body{
   opacity: .9;
   background: rgba(255,255,255,.02);
 }
+
+/* Composer: context stack */
+.sf-reply-contextStack {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px 0;
+}
+
+.sf-reply-context {
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 14px;
+  padding: 12px 12px 10px;
+  background: rgba(255,255,255,0.04);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+}
+
+.sf-reply-context[data-depth="0"] {
+  background: rgba(255,255,255,0.055);
+  border-color: rgba(255,255,255,0.14);
+}
+
+.sf-reply-context-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.sf-reply-context-author {
+  opacity: 0.85;
+  font-size: 0.92rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sf-reply-context-body {
+  margin: 8px 0 0 0;
+  opacity: 0.9;
+  line-height: 1.35;
+}
+
+/* Small "Open →" inside context cards */
+.sf-reply-context-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+}
+
+.sf-reply-context-open:hover {
+  background: rgba(255,255,255,0.10);
+  border-color: rgba(255,255,255,0.22);
+}
+
+/* Result: make Open look like a real button */
+.sf-btn--open {
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.10);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.sf-btn--open:hover {
+  background: rgba(255,255,255,0.14);
+  border-color: rgba(255,255,255,0.26);
+}
+
+.sf-btn--open:active {
+  transform: translateY(1px);
+}
+
 /* ========== 20) SIGIL STAGE (ATLANTEAN STAGE — SUPER ADVANCED) ============
    Drop-in replacement for section 20 ONLY.
    - Same selectors (.sf-sigilWrap, ::before, __inner, svg guards) ✅
