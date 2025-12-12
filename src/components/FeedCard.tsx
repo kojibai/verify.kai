@@ -114,9 +114,9 @@ function isLikelyToken(s: string): boolean {
 }
 
 function extractFromPath(pathname: string): string | null {
-  // legacy p-tilde form: /p~TOKEN   (tilde = \u007e)
+  // Legacy p-tilde path, including percent-encoded tilde
   {
-    const m = pathname.match(/\/p\u007e([^/?#]+)/);
+    const m = pathname.match(/\/p(?:\u007e|%7[Ee])([^/?#]+)/);
     if (m?.[1]) return m[1];
   }
   // /stream/p/TOKEN or /feed/p/TOKEN
@@ -212,53 +212,19 @@ function isSPayloadUrl(raw: string): boolean {
   return /^\/s(?:\/|$)/.test(path);
 }
 
-/** Always build browser-openable URL (never return legacy p-tilde). */
+/** Always build browser-openable URL (never return legacy paths). */
 function makeBrowserOpenUrlFromToken(tokenRaw: string): string {
   const base = originFallback().replace(/\/+$/g, "");
   const t = normalizeToken(tokenRaw);
   return `${base}/stream/p/${t}`;
 }
 
-/**
- * Best-effort token extraction for building browser URLs.
- * (More permissive than extractTokenCandidates: this is for rewriting output, not decode validation.)
- */
-function extractTokenForBrowserOpen(rawUrl: string): string | null {
-  const raw = stripEdgePunct(rawUrl);
-  if (!raw) return null;
-
-  // bare token support (normalized)
-  const normBare = normalizeToken(raw);
-  if (isLikelyToken(normBare)) return normBare;
-
-  const u = tryParseUrl(raw);
-  if (!u) return null;
-
-  // path forms first (covers legacy p-tilde + stream/p + /p/)
-  const fromPath = extractFromPath(u.pathname);
-  if (fromPath) return normalizeToken(fromPath);
-
-  // hash/search params
-  const hashStr = u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : "";
-  const hash = new URLSearchParams(hashStr);
-  const search = u.searchParams;
-
-  for (const k of ["t", "p", "token", "capsule"]) {
-    const hv = hash.get(k);
-    if (hv) return normalizeToken(hv);
-    const sv = search.get(k);
-    if (sv) return normalizeToken(sv);
-  }
-
-  return null;
-}
-
-/** Normalize any non-/s URL into /stream/p/<token> when possible. */
+/** Normalize any non-/s URL into /stream/p/<token> when possible (supports nested add=). */
 function normalizeResolvedUrlForBrowser(rawUrl: string): string {
   const raw = stripEdgePunct(rawUrl);
   if (isSPayloadUrl(raw)) return raw;
 
-  const tok = extractTokenForBrowserOpen(raw);
+  const tok = extractTokenCandidates(raw)[0];
   return tok ? makeBrowserOpenUrlFromToken(tok) : raw;
 }
 
@@ -267,7 +233,6 @@ function buildDecodeUrlCandidates(token: string): string[] {
   const base = originFallback().replace(/\/+$/g, "");
   const t = normalizeToken(token);
 
-  // NOTE: We never generate legacy p-tilde URLs.
   return [
     t, // in case decoder accepts raw token
     `${base}/stream/p/${t}`,
@@ -297,8 +262,6 @@ function decodeSigilUrlSmart(rawUrl: string): SmartDecode {
   // 1) raw first
   const rawOk = attempt(rawTrim);
   if (rawOk) {
-    // ✅ /s stays /s
-    // ✅ everything else becomes /stream/p/<token> when possible
     return { decoded: rawOk, resolvedUrl: normalizeResolvedUrlForBrowser(rawTrim) };
   }
 
@@ -319,9 +282,6 @@ function decodeSigilUrlSmart(rawUrl: string): SmartDecode {
 
 /* ─────────────────────────────────────────────────────────────
    KKS-1.0: D/M/Y from μpulses (exact, deterministic)
-   dayOfMonth: 1..42
-   month:      1..8
-   year:       1.. (yearIndex + 1)
    ───────────────────────────────────────────────────────────── */
 
 /** Euclidean mod (always 0..m-1) */
@@ -496,14 +456,18 @@ function clipboardWriteTextPromise(text: string): Promise<void> | null {
 export const FeedCard: React.FC<Props> = ({ url }) => {
   const [copied, setCopied] = useState(false);
 
-  // ✅ Smart decode (handles #t=, ?t=, stream wrappers, nested add=)
-  // ✅ resolvedUrl is ALWAYS browser-openable (never legacy p-tilde); /s stays /s
+  // ✅ Smart decode
   const smart = useMemo(() => decodeSigilUrlSmart(url), [url]);
   const decoded = smart.decoded;
-  const openUrl = smart.resolvedUrl;
+
+  // ✅ Single canonical URL for UI + copy (hard normalized)
+  const rememberUrl = useMemo(() => normalizeResolvedUrlForBrowser(smart.resolvedUrl || url), [
+    smart.resolvedUrl,
+    url,
+  ]);
 
   const onCopy = useCallback(() => {
-    const text = openUrl || url;
+    const text = normalizeResolvedUrlForBrowser(rememberUrl || url);
 
     // 1) sync attempt (best for gesture constraints)
     const okSync = tryCopyExecCommand(text);
@@ -529,7 +493,7 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
     // 3) total failure
     // eslint-disable-next-line no-console
     console.warn("Remember failed: no clipboard available");
-  }, [openUrl, url]);
+  }, [rememberUrl, url]);
 
   if (!decoded.ok) {
     return (
@@ -803,14 +767,26 @@ export const FeedCard: React.FC<Props> = ({ url }) => {
           {!post && !message && !share && !reaction && (
             <section className="fc-bodywrap" aria-label="Sigil body">
               <h3 className="fc-title">Proof Of Breath™</h3>
-              <a className="fc-link" href={openUrl} target="_blank" rel="noreferrer" title={openUrl}>
-                {hostOf(openUrl) ?? openUrl}
+              <a
+                className="fc-link"
+                href={rememberUrl}
+                target="_blank"
+                rel="noreferrer"
+                title={rememberUrl}
+              >
+                {hostOf(rememberUrl) ?? rememberUrl}
               </a>
             </section>
           )}
 
           <footer className="fc-actions" role="group" aria-label="Actions">
-            <a className="fc-btn" href={openUrl} target="_blank" rel="noreferrer" title="Open sigil">
+            <a
+              className="fc-btn"
+              href={rememberUrl}
+              target="_blank"
+              rel="noreferrer"
+              title="Open sigil"
+            >
               ↗ Sigil-Glyph
             </a>
 

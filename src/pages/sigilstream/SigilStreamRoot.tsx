@@ -1129,7 +1129,8 @@ function SigilStreamInner(): React.JSX.Element {
 
     try {
       const canon = canonicalizeCurrentStreamUrl(token);
-      const share = preferredShareUrl(token);
+     const share = isSealed ? canonicalizeCurrentStreamUrl(token) : preferredShareUrl(token);
+
       registerSigilUrl(canon);
       if (share !== canon) registerSigilUrl(share);
     } catch (e) {
@@ -1417,47 +1418,41 @@ function SigilStreamInner(): React.JSX.Element {
     };
   }, []);
 
-  const onKopy = useCallback(() => {
-    const tokenRaw = activeToken ?? (typeof window !== "undefined" ? extractPayloadTokenFromLocation() : null);
-    const token = tokenRaw ? normalizeIncomingToken(tokenRaw) : null;
-    if (!token) return;
+const onKopy = useCallback(() => {
+  const tokenRaw = activeToken ?? (typeof window !== "undefined" ? extractPayloadTokenFromLocation() : null);
+  const token = tokenRaw ? normalizeIncomingToken(tokenRaw) : null;
+  if (!token) return;
 
-    // ✅ Use human + capsule-friendly share URL (p~ or ?p=)
-    const share = preferredShareUrl(token);
+  // ✅ Sealed: copy canonical stream URL (never /p~)
+  // ✅ Public: keep human-friendly /p~ when short
+  const share = isSealed ? canonicalizeCurrentStreamUrl(token) : preferredShareUrl(token);
 
-    // 1) Prefer sync copy: keeps toast-sound inside the click gesture (v6.1 behavior)
-    const okSync = tryCopyExecCommand(share);
-    if (okSync) {
-      setCopied(true);
-      if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
-      copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
+  const okSync = tryCopyExecCommand(share);
+  if (okSync) {
+    setCopied(true);
+    if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+    copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
+    toasts.push("success", "Remembered");
+    return;
+  }
 
-      toasts.push("success", "Remembered");
-      return;
-    }
+  const p = clipboardWriteTextPromise(share);
+  if (p) {
+    setCopied(true);
+    if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+    copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
+    toasts.push("success", "Remembered");
 
-    // 2) Clipboard API: start write INSIDE gesture (no await), toast immediately for sound parity,
-    // then warn if it actually fails.
-    const p = clipboardWriteTextPromise(share);
-    if (p) {
-      setCopied(true);
-      if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
-      copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
+    p.catch((e: unknown) => {
+      report("kopy clipboard.writeText", e);
+      setCopied(false);
+      toasts.push("warn", "Remember failed. Select the address bar.");
+    });
+    return;
+  }
 
-      toasts.push("success", "Remembered");
-
-      p.catch((e: unknown) => {
-        report("kopy clipboard.writeText", e);
-        setCopied(false);
-        toasts.push("warn", "Remember failed. Select the address bar.");
-      });
-
-      return;
-    }
-
-    // 3) Total failure
-    toasts.push("warn", "Remember failed. Select the address bar.");
-  }, [activeToken, toasts]);
+  toasts.push("warn", "Remember failed. Select the address bar.");
+}, [activeToken, isSealed, toasts]);
 
   /** ---------- Derived list: show payload first if present ---------- */
   const urls: string[] = useMemo(() => {
