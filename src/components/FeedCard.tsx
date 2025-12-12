@@ -6,7 +6,7 @@
  * v4.0.0 — FIX: flawless decode for ALL token/url forms + KKS-1.0 pulse-authoritative display
  *
  * ✅ Decode hardening:
- *    - Accepts /p~<token>, /p#t=<token>, /p?t=<token>, /p#p=<token>, /p?p=<token>
+ *    - Accepts /p#t=<token>, /p?t=<token>, /p#p=<token>, /p?p=<token>
  *    - Accepts /stream/p/<token>, /stream#t=<token>, /stream?p=<token>
  *    - Accepts full URLs, relative URLs, or bare tokens
  *    - Strips trailing punctuation, decodes %xx, normalizes base64 -> base64url (-/_ no '=')
@@ -114,9 +114,9 @@ function isLikelyToken(s: string): boolean {
 }
 
 function extractFromPath(pathname: string): string | null {
-  // /p~TOKEN
+  // legacy p-tilde form: /p~TOKEN   (tilde = \u007e)
   {
-    const m = pathname.match(/\/p~([^/?#]+)/);
+    const m = pathname.match(/\/p\u007e([^/?#]+)/);
     if (m?.[1]) return m[1];
   }
   // /stream/p/TOKEN or /feed/p/TOKEN
@@ -131,7 +131,6 @@ function extractFromPath(pathname: string): string | null {
   }
   return null;
 }
-
 
 function tryParseUrl(raw: string): URL | null {
   const t = raw.trim();
@@ -182,8 +181,7 @@ function extractTokenCandidates(rawUrl: string, depth = 0): string[] {
   // path forms
   push(extractFromPath(u.pathname));
 
-  // If the full pathname itself is /p~TOKEN (no slash separator), regex already handles.
-  // Now: nested add= urls (common in reply/share wrappers)
+  // nested add= urls (common in reply/share wrappers)
   if (depth < 1) {
     const adds = [...search.getAll("add"), ...hash.getAll("add")];
     for (const a of adds) {
@@ -206,35 +204,81 @@ function extractTokenCandidates(rawUrl: string, depth = 0): string[] {
   return out;
 }
 
-/** Build canonical url candidates to satisfy whatever decodeSigilUrl already supports. */
-const OPEN_URL_HARD_LIMIT = 3500; // match feedPayload.ts TOKEN_HARD_LIMIT
+/** Keep sigil payload (/s/...) untouched. */
+function isSPayloadUrl(raw: string): boolean {
+  const t = stripEdgePunct(raw);
+  const u = tryParseUrl(t);
+  const path = u ? u.pathname : t;
+  return /^\/s(?:\/|$)/.test(path);
+}
 
+/** Always build browser-openable URL (never return legacy p-tilde). */
+function makeBrowserOpenUrlFromToken(tokenRaw: string): string {
+  const base = originFallback().replace(/\/+$/g, "");
+  const t = normalizeToken(tokenRaw);
+  return `${base}/stream/p/${t}`;
+}
+
+/**
+ * Best-effort token extraction for building browser URLs.
+ * (More permissive than extractTokenCandidates: this is for rewriting output, not decode validation.)
+ */
+function extractTokenForBrowserOpen(rawUrl: string): string | null {
+  const raw = stripEdgePunct(rawUrl);
+  if (!raw) return null;
+
+  // bare token support (normalized)
+  const normBare = normalizeToken(raw);
+  if (isLikelyToken(normBare)) return normBare;
+
+  const u = tryParseUrl(raw);
+  if (!u) return null;
+
+  // path forms first (covers legacy p-tilde + stream/p + /p/)
+  const fromPath = extractFromPath(u.pathname);
+  if (fromPath) return normalizeToken(fromPath);
+
+  // hash/search params
+  const hashStr = u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : "";
+  const hash = new URLSearchParams(hashStr);
+  const search = u.searchParams;
+
+  for (const k of ["t", "p", "token", "capsule"]) {
+    const hv = hash.get(k);
+    if (hv) return normalizeToken(hv);
+    const sv = search.get(k);
+    if (sv) return normalizeToken(sv);
+  }
+
+  return null;
+}
+
+/** Normalize any non-/s URL into /stream/p/<token> when possible. */
+function normalizeResolvedUrlForBrowser(rawUrl: string): string {
+  const raw = stripEdgePunct(rawUrl);
+  if (isSPayloadUrl(raw)) return raw;
+
+  const tok = extractTokenForBrowserOpen(raw);
+  return tok ? makeBrowserOpenUrlFromToken(tok) : raw;
+}
+
+/** Build canonical url candidates to satisfy whatever decodeSigilUrl already supports. */
 function buildDecodeUrlCandidates(token: string): string[] {
   const base = originFallback().replace(/\/+$/g, "");
   const t = normalizeToken(token);
 
+  // NOTE: We never generate legacy p-tilde URLs.
   return [
-    t, // some decoders accept raw token
+    t, // in case decoder accepts raw token
     `${base}/stream/p/${t}`,
-    `${base}/stream#t=${t}`,
-    `${base}/stream?t=${t}`,
-    // still accept legacy/alt inputs for decode (but NOT our output)
     `${base}/p#t=${t}`,
     `${base}/p?t=${t}`,
     `${base}/p#p=${t}`,
     `${base}/p?p=${t}`,
     `${base}/p#token=${t}`,
     `${base}/p?token=${t}`,
-    `${base}/p~${t}`, // decode-only support
   ];
 }
-function canonicalOpenUrlFromToken(token: string): string {
-  const base = originFallback().replace(/\/+$/g, "");
-  const t = normalizeToken(token);
-  // If absurdly large, use hash (router-safe, request-line safe)
-  return t.length <= OPEN_URL_HARD_LIMIT ? `${base}/stream/p/${t}` : `${base}/stream#t=${t}`;
-}
-
 
 /** Smart decode: try raw url, then extracted tokens across multiple canonical forms. */
 function decodeSigilUrlSmart(rawUrl: string): SmartDecode {
@@ -253,10 +297,9 @@ function decodeSigilUrlSmart(rawUrl: string): SmartDecode {
   // 1) raw first
   const rawOk = attempt(rawTrim);
   if (rawOk) {
-    // If raw was /p~... or any wrapper, canonicalize output to /stream/p/<token>
-    const toks = extractTokenCandidates(rawTrim);
-    if (toks[0]) return { decoded: rawOk, resolvedUrl: canonicalOpenUrlFromToken(toks[0]) };
-    return { decoded: rawOk, resolvedUrl: rawTrim };
+    // ✅ /s stays /s
+    // ✅ everything else becomes /stream/p/<token> when possible
+    return { decoded: rawOk, resolvedUrl: normalizeResolvedUrlForBrowser(rawTrim) };
   }
 
   // 2) tokens from raw url
@@ -265,13 +308,13 @@ function decodeSigilUrlSmart(rawUrl: string): SmartDecode {
     for (const cand of buildDecodeUrlCandidates(tok)) {
       const ok = attempt(cand);
       if (ok) {
-        return { decoded: ok, resolvedUrl: canonicalOpenUrlFromToken(tok) };
+        return { decoded: ok, resolvedUrl: makeBrowserOpenUrlFromToken(tok) };
       }
     }
   }
 
-  // 3) last resort: return original decoder result (raw)
-  return { decoded: decodeSigilUrl(rawTrim), resolvedUrl: rawTrim };
+  // 3) last resort: return original decoder error (raw), but still normalize the resolved URL for copy/open
+  return { decoded: decodeSigilUrl(rawTrim), resolvedUrl: normalizeResolvedUrlForBrowser(rawTrim) };
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -453,7 +496,8 @@ function clipboardWriteTextPromise(text: string): Promise<void> | null {
 export const FeedCard: React.FC<Props> = ({ url }) => {
   const [copied, setCopied] = useState(false);
 
-  // ✅ Smart decode (handles /p~, #t=, ?t=, stream wrappers, nested add=)
+  // ✅ Smart decode (handles #t=, ?t=, stream wrappers, nested add=)
+  // ✅ resolvedUrl is ALWAYS browser-openable (never legacy p-tilde); /s stays /s
   const smart = useMemo(() => decodeSigilUrlSmart(url), [url]);
   const decoded = smart.decoded;
   const openUrl = smart.resolvedUrl;
