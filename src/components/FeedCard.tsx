@@ -605,19 +605,19 @@ function toChakra(value: unknown, fallback: ChakraDay): ChakraDay {
 function arcFromBeat(
   beatZ: number,
 ):
-  | "Ignition"
-  | "Integration"
-  | "Harmonization"
-  | "Reflection"
-  | "Purification"
+  | "Ignite"
+  | "Integrate"
+  | "Harmonize"
+  | "Reflekt"
+  | "Purify"
   | "Dream" {
   const idx = Math.max(0, Math.min(5, Math.floor(beatZ / 6)));
   return ([
-    "Ignition",
-    "Integration",
-    "Harmonization",
-    "Reflection",
-    "Purification",
+    "Ignite",
+    "Integrate",
+    "Harmonize",
+    "Reflekt",
+    "Purify",
     "Dream",
   ] as const)[idx];
 }
