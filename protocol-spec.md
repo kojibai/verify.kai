@@ -1,10 +1,3 @@
-Absolutely. Let’s begin with the first file:
-
-✅ protocol-spec.md
-
-⸻
-
-
 # Φ Network Protocol Specification (v1.0)
 
 > Authored by Kai Rex Klok (K℞K)  
