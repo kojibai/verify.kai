@@ -60,9 +60,11 @@ type ParentPreview = {
 
 const ADD_CHAIN_MAX = 512;
 
-/** Explorer integration (no backend): persist + cross-tab notify */
+/** Explorer + Feed integration (no backend): persist + cross-tab notify */
 const EXPLORER_FALLBACK_LS_KEY = "sigil:urls";
+const FEED_FALLBACK_LS_KEY = "sigil:feed";
 const EXPLORER_BC_NAME = "kai-sigil-registry";
+const FEED_BC_NAME = "kai-feed-registry";
 
 function safeDecodeURIComponent(v: string): string {
   try {
@@ -88,12 +90,41 @@ function canonicalizeForStorage(raw: string): string {
   }
 }
 
-function persistUrlsForExplorer(urls: readonly string[]): void {
-  if (typeof window === "undefined") return;
-  if (typeof window.localStorage === "undefined") return;
+function extractTokenKeyFromUrl(rawUrl: string): string | null {
+  const t = extractPayloadTokenFromUrlString(rawUrl);
+  return t ? `t:${t}` : null;
+}
+
+function countAddsInUrl(rawUrl: string): number {
+  try {
+    const u = new URL(rawUrl, canonicalBase().origin);
+    const hashStr = u.hash.startsWith("#") ? u.hash.slice(1) : "";
+    const hp = new URLSearchParams(hashStr);
+    return hp.getAll("add").length + u.searchParams.getAll("add").length;
+  } catch {
+    return 0;
+  }
+}
+
+function registryScore(rawUrl: string): number {
+  const adds = countAddsInUrl(rawUrl);
+  return adds * 100_000 + rawUrl.length;
+}
+
+/**
+ * Upsert URL into a list stored in localStorage:
+ * - Uniqueness by token key (preferred), else by canonical string.
+ * - If same key exists, keep the richer URL (more add= or longer).
+ */
+function upsertUrlIntoList(lsKey: string, rawUrl: string): { changed: boolean; value: string } {
+  if (typeof window === "undefined") return { changed: false, value: rawUrl };
+  if (typeof window.localStorage === "undefined") return { changed: false, value: rawUrl };
+
+  const canonical = canonicalizeForStorage(rawUrl);
+  if (!canonical) return { changed: false, value: rawUrl };
 
   try {
-    const raw = window.localStorage.getItem(EXPLORER_FALLBACK_LS_KEY);
+    const raw = window.localStorage.getItem(lsKey);
 
     const existing: string[] = [];
     if (raw) {
@@ -103,35 +134,66 @@ function persistUrlsForExplorer(urls: readonly string[]): void {
       }
     }
 
-    const out: string[] = [];
-    const seen = new Set<string>();
+    // Build best entry per key, preserve first-seen order.
+    const order: string[] = [];
+    const best = new Map<string, { url: string; score: number }>();
+
+    const keyOf = (u: string): string => {
+      const k = extractTokenKeyFromUrl(u);
+      return k ?? `u:${canonicalizeForStorage(u)}`;
+    };
 
     for (const v of existing) {
       const c = canonicalizeForStorage(v);
       if (!c) continue;
-      if (seen.has(c)) continue;
-      seen.add(c);
-      out.push(c);
+
+      const k = keyOf(c);
+      const sc = registryScore(c);
+
+      if (!best.has(k)) {
+        best.set(k, { url: c, score: sc });
+        order.push(k);
+      } else {
+        const prior = best.get(k)!;
+        if (sc > prior.score) best.set(k, { url: c, score: sc });
+      }
     }
 
-    for (const u of urls) {
-      const c = canonicalizeForStorage(u);
-      if (!c) continue;
-      if (seen.has(c)) continue;
-      seen.add(c);
-      out.push(c);
+    const newKey = keyOf(canonical);
+    const newScore = registryScore(canonical);
+
+    if (!best.has(newKey)) {
+      best.set(newKey, { url: canonical, score: newScore });
+      order.push(newKey);
+    } else {
+      const prior = best.get(newKey)!;
+      if (newScore > prior.score) best.set(newKey, { url: canonical, score: newScore });
     }
 
-    window.localStorage.setItem(EXPLORER_FALLBACK_LS_KEY, JSON.stringify(out));
+    const next: string[] = [];
+    for (const k of order) {
+      const it = best.get(k);
+      if (it) next.push(it.url);
+    }
+
+    const prevJson = JSON.stringify(existing);
+    const nextJson = JSON.stringify(next);
+
+    if (prevJson !== nextJson) {
+      window.localStorage.setItem(lsKey, nextJson);
+      return { changed: true, value: canonical };
+    }
+
+    return { changed: false, value: canonical };
   } catch {
-    // silent
+    return { changed: false, value: canonical };
   }
 }
 
 function notifyExplorerOfNewUrl(url: string): void {
   if (typeof window === "undefined") return;
 
-  // (1) In-page hook (if Explorer is mounted in this document)
+  // (1) In-page hook (Explorer mounted)
   try {
     const w = window as unknown as {
       __SIGIL__?: { registerSigilUrl?: (u: string) => void };
@@ -160,7 +222,39 @@ function notifyExplorerOfNewUrl(url: string): void {
   }
 }
 
-/** Parse add= from BOTH query and hash, normalize to canonical URL strings. */
+function notifyFeedOfNewUrl(url: string): void {
+  if (typeof window === "undefined") return;
+
+  // (1) In-page hook (Feed mounted)
+  try {
+    const w = window as unknown as {
+      __FEED__?: { registerFeedUrl?: (u: string) => void };
+    };
+    w.__FEED__?.registerFeedUrl?.(url);
+  } catch {
+    // silent
+  }
+
+  // (2) DOM event fallback
+  try {
+    window.dispatchEvent(new CustomEvent("feed:url-registered", { detail: { url } }));
+  } catch {
+    // silent
+  }
+
+  // (3) Cross-tab BroadcastChannel
+  try {
+    if ("BroadcastChannel" in window) {
+      const bc = new BroadcastChannel(FEED_BC_NAME);
+      bc.postMessage({ type: "feed:add", url });
+      bc.close();
+    }
+  } catch {
+    // silent
+  }
+}
+
+/** Parse add= from BOTH query and hash, normalize to canonical URL strings OR keep j: payload refs. */
 function extractAddChainFromHref(href: string): string[] {
   try {
     const u = new URL(href, canonicalBase().origin);
@@ -174,6 +268,12 @@ function extractAddChainFromHref(href: string): string[] {
       const decoded = safeDecodeURIComponent(String(a)).trim();
       if (!decoded) continue;
 
+      // ✅ Keep embedded payload refs (Memory Stream v2 style)
+      if (decoded.startsWith("j:") && decoded.length > 10) {
+        if (!out.includes(decoded)) out.push(decoded);
+        continue;
+      }
+
       // ✅ If add= is a bare token, convert into a canonical stream URL first
       if (looksLikeBareToken(decoded)) {
         try {
@@ -181,7 +281,7 @@ function extractAddChainFromHref(href: string): string[] {
           if (canonTokUrl && !out.includes(canonTokUrl)) out.push(canonTokUrl);
           continue;
         } catch {
-          // fall through to normal handling
+          // fall through
         }
       }
 
@@ -204,7 +304,7 @@ function extractPayloadTokenFromUrlString(rawUrl: string): string | null {
   const t = rawUrl.trim();
   if (!t) return null;
 
-  // ✅ NEW: bare token support (for #add=TOKEN)
+  // ✅ bare token support (for #add=TOKEN)
   if (looksLikeBareToken(t)) return t;
 
   let u: URL;
@@ -276,27 +376,63 @@ type ReplyContext = {
   addChain: string[]; // ancestor chain excluding replyToUrl (root..parent-of-parent)
 };
 
+function buildMomentUrlFromToken(tok: string): string {
+  const origin = canonicalBase().origin.replace(/\/+$/g, "");
+  return `${origin}/stream/p/${encodeURIComponent(tok)}`;
+}
+
+function extractRootRefFromHref(href: string): string | null {
+  try {
+    const u = new URL(href, canonicalBase().origin);
+
+    const hashStr = u.hash.startsWith("#") ? u.hash.slice(1) : "";
+    const hp = new URLSearchParams(hashStr);
+
+    const rRaw = hp.get("root") ?? u.searchParams.get("root");
+    if (!rRaw) return null;
+
+    const decoded = safeDecodeURIComponent(String(rRaw)).trim();
+    if (!decoded) return null;
+
+    if (decoded.startsWith("j:") && decoded.length > 10) return decoded;
+
+    // bare blob fallback (accept as j:<blob> if it looks like base64url)
+    if (/^[A-Za-z0-9_-]{16,}$/u.test(decoded)) return `j:${decoded}`;
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function computeReplyContextFromWindow(): ReplyContext {
   if (typeof window === "undefined") return { replyToUrl: null, originUrl: null, addChain: [] };
 
-  const addChain = extractAddChainFromHref(window.location.href);
+  const href = window.location.href;
+  const addChain = extractAddChainFromHref(href);
 
-  // If current location contains a payload token, that is the reply target.
-  const hereToken = extractPayloadTokenFromLocation(window.location);
+  // detect current token even on /stream/p/<token>
+  const hereToken =
+    extractPayloadTokenFromUrlString(href) ?? extractPayloadTokenFromLocation(window.location);
+
   const replyToFromHere = hereToken
     ? (() => {
         try {
-          return expandShortAliasToCanonical(buildStreamUrl(hereToken));
+          return expandShortAliasToCanonical(buildMomentUrlFromToken(hereToken));
         } catch {
-          return null;
+          return buildMomentUrlFromToken(hereToken);
         }
       })()
     : null;
 
-  // Otherwise, the reply target is the last add=
-  const replyToFallback = !replyToFromHere && addChain.length ? addChain[addChain.length - 1] : null;
+  // If we're on a Memory Stream v2 URL (#root=j:...), treat root as the reply target
+  const rootRef = extractRootRefFromHref(href);
 
-  const replyTo = replyToFromHere ?? replyToFallback;
+  // Otherwise, the reply target is the last add=
+  const replyToFallback =
+    !replyToFromHere && !rootRef && addChain.length ? addChain[addChain.length - 1] : null;
+
+  const replyTo = replyToFromHere ?? rootRef ?? replyToFallback;
 
   // Origin/root: first add= if present, else replyTo
   const origin = addChain.length ? addChain[0] : replyTo;
@@ -381,7 +517,7 @@ export function Composer({
       const decoded = decodeFeedPayload(tok);
       if (decoded) setParentPayload(decoded);
     } catch {
-      // Silent: if we can't decode, we just omit the preview
+      // silent
     }
   }, []);
 
@@ -543,6 +679,7 @@ export function Composer({
       const allAttachments: PayloadAttachmentItem[] = [...linkAsAttachments, ...fileAsAttachments];
       const attachments = allAttachments.length > 0 ? makeAttachments(allAttachments) : undefined;
 
+      // Kai pulse is authoritative (no Chronos stamp required for identity)
       const pulseNow = computeLocalKai(new Date()).pulse;
 
       const payloadBody =
@@ -550,9 +687,8 @@ export function Composer({
           ? ({ kind: "text", text: replyTextTrimmed } as const)
           : undefined;
 
-      // ✅ CRITICAL: do NOT embed parent/origin URLs inside the payload token.
-      // Thread context is carried in the *link hash* as add= witness chain.
-      const payloadObj: FeedPostPayload = makeBasePayload({
+      // Thread context is carried ONLY in link hash add= witness chain.
+      const basePayload: FeedPostPayload = makeBasePayload({
         url: actionUrl || canonicalBase().origin,
         pulse: pulseNow,
         caption: replyTextTrimmed || undefined,
@@ -564,14 +700,20 @@ export function Composer({
         parent: undefined,
         parentUrl: undefined,
         originUrl: undefined,
-        ts: Date.now(),
+        ts: undefined,
         attachments,
       });
 
+      // Optional hint for downstream renderers: this is a memory/post (not a raw sigil)
+      const payloadObj: FeedPostPayload & { kind: "post" } = {
+        ...basePayload,
+        kind: "post",
+      };
+
       const token = encodeFeedPayload(payloadObj);
 
-      // Base share URL (may be /stream/p/<token> or /stream#t=<token>)
-      const baseShare = buildStreamUrl(token);
+      // Base share URL
+      const baseShare = buildMomentUrlFromToken(token);
 
       // Build hash-based add= witness chain as TOKENS ONLY (not full URLs)
       const ctx = computeReplyContextFromWindow();
@@ -594,13 +736,21 @@ export function Composer({
 
       setReplyUrl(share);
 
-      // ✅ Auto-register into SigilExplorer (persist + live notify)
+      // ✅ Auto-register: Explorer (all), Feed (only the new reply URL)
       try {
-        const ancestryUrls: string[] = [];
-        for (const t of adds) ancestryUrls.push(buildStreamUrl(t));
+        // Explorer: upsert ancestors (canonical stream URLs) + the new share
+        for (const t of adds) {
+          const u = buildMomentUrlFromToken(t);
+          const ex = upsertUrlIntoList(EXPLORER_FALLBACK_LS_KEY, u);
+          if (ex.changed) notifyExplorerOfNewUrl(ex.value);
+        }
 
-        persistUrlsForExplorer([...ancestryUrls, share]);
-        notifyExplorerOfNewUrl(share);
+        const exSelf = upsertUrlIntoList(EXPLORER_FALLBACK_LS_KEY, share);
+        if (exSelf.changed) notifyExplorerOfNewUrl(exSelf.value);
+
+        // Feed: only the new reply URL (unique, upgrade if richer)
+        const fd = upsertUrlIntoList(FEED_FALLBACK_LS_KEY, share);
+        if (fd.changed) notifyFeedOfNewUrl(fd.value);
       } catch {
         // silent
       }
@@ -767,7 +917,12 @@ export function Composer({
         <div className="sf-reply-result">
           <label className="sf-label">Share this link</label>
 
-          <input className="sf-input" readOnly value={replyUrl} onFocus={(e) => e.currentTarget.select()} />
+          <input
+            className="sf-input"
+            readOnly
+            value={replyUrl}
+            onFocus={(e) => e.currentTarget.select()}
+          />
 
           <div className="sf-reply-actions">
             <a className="sf-link" href={replyUrl} target="_blank" rel="noreferrer">

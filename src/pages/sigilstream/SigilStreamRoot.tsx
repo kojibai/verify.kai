@@ -3,15 +3,27 @@
 
 /**
  * SigilStreamRoot — Memory Stream Shell
- * v7.8.0 — KKS-1.0 Kai display + universal token/URL normalization + INFINITE replies
+ * v8.0.0 — KKS-1.0 Kai display + universal token/URL normalization + INFINITE replies + THREAD HYDRATION
  *
- * ✅ Critical KKS-1.0 fix:
+ * ✅ NEW (Memory Stream History v2):
+ *    - Opening ANY payload now “hydrates” the full known thread history:
+ *        • ancestors (root → … → parent)
+ *        • current payload
+ *        • descendants (replies-of-replies), as far as your local history knows
+ *    - Works offline: thread graph is learned from URLs you’ve seen/copied/opened.
+ *    - Graph is built from `add=` witness chains found in:
+ *        • current location
+ *        • all known URLs (seed + storage + registry + composer-generated)
+ *    - Thread URLs are re-emitted as canonical stream URLs WITH `#add=` witness tokens preserved,
+ *      so FeedCard/thread renderers always have the chain when you click through.
+ *
+ * ✅ Critical KKS-1.0 fix (unchanged):
  *    - payload.pulse is already correct (authoritative)
  *    - beat:step, weekday, ark, and chakra MUST be derived from pulse using KKS-1.0
  *    - uses 17,491.270421 breaths per day (continuous), not 17,424 grid pulses
  *    - preserves 36 beats/day + 44 steps/beat (beat/step are computed by day-fraction)
  *
- * ✅ Token / URL handling (backward + forward compatible):
+ * ✅ Token / URL handling (unchanged):
  *    - Accepts raw tokens OR full URLs in all known forms:
  *        • /stream/p/<token>
  *        • /stream?p=<token>
@@ -24,40 +36,31 @@
  *    - preferredShareUrl(...) → /p~<token> when short, /stream?p=<token> when huge
  *    - All forms round-trip cleanly and are registered via registerSigilUrl(...)
  *
- * ✅ NEW: Browser-canonical load:
+ * ✅ Browser-canonical load (unchanged):
  *    - On entry, normalizes address bar to canonical:
  *        • short:  /stream/p/<token>
  *        • huge:   /stream?<...>&add=...#t=<token>
  *      while preserving existing add= reply chain params.
  *
- * ✅ NEW: Infinite replies:
+ * ✅ Infinite replies (unchanged):
  *    - Ingests add= links from:
  *        • current location (every navigation)
  *        • every known stream URL in the list (recursive / closure scan)
  *    - Deduped, persisted, and registered (registerSigilUrl + localStorage).
  *
- * ✅ Keeps v7 features:
- *    - extractPayloadTokenFromLocation (ALL token forms)
- *    - Brotli-aware decodeFeedPayload (await-safe)
- *    - supports /p~ ingestion + hash fallback for huge tokens
- *    - per-thread verified session keyed off ANY token form
- *    - body renders: text | md (safe) | html (sanitized) | code
- *
- * ✅ Restores EXACT bottom behavior:
+ * ✅ Restores EXACT bottom behavior (unchanged):
  *    - <StreamList urls={urls} /> ONLY (no RichList, no mirror)
  *
- * ✅ KOPY sound parity with v6.1:
+ * ✅ KOPY sound parity with v6.1 (unchanged) + Witness preservation (NEW):
  *    - NO await before toast push (preserves user-gesture audio gating)
  *    - Sync copy attempt first; async clipboard kicked off without await
+ *    - REMEMBER copies canonical stream URL and preserves current `#add=` witness chain (when present)
  *
- * ✅ NEW (Private / Sealed UX):
+ * ✅ Private / Sealed UX (unchanged):
  *    - If payload.seal is present and not yet opened, page shows a lock-screen gate
  *    - Gate includes SigilLogin (glyph upload) ONLY for sealed posts
  *    - Once ΦKey is inhaled (verified session + meta present), UNSEAL becomes available
  *    - Reply composer is hidden until sealed content is opened (prevents “reply blind”)
- *    - Bridge supports postSeal exports:
- *        • openSealedEnvelope/openSealedPayload/unsealEnvelope/unsealPayload (returns content)
- *        • unsealEnvelopeV1 (returns {ok, inner})
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -125,11 +128,6 @@ type Source = { url: string };
    Kai display helpers (KKS-1.0 authoritative, derived from pulse)
 ──────────────────────────────────────────────────────────────── */
 
-/**
- * KKS-1.0 constants (authoritative)
- * - Continuous breaths per day (NOT the 36*44*11 grid count)
- * - beat/step are computed by day-fraction to preserve 36 beats/day + 44 steps/beat
- */
 const KKS_PULSES_PER_DAY = 17491.270421;
 const KKS_BEATS_PER_DAY = 36;
 const KKS_STEPS_PER_BEAT = 44;
@@ -151,39 +149,27 @@ function clamp01(n: number): number {
   return n < 0 ? 0 : n > 1 ? 1 : n;
 }
 
-/** Finite-safe pulse read (payload.pulse is expected to be a number). */
 function readPulse(pulse: number): number {
   return Number.isFinite(pulse) ? pulse : 0;
 }
 
-/** KKS day index (0-based) from continuous pulse count. */
 function pulseToDayIndex(pulse: number): number {
   const p = readPulse(pulse);
-  // floor() is correct for negative too (creates consistent day bins)
   return Math.floor(p / KKS_PULSES_PER_DAY);
 }
 
-/** Position within the KKS day in [0, KKS_PULSES_PER_DAY). */
 function pulseToPulseOfDay(pulse: number): number {
   const p = readPulse(pulse);
   const day = pulseToDayIndex(p);
   const start = day * KKS_PULSES_PER_DAY;
   const within = p - start;
 
-  // Guard float edge: ensure within is always [0, dayLen)
   const mod = within % KKS_PULSES_PER_DAY;
   const pos = mod < 0 ? mod + KKS_PULSES_PER_DAY : mod;
 
-  // If float math ever yields dayLen exactly, clamp down.
   return pos >= KKS_PULSES_PER_DAY ? 0 : pos;
 }
 
-/**
- * KKS beat/step derived from pulse (authoritative):
- * - Compute day progress using continuous breaths/day (17491.270421)
- * - Quantize into 1584 steps/day (36*44)
- * - Derive beat and step from that quantized step-of-day
- */
 function pulseToBeatStep(pulse: number): { beat: number; step: number } {
   const pod = pulseToPulseOfDay(pulse);
   const frac = clamp01(pod / KKS_PULSES_PER_DAY); // [0,1)
@@ -198,7 +184,7 @@ function pulseToBeatStep(pulse: number): { beat: number; step: number } {
 function pulseToDMY(pulse: number): { d: number; m: number; y: number } {
   const day = pulseToDayIndex(pulse); // absolute day index (0-based)
   const y = Math.floor(day / KKS_DAYS_PER_YEAR); // base-0 year
-  const dayOfYear = safeModulo(day, KKS_DAYS_PER_YEAR); // 0..335 (euclidean)
+  const dayOfYear = safeModulo(day, KKS_DAYS_PER_YEAR); // 0..335
   const m0 = Math.floor(dayOfYear / KKS_DAYS_PER_MONTH); // 0..7
   const d0 = dayOfYear % KKS_DAYS_PER_MONTH; // 0..41
   return { d: d0 + 1, m: m0 + 1, y };
@@ -228,7 +214,6 @@ function pulseToWeekday(pulse: number): string {
   return WEEKDAYS[safeModulo(day, WEEKDAYS.length)] ?? "Kaelith";
 }
 
-/** Chakra-of-day (7-cycle) derived from day index, not from step. */
 function pulseToChakraDay(pulse: number): string {
   const day = pulseToDayIndex(pulse);
   return CHAKRAS[safeModulo(day, CHAKRAS.length)] ?? "Crown";
@@ -247,12 +232,10 @@ const KKS_MONTH_NAMES: readonly string[] = [
 
 function pulseToMonthName(pulse: number): string {
   const day = pulseToDayIndex(pulse);
-  const dayOfYear = safeModulo(day, KKS_DAYS_PER_YEAR); // 0..335
-  const m0 = Math.floor(dayOfYear / KKS_DAYS_PER_MONTH); // 0..7
+  const dayOfYear = safeModulo(day, KKS_DAYS_PER_YEAR);
+  const m0 = Math.floor(dayOfYear / KKS_DAYS_PER_MONTH);
   return KKS_MONTH_NAMES[m0] ?? `Month ${m0 + 1}`;
 }
-
-/* Display label normalizers */
 
 function normalizeWeekdayLabel(s: string): string {
   const t = s.trim();
@@ -276,7 +259,6 @@ function normalizeChakraLabel(s: string): string {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
-/** ✅ ONLY CHANGE: display label translation (manual → Proof of Memory™) */
 function normalizeFeedSourceLabel(s: string): string {
   const t = s.trim();
   if (!t) return t;
@@ -297,8 +279,8 @@ const ARKS: readonly string[] = [
 ] as const;
 
 function pulseToArkIndex(pulse: number): number {
-  const { beat } = pulseToBeatStep(pulse); // 0..35
-  const idx = Math.floor(beat / KKS_BEATS_PER_ARK); // 0..5
+  const { beat } = pulseToBeatStep(pulse);
+  const idx = Math.floor(beat / KKS_BEATS_PER_ARK);
   if (idx < 0) return 0;
   if (idx >= ARKS.length) return ARKS.length - 1;
   return idx;
@@ -336,18 +318,7 @@ function canonicalizeCurrentStreamUrl(token: string): string {
 
 function legacyStreamQueryUrl(token: string): string {
   const base = originFallback().replace(/\/+$/, "");
-  // This is what the Sigil-Glyph capsule decoder expects right now
   return `${base}/stream?p=${encodeURIComponent(token)}`;
-}
-
-/**
- * Preferred share URL for humans / capsules:
- * - Uses /p~<token> when short (SMS-safe, no ? or =)
- * - Falls back to /stream?p=<token> for huge payloads
- *   (the Sigil-Glyph decoder understands ?p=)
- */
-function preferredShareUrl(token: string): string {
-  return token.length <= TOKEN_HARD_LIMIT ? shortAliasUrl(token) : legacyStreamQueryUrl(token);
 }
 
 function shortAliasUrl(token: string): string {
@@ -355,18 +326,13 @@ function shortAliasUrl(token: string): string {
   return `${base}/p~${token}`;
 }
 
-/**
- * Normalize ANY incoming representation to a base64url token:
- * - Accepts:
- *     • raw token (base64 or base64url)
- *     • full URLs: /stream/p/<token>, /p~<token>, /stream?p=, /p?t=, /p#t=, /stream#t=
- * - Restores '+' lost as spaces (old query-style)
- * - Converts base64 → base64url
- */
+function preferredShareUrl(token: string): string {
+  return token.length <= TOKEN_HARD_LIMIT ? shortAliasUrl(token) : legacyStreamQueryUrl(token);
+}
+
 function normalizeIncomingToken(raw: string): string {
   let t = raw.trim();
 
-  // If someone passed a whole URL instead of just a token, extract from it.
   try {
     const u = new URL(t);
     const h = new URLSearchParams(u.hash.startsWith("#") ? u.hash.slice(1) : u.hash);
@@ -382,10 +348,9 @@ function normalizeIncomingToken(raw: string): string {
     else if (/\/p~/.test(u.pathname)) t = u.pathname.split("/p~")[1] ?? t;
     else if (/\/stream\/p\//.test(u.pathname)) t = u.pathname.split("/stream/p/")[1] ?? t;
   } catch {
-    // not a URL, ignore
+    // not a URL
   }
 
-  // Decode %xx if present
   if (/%[0-9A-Fa-f]{2}/.test(t)) {
     try {
       t = decodeURIComponent(t);
@@ -394,10 +359,8 @@ function normalizeIncomingToken(raw: string): string {
     }
   }
 
-  // Query/base64 legacy: '+' may come through as space; restore it.
   if (t.includes(" ")) t = t.replaceAll(" ", "+");
 
-  // If it looks like standard base64, normalize to base64url
   if (/[+/=]/.test(t)) {
     t = t.replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
   }
@@ -405,7 +368,6 @@ function normalizeIncomingToken(raw: string): string {
   return t;
 }
 
-/** base64url-ish token guard */
 function isLikelyToken(s: string): boolean {
   return /^[A-Za-z0-9_-]{16,}$/.test(s);
 }
@@ -427,7 +389,6 @@ function extractTokenFromUrlLike(raw: string): string | null {
   const s = raw.trim();
   if (!s) return null;
 
-  // bare token
   if (isLikelyToken(s)) return s;
 
   const u = tryParseUrlLike(s);
@@ -449,14 +410,12 @@ function extractTokenFromUrlLike(raw: string): string | null {
 
   if (got && got.trim().length) return got.trim();
 
-  // /p~TOKEN
   if (u.pathname.includes("/p~")) {
     const idx = u.pathname.indexOf("/p~");
-    const tail = u.pathname.slice(idx + 3); // "/p~".length = 3
+    const tail = u.pathname.slice(idx + 3);
     if (tail && tail.length) return tail.startsWith("/") ? tail.slice(1) : tail;
   }
 
-  // /stream/p/TOKEN or /p/TOKEN
   {
     const m = u.pathname.match(/\/stream\/p\/([^/?#]+)/);
     if (m?.[1]) return m[1];
@@ -469,15 +428,6 @@ function extractTokenFromUrlLike(raw: string): string | null {
   return null;
 }
 
-/**
- * Canonicalize current address bar for browser reload:
- * - short: /stream/p/<token>
- * - huge:  /stream?<kept params>&add=...#t=<token>
- * Preserves:
- * - all existing non-token search params
- * - all add= params (from search+hash), normalized
- * - all existing non-token hash params (short only), or merged into huge hash after t=
- */
 function canonicalizeLocationRel(token: string): string {
   if (typeof window === "undefined") return `/stream/p/${encodeURIComponent(token)}`;
 
@@ -486,7 +436,6 @@ function canonicalizeLocationRel(token: string): string {
     window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash,
   );
 
-  // collect add= from both, normalize, dedupe
   const addsRaw = [...searchNow.getAll("add"), ...hashNow.getAll("add")];
   const adds = addsRaw
     .map(normalizeAddParam)
@@ -498,16 +447,14 @@ function canonicalizeLocationRel(token: string): string {
     if (!addsNorm.includes(normalized)) addsNorm.push(normalized);
   }
 
-  // keep all non-token search params
   const keepSearch = new URLSearchParams();
   for (const [k, v] of searchNow.entries()) {
     if (k === "p" || k === "t" || k === "token" || k === "capsule") continue;
-    if (k === "add") continue; // we re-add normalized add chain
+    if (k === "add") continue;
     keepSearch.append(k, v);
   }
   for (const a of addsNorm) keepSearch.append("add", a);
 
-  // keep non-token hash params (only if short; for huge, hash is reserved for t= token)
   const keepHash = new URLSearchParams();
   for (const [k, v] of hashNow.entries()) {
     if (k === "p" || k === "t" || k === "token" || k === "capsule") continue;
@@ -526,7 +473,6 @@ function canonicalizeLocationRel(token: string): string {
     return `${pathname}${searchPart}${hashPart}`;
   }
 
-  // huge: put token in hash, and merge keepHash extras after t=
   const hugeHash = new URLSearchParams();
   hugeHash.set("t", token);
   for (const [k, v] of keepHash.entries()) hugeHash.append(k, v);
@@ -534,7 +480,6 @@ function canonicalizeLocationRel(token: string): string {
   return `${pathname}${searchPart}#${hugeHash.toString()}`;
 }
 
-/** Convert stream-ish URLs / tokens into browser-canonical /stream/p/<token> when possible. */
 function normalizeStreamishUrlForBrowser(raw: string): string {
   const t = raw.trim();
   if (!t) return t;
@@ -549,9 +494,261 @@ function normalizeStreamishUrlForBrowser(raw: string): string {
   return canonicalizeCurrentStreamUrl(token);
 }
 
+/** Add add= entries into the URL hash, preserving token hash (t=) if present. */
+function withHashAddTokens(baseUrl: string, addTokens: readonly string[]): string {
+  const u = new URL(baseUrl, originFallback());
+
+  const hashStr = u.hash.startsWith("#") ? u.hash.slice(1) : u.hash;
+  const h = new URLSearchParams(hashStr);
+
+  h.delete("add");
+  for (const t of addTokens) h.append("add", t);
+
+  // keep query empty to avoid 414 (thread witness stays client-side)
+  u.search = "";
+
+  const nextHash = h.toString();
+  u.hash = nextHash ? `#${nextHash}` : "";
+  return u.toString();
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Memory Stream History v2 (offline thread graph learned from add= chains)
+──────────────────────────────────────────────────────────────── */
+
+const MSV2_KEY = "sf:memoryStream:v2";
+const MSV2_MAX_NODES = 20000;
+const MSV2_MAX_CHILDREN = 4096;
+const MSV2_MAX_WALK = 4096;
+
+type MemoryStreamV2 = {
+  v: 2;
+  parentOf: Record<string, string>; // child -> parent
+  childrenOf: Record<string, string[]>; // parent -> children
+  pulseOf: Record<string, number>; // token -> pulse (for ordering)
+};
+
+function ms2Empty(): MemoryStreamV2 {
+  return { v: 2, parentOf: {}, childrenOf: {}, pulseOf: {} };
+}
+
+function ms2Load(): MemoryStreamV2 {
+  if (typeof window === "undefined") return ms2Empty();
+  try {
+    const raw = window.localStorage.getItem(MSV2_KEY);
+    if (!raw) return ms2Empty();
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed)) return ms2Empty();
+    if (parsed["v"] !== 2) return ms2Empty();
+
+    const parentOf = isRecord(parsed["parentOf"]) ? (parsed["parentOf"] as Record<string, unknown>) : {};
+    const childrenOf = isRecord(parsed["childrenOf"]) ? (parsed["childrenOf"] as Record<string, unknown>) : {};
+    const pulseOf = isRecord(parsed["pulseOf"]) ? (parsed["pulseOf"] as Record<string, unknown>) : {};
+
+    const out: MemoryStreamV2 = ms2Empty();
+
+    for (const [k, v] of Object.entries(parentOf)) {
+      if (typeof k === "string" && typeof v === "string" && isLikelyToken(k) && isLikelyToken(v)) out.parentOf[k] = v;
+    }
+
+    for (const [k, v] of Object.entries(childrenOf)) {
+      if (!isLikelyToken(k) || !Array.isArray(v)) continue;
+      const arr = (v as unknown[]).filter((x): x is string => typeof x === "string" && isLikelyToken(x));
+      out.childrenOf[k] = Array.from(new Set(arr)).slice(0, MSV2_MAX_CHILDREN);
+    }
+
+    for (const [k, v] of Object.entries(pulseOf)) {
+      if (!isLikelyToken(k)) continue;
+      if (typeof v === "number" && Number.isFinite(v)) out.pulseOf[k] = v;
+      else if (typeof v === "string" && v.trim().length) {
+        const n = Number(v.trim());
+        if (Number.isFinite(n)) out.pulseOf[k] = n;
+      }
+    }
+
+    return out;
+  } catch {
+    return ms2Empty();
+  }
+}
+
+function ms2Save(g: MemoryStreamV2): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(MSV2_KEY, JSON.stringify(g));
+  } catch (e) {
+    report("ms2Save", e);
+  }
+}
+
+function ms2EnsureChild(g: MemoryStreamV2, parent: string, child: string): boolean {
+  const prev = g.childrenOf[parent] ?? [];
+  if (prev.includes(child)) return false;
+  const next = [...prev, child].slice(-MSV2_MAX_CHILDREN);
+  g.childrenOf[parent] = next;
+  return true;
+}
+
+function ms2SetParent(g: MemoryStreamV2, child: string, parent: string): boolean {
+  if (!isLikelyToken(child) || !isLikelyToken(parent)) return false;
+  if (child === parent) return false;
+
+  const had = g.parentOf[child];
+  if (had === parent) return false;
+
+  g.parentOf[child] = parent;
+  ms2EnsureChild(g, parent, child);
+  return true;
+}
+
+function ms2SetPulse(g: MemoryStreamV2, token: string, pulse: number): boolean {
+  if (!isLikelyToken(token)) return false;
+  if (!Number.isFinite(pulse)) return false;
+  const had = g.pulseOf[token];
+  if (had === pulse) return false;
+  g.pulseOf[token] = pulse;
+  return true;
+}
+
+function ms2ExtractAddTokensFromUrl(raw: string): string[] {
+  const u = tryParseUrlLike(raw);
+  if (!u) return [];
+
+  const hashStr = u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : "";
+  const hash = new URLSearchParams(hashStr);
+  const search = u.searchParams;
+
+  const addsRaw = [...search.getAll("add"), ...hash.getAll("add")];
+  if (addsRaw.length === 0) return [];
+
+  const out: string[] = [];
+  for (const a0 of addsRaw) {
+    const a = normalizeAddParam(a0);
+    if (!a || !a.trim().length) continue;
+
+    const t = extractTokenFromUrlLike(a) ?? (isLikelyToken(a) ? a : null);
+    if (!t) continue;
+
+    const tok = normalizeIncomingToken(t);
+    if (!isLikelyToken(tok)) continue;
+    if (!out.includes(tok)) out.push(tok);
+  }
+  return out;
+}
+
+/** Ingest a single stream-ish URL into graph: learns token + parent edge via last add= token. */
+function ms2IngestUrl(g: MemoryStreamV2, rawUrl: string): boolean {
+  const tokRaw = extractTokenFromUrlLike(rawUrl);
+  if (!tokRaw) return false;
+
+  const token = normalizeIncomingToken(tokRaw);
+  if (!isLikelyToken(token)) return false;
+
+  const adds = ms2ExtractAddTokensFromUrl(rawUrl);
+  const parentTok = adds.length ? adds[adds.length - 1] : null;
+
+  let changed = false;
+  if (parentTok) changed = ms2SetParent(g, token, parentTok) || changed;
+
+  // Keep graph bounded
+  const nodeCount = Object.keys(g.parentOf).length + Object.keys(g.childrenOf).length;
+  if (nodeCount > MSV2_MAX_NODES) {
+    // soft trim: drop children lists for very old/unknown nodes
+    // (keeps parents, keeps pulses)
+    const keys = Object.keys(g.childrenOf);
+    for (let i = 0; i < Math.min(256, keys.length); i++) delete g.childrenOf[keys[i]];
+    changed = true;
+  }
+
+  return changed;
+}
+
+function ms2RootOf(g: MemoryStreamV2, token: string): string {
+  if (!isLikelyToken(token)) return token;
+  const seen = new Set<string>();
+  let cur = token;
+
+  for (let i = 0; i < MSV2_MAX_WALK; i++) {
+    if (seen.has(cur)) break;
+    seen.add(cur);
+
+    const p = g.parentOf[cur];
+    if (!p || !isLikelyToken(p)) break;
+    cur = p;
+  }
+
+  return cur;
+}
+
+/** Ancestor chain root..parent for a given token. */
+function ms2Ancestors(g: MemoryStreamV2, token: string): string[] {
+  if (!isLikelyToken(token)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  let cur = token;
+
+  for (let i = 0; i < MSV2_MAX_WALK; i++) {
+    const p = g.parentOf[cur];
+    if (!p || !isLikelyToken(p)) break;
+    if (seen.has(p)) break;
+    seen.add(p);
+    out.push(p);
+    cur = p;
+  }
+
+  out.reverse(); // root..parent
+  return out;
+}
+
+/** All descendants (including root) via BFS from root token. */
+function ms2ThreadTokens(g: MemoryStreamV2, anyToken: string): string[] {
+  const root = ms2RootOf(g, anyToken);
+  const out: string[] = [];
+  const q: string[] = [];
+  const seen = new Set<string>();
+
+  q.push(root);
+  seen.add(root);
+
+  for (let i = 0; i < MSV2_MAX_WALK && q.length; i++) {
+    const cur = q.shift() as string;
+    out.push(cur);
+
+    const kids = g.childrenOf[cur] ?? [];
+    for (const k of kids) {
+      if (!isLikelyToken(k)) continue;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      q.push(k);
+    }
+  }
+
+  // Prefer pulse ordering when known
+  out.sort((a, b) => {
+    const pa = g.pulseOf[a];
+    const pb = g.pulseOf[b];
+    const ha = typeof pa === "number" && Number.isFinite(pa);
+    const hb = typeof pb === "number" && Number.isFinite(pb);
+
+    if (ha && hb) return pa - pb;
+    if (ha) return -1;
+    if (hb) return 1;
+    // stable-ish fallback
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+
+  return out;
+}
+
+/** Build a stream URL for a token with its full `#add=` witness chain (root..parent). */
+function ms2ThreadedUrl(g: MemoryStreamV2, token: string): string {
+  const base = canonicalizeCurrentStreamUrl(token);
+  const adds = ms2Ancestors(g, token);
+  return adds.length ? withHashAddTokens(base, adds) : base;
+}
+
 /* ────────────────────────────────────────────────────────────────
    Clipboard helpers (KOPY sound parity with v6.1)
-   Key rule: DO NOT await before pushing the toast.
 ──────────────────────────────────────────────────────────────── */
 
 function tryCopyExecCommand(text: string): boolean {
@@ -606,12 +803,6 @@ function escapeHtml(s: string): string {
     .replaceAll("'", "&#39;");
 }
 
-/**
- * Minimal sanitizer:
- * - strips script/style/iframe/object/embed
- * - removes on* handlers
- * - blocks javascript:/data: URLs on href/src
- */
 function sanitizeHtml(input: string): string {
   try {
     const parser = new DOMParser();
@@ -734,10 +925,12 @@ function coerceAttachmentManifest(v: unknown): AttachmentManifest | null {
   const totals = sumBytes(items);
 
   const totalBytes =
-    typeof v["totalBytes"] === "number" && Number.isFinite(v["totalBytes"]) ? v["totalBytes"] : totals.total;
+    typeof v["totalBytes"] === "number" && Number.isFinite(v["totalBytes"]) ? (v["totalBytes"] as number) : totals.total;
 
   const inlinedBytes =
-    typeof v["inlinedBytes"] === "number" && Number.isFinite(v["inlinedBytes"]) ? v["inlinedBytes"] : totals.inlined;
+    typeof v["inlinedBytes"] === "number" && Number.isFinite(v["inlinedBytes"])
+      ? (v["inlinedBytes"] as number)
+      : totals.inlined;
 
   return { version: 1, totalBytes, inlinedBytes, items };
 }
@@ -775,7 +968,6 @@ function PostBodyView({
     return <div className="sf-md" dangerouslySetInnerHTML={{ __html: html }} />;
   }
 
-  // html
   const mode = effectiveBody.mode ?? "code";
   if (mode === "code") {
     return (
@@ -885,7 +1077,6 @@ async function tryUnsealWithPostSealModule(args: {
   const fnName =
     (isRecord(mod) && Object.entries(mod).find(([, v]) => v === fnUnknown)?.[0]) ?? "unseal";
 
-  // If module exposes unsealEnvelopeV1(env, creds), pass creds extracted from meta.
   if (fnName === "unsealEnvelopeV1") {
     const kaiSignature =
       typeof args.meta === "object" && args.meta !== null ? readStringProp(args.meta, "kaiSignature") : undefined;
@@ -909,13 +1100,11 @@ async function tryUnsealWithPostSealModule(args: {
       return content;
     }
 
-    // Some implementations may return the content directly.
     if (isUnsealedContent(outUnknown)) return outUnknown;
 
     throw new Error("Unseal returned an unexpected shape.");
   }
 
-  // Default contract: fn(seal, { meta, svgText? }) -> { body?, attachments?, caption? }
   const outUnknown = await Promise.resolve(
     fnUnknown(args.seal, { meta: args.meta, svgText: args.svgText ?? undefined }),
   );
@@ -934,7 +1123,6 @@ function PayloadCard(props: {
   copied: boolean;
   onKopy: () => void;
 
-  // Private / sealed
   isSealed: boolean;
   unsealState: UnsealState;
   canUnseal: boolean;
@@ -945,7 +1133,6 @@ function PayloadCard(props: {
   onUnseal: () => void;
   onForgetUnsealed: () => void;
 
-  // Rendered content (may be unsealed)
   body?: PostBody;
   caption?: string;
 }): React.JSX.Element {
@@ -967,6 +1154,7 @@ function PayloadCard(props: {
     body,
     caption,
   } = props;
+
   const gateRef = useRef<HTMLDivElement | null>(null);
 
   const promptGate = useCallback(() => {
@@ -979,14 +1167,12 @@ function PayloadCard(props: {
       /* ignore */
     }
 
-    // Try to open the file picker inside SigilLogin (best effort).
     const file = el.querySelector('input[type="file"]') as HTMLInputElement | null;
     if (file) {
       file.click();
       return;
     }
 
-    // Fallback: click the first button in the gate.
     const btn = el.querySelector("button") as HTMLButtonElement | null;
     btn?.click();
   }, []);
@@ -1010,7 +1196,6 @@ function PayloadCard(props: {
     onUnseal();
   }, [canUnseal, onUnseal, promptGate]);
 
-  // ✅ KKS-1.0 authoritative display derived ONLY from pulse (payload pulse is correct)
   const pulse = readPulse(payload.pulse);
   const { beat, step } = pulseToBeatStep(pulse);
   const { d, m, y } = pulseToDMY(pulse);
@@ -1028,7 +1213,6 @@ function PayloadCard(props: {
     pickString((payload as unknown as { meta?: unknown }).meta, ["mode", "source", "origin"]) ??
     "Manual";
 
-  // ✅ translate "manual" → Proof of Memory™ for display
   const modeLabel = normalizeFeedSourceLabel(modeLabelRaw);
 
   useEffect(() => {
@@ -1111,7 +1295,6 @@ function PayloadCard(props: {
                 </div>
               ) : null}
 
-              {/* 🔒 LOCK SCREEN: glyph upload gate (ONLY for sealed posts) */}
               <div ref={gateRef} className="sf-seal__gate" role="region" aria-label="Unlock gate">
                 {!verifiedThisSession ? (
                   <>
@@ -1205,6 +1388,30 @@ function SigilStreamInner(): React.JSX.Element {
   // Track which source URLs we have already scanned for add= links (infinite replies)
   const scannedForAddsRef = useRef<Set<string>>(new Set<string>());
 
+  /** ---------- Memory Stream History v2 state ---------- */
+  const ms2Ref = useRef<MemoryStreamV2>(ms2Load());
+  const ms2ScannedUrlRef = useRef<Set<string>>(new Set<string>());
+  const [ms2Tick, setMs2Tick] = useState(0);
+
+  const ms2IngestMany = useCallback((urls: readonly string[], pulseHint?: number) => {
+    const g = ms2Ref.current;
+    let changed = false;
+
+    for (const u of urls) {
+      if (!u || !u.trim().length) continue;
+      changed = ms2IngestUrl(g, u) || changed;
+    }
+
+    // If we have a pulse hint for the *current* token, apply it where we can.
+    // (We don’t guess token from pulseHint; we apply pulse in refreshPayloadFromLocation where token is known.)
+    if (pulseHint !== undefined) void pulseHint;
+
+    if (changed) {
+      ms2Save(g);
+      setMs2Tick((x) => x + 1);
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
@@ -1217,15 +1424,17 @@ function SigilStreamInner(): React.JSX.Element {
 
         setSources(unique);
         for (const { url } of unique) registerSigilUrl(url);
+
+        // Learn thread edges from anything we already know
+        ms2IngestMany(unique.map((s) => s.url));
       } catch (e) {
         report("initial seed load", e);
       }
     })().catch((e) => report("initial seed load outer", e));
-  }, []);
+  }, [ms2IngestMany]);
 
   /**
-   * Ingest add= links from CURRENT location every time it changes (router navigation).
-   * This is the “front door” for reply chains (including those appended by the Composer).
+   * Ingest add= links from CURRENT location every time it changes.
    */
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1244,6 +1453,9 @@ function SigilStreamInner(): React.JSX.Element {
 
       if (adds.length === 0) return;
 
+      // learn edges from current location too
+      ms2IngestMany([window.location.href, ...adds]);
+
       setSources((prev) => {
         const seen = new Set(prev.map((s) => s.url));
         const fresh = adds.filter((u) => !seen.has(u));
@@ -1257,12 +1469,12 @@ function SigilStreamInner(): React.JSX.Element {
     } catch (e) {
       report("add ingestion (location)", e);
     }
-  }, [loc.pathname, loc.search, loc.hash]);
+  }, [loc.pathname, loc.search, loc.hash, ms2IngestMany]);
 
   /**
-   * Infinite replies closure scan:
-   * - Whenever sources grows, scan NEW/UNSCANNED source URLs for add= links
-   * - Ingest those add= links too (dedupe + persist)
+   * Infinite replies closure scan (unchanged) + memory graph ingest (new):
+   * - scan NEW/UNSCANNED source URLs for add= links
+   * - ingest discovered add= links
    */
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1300,6 +1512,9 @@ function SigilStreamInner(): React.JSX.Element {
 
     if (newlyDiscovered.length === 0) return;
 
+    // Learn edges for newly discovered URLs
+    ms2IngestMany(newlyDiscovered);
+
     setSources((prev) => {
       const seen = new Set(prev.map((p) => p.url));
       const fresh = newlyDiscovered.filter((u) => !seen.has(u));
@@ -1319,7 +1534,28 @@ function SigilStreamInner(): React.JSX.Element {
       }
       return [...fresh.map((u) => ({ url: u })), ...prev];
     });
-  }, [sources]);
+  }, [sources, ms2IngestMany]);
+
+  /**
+   * NEW: continuously ingest ALL known URLs into ms2 graph (one-time per URL).
+   * This is what makes “replies-of-replies” appear when you open a payload later.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const scanned = ms2ScannedUrlRef.current;
+    const batch: string[] = [];
+
+    for (const s of sources) {
+      const u = s.url;
+      if (!u || scanned.has(u)) continue;
+      scanned.add(u);
+      batch.push(u);
+      if (batch.length >= 256) break;
+    }
+
+    if (batch.length) ms2IngestMany(batch);
+  }, [sources, ms2IngestMany]);
 
   /** ---------- Payload (decoded from token) ---------- */
   const [activeToken, setActiveToken] = useState<string | null>(null);
@@ -1331,7 +1567,6 @@ function SigilStreamInner(): React.JSX.Element {
   /** ---------- Private: unseal state (in-memory only) ---------- */
   const [unsealState, setUnsealState] = useState<UnsealState>({ status: "none" });
 
-  // reset unseal state when token changes / payload changes
   useEffect(() => {
     if (!payload) {
       setUnsealState({ status: "none" });
@@ -1347,14 +1582,11 @@ function SigilStreamInner(): React.JSX.Element {
     const raw = extractPayloadTokenFromLocation();
     const token = raw ? normalizeIncomingToken(raw) : null;
 
-    // ✅ browser-canonical load (preserve add= chain; strip token query/hash forms)
     if (token) {
       try {
         const canonRel = canonicalizeLocationRel(token);
         const currentRel = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-        if (canonRel !== currentRel) {
-          window.history.replaceState(null, "", canonRel);
-        }
+        if (canonRel !== currentRel) window.history.replaceState(null, "", canonRel);
       } catch (e) {
         report("canonicalizeLocationRel", e);
       }
@@ -1369,7 +1601,7 @@ function SigilStreamInner(): React.JSX.Element {
       return;
     }
 
-    // register canonical + preferred share forms (always)
+    // Register canonical + preferred share forms
     try {
       const canon = canonicalizeCurrentStreamUrl(token);
       const share = preferredShareUrl(token);
@@ -1377,6 +1609,31 @@ function SigilStreamInner(): React.JSX.Element {
       if (share !== canon) registerSigilUrl(share);
     } catch (e) {
       report("register current stream url (pre-decode)", e);
+    }
+
+    // Ensure the *visited stream URL itself* becomes part of history
+    try {
+      const canonStream = canonicalizeCurrentStreamUrl(token);
+      setSources((prev) => {
+        const seen = new Set(prev.map((s) => s.url));
+        if (seen.has(canonStream)) return prev;
+        try {
+          prependUniqueToStorage([canonStream]);
+        } catch (e) {
+          report("prependUniqueToStorage (visited stream)", e);
+        }
+        try {
+          registerSigilUrl(canonStream);
+        } catch (e) {
+          report("registerSigilUrl (visited stream)", e);
+        }
+        return [{ url: canonStream }, ...prev];
+      });
+
+      // Learn edges from the actual browser URL (includes #add= chain if present)
+      ms2IngestMany([window.location.href, canonStream]);
+    } catch (e) {
+      report("ms2 ingest visited stream", e);
     }
 
     try {
@@ -1391,6 +1648,18 @@ function SigilStreamInner(): React.JSX.Element {
 
       setPayload(decoded);
       setPayloadError(null);
+
+      // Record pulse for ordering (thread history prefers pulse sort)
+      try {
+        const g = ms2Ref.current;
+        const changed = ms2SetPulse(g, token, readPulse(decoded.pulse));
+        if (changed) {
+          ms2Save(g);
+          setMs2Tick((x) => x + 1);
+        }
+      } catch (e) {
+        report("ms2SetPulse", e);
+      }
 
       if (decoded.url && typeof decoded.url === "string" && decoded.url.length) {
         if (autoAddGuardRef.current !== token) {
@@ -1440,7 +1709,7 @@ function SigilStreamInner(): React.JSX.Element {
       setPayload(null);
       setPayloadError("Payload decode failed.");
     }
-  }, [toasts]);
+  }, [toasts, ms2IngestMany]);
 
   useEffect(() => {
     void refreshPayloadFromLocation();
@@ -1509,10 +1778,7 @@ function SigilStreamInner(): React.JSX.Element {
   const rawSigilAuth = useSigilAuth() as unknown;
   const authLike = useMemo(() => coerceAuth(rawSigilAuth), [rawSigilAuth]);
 
-  const composerMeta = useMemo(
-    () => (verifiedThisSession ? authLike.meta : null),
-    [verifiedThisSession, authLike.meta],
-  );
+  const composerMeta = useMemo(() => (verifiedThisSession ? authLike.meta : null), [verifiedThisSession, authLike.meta]);
   const composerSvgText = useMemo(
     () => (verifiedThisSession ? authLike.svgText : null),
     [verifiedThisSession, authLike.svgText],
@@ -1565,6 +1831,10 @@ function SigilStreamInner(): React.JSX.Element {
       if (!seen.has(u)) {
         prependUniqueToStorage([u]);
         registerSigilUrl(u);
+
+        // Learn any thread edges that might be present on the URL
+        ms2IngestMany([u]);
+
         return [{ url: u }, ...prev];
       }
       return prev;
@@ -1577,10 +1847,10 @@ function SigilStreamInner(): React.JSX.Element {
     return isRecord(payload as unknown) && (payload as unknown as Record<string, unknown>)["seal"] !== undefined;
   }, [payload]);
 
-  const canUnseal = useMemo(() => {
-    // Require inhaled ΦKey + meta; sealed content is keyed.
-    return Boolean(isSealed && verifiedThisSession && composerMeta);
-  }, [isSealed, verifiedThisSession, composerMeta]);
+  const canUnseal = useMemo(
+    () => Boolean(isSealed && verifiedThisSession && composerMeta),
+    [isSealed, verifiedThisSession, composerMeta],
+  );
 
   const onForgetUnsealed = useCallback(() => {
     if (!payload) return;
@@ -1623,10 +1893,7 @@ function SigilStreamInner(): React.JSX.Element {
     }
   }, [payload, verifiedThisSession, composerMeta, composerSvgText, toasts]);
 
-  const lockedSealedView = useMemo(
-    () => isSealed && unsealState.status !== "open",
-    [isSealed, unsealState.status],
-  );
+  const lockedSealedView = useMemo(() => isSealed && unsealState.status !== "open", [isSealed, unsealState.status]);
 
   /** ---------- Manifest/body/caption source (unsealed overrides) ---------- */
   const effectiveBody = useMemo<PostBody | undefined>(() => {
@@ -1665,8 +1932,11 @@ function SigilStreamInner(): React.JSX.Element {
     const token = tokenRaw ? normalizeIncomingToken(tokenRaw) : null;
     if (!token) return;
 
-    // ✅ ALWAYS copy canonical stream URL (never /p~)
-    const share = canonicalizeCurrentStreamUrl(token);
+    // ✅ Copy canonical stream URL, preserving CURRENT witness chain (if present),
+    // and keeping the witness in hash (avoids 414; matches MSv2 threaded URLs).
+    const base = canonicalizeCurrentStreamUrl(token);
+    const adds = typeof window !== "undefined" ? ms2ExtractAddTokensFromUrl(window.location.href) : [];
+    const share = adds.length ? withHashAddTokens(base, adds) : base;
 
     const okSync = tryCopyExecCommand(share);
     if (okSync) {
@@ -1695,16 +1965,72 @@ function SigilStreamInner(): React.JSX.Element {
     toasts.push("warn", "Remember failed. Select the address bar.");
   }, [activeToken, toasts]);
 
-  /** ---------- Derived list: show payload first if present ---------- */
+  /* ────────────────────────────────────────────────────────────────
+     Thread History hydration when opening a payload
+     - Build the full known thread (root + descendants)
+     - Emit each token as a stream URL WITH #add witness chain
+     - Push into sources + storage so StreamList “populates” immediately
+  ──────────────────────────────────────────────────────────────── */
+
+  const threadHistoryUrls = useMemo((): string[] => {
+    if (!activeToken) return [];
+    const g = ms2Ref.current;
+    const tokens = ms2ThreadTokens(g, activeToken);
+    const urls = tokens.map((t) => ms2ThreadedUrl(g, t));
+    return urls;
+  }, [activeToken, ms2Tick]);
+
+  useEffect(() => {
+    if (!activeToken) return;
+    if (threadHistoryUrls.length === 0) return;
+
+    // Persist and inject into sources (dedup)
+    setSources((prev) => {
+      const seen = new Set(prev.map((s) => s.url));
+      const fresh = threadHistoryUrls.filter((u) => !seen.has(u));
+      if (!fresh.length) return prev;
+
+      try {
+        prependUniqueToStorage(fresh);
+      } catch (e) {
+        report("prependUniqueToStorage (thread hydrate)", e);
+      }
+
+      for (const u of fresh) {
+        try {
+          registerSigilUrl(u);
+        } catch (e) {
+          report("registerSigilUrl (thread hydrate)", e);
+        }
+      }
+
+      return [...fresh.map((u) => ({ url: u })), ...prev];
+    });
+  }, [activeToken, threadHistoryUrls]);
+
+  /** ---------- Derived list: if payload open, thread history appears first ---------- */
   const urls: string[] = useMemo(() => {
     const base = sources.map((s) => s.url);
 
-    const payloadUrl = payload && typeof payload.url === "string" && payload.url.length ? payload.url : null;
-    if (!payloadUrl) return base;
+    if (!activeToken || threadHistoryUrls.length === 0) return base;
 
-    const rest = base.filter((u) => u !== payloadUrl);
-    return [payloadUrl, ...rest];
-  }, [sources, payload]);
+    const seen = new Set<string>();
+    const out: string[] = [];
+
+    for (const u of threadHistoryUrls) {
+      if (seen.has(u)) continue;
+      seen.add(u);
+      out.push(u);
+    }
+
+    for (const u of base) {
+      if (seen.has(u)) continue;
+      seen.add(u);
+      out.push(u);
+    }
+
+    return out;
+  }, [sources, activeToken, threadHistoryUrls]);
 
   /** ---------- Render ---------- */
   const sigilBlock =
@@ -1745,7 +2071,7 @@ function SigilStreamInner(): React.JSX.Element {
         ) : (
           <p className="sf-sub">
             Open a payload link at <code>/stream/p/&lt;token&gt;</code> (or <code>/stream#t=&lt;token&gt;</code>).
-            Replies are Kai-sealed and thread via <code>?add=</code>. Short alias accepted: <code>/p~&lt;token&gt;</code>{" "}
+            Replies are Kai-sealed and thread via <code>#add=</code>. Short alias accepted: <code>/p~&lt;token&gt;</code>{" "}
             (and legacy <code>/p#t=</code>, <code>/p?t=</code>, <code>/stream?p=</code>).
           </p>
         )}
@@ -1786,7 +2112,7 @@ function SigilStreamInner(): React.JSX.Element {
         ) : null}
       </header>
 
-      {/* ✅ EXACT v6.1 bottom behavior */}
+      {/* ✅ EXACT bottom behavior */}
       <section className="sf-list">
         {urls.length === 0 ? (
           <div className="sf-empty">

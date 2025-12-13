@@ -691,6 +691,19 @@
   color: rgba(var(--muted), .95);
   opacity:.9;
 }
+.fc-memoryMark {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.95;
+  user-select: none;
+}
 
 /* ========== 14) ERROR STATE (new + legacy) ===================== */
 .fc--error,

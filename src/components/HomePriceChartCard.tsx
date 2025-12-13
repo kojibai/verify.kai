@@ -138,11 +138,12 @@ const InlineCardCheckout: React.FC<{
     <div className="hp-popover" role="dialog" aria-label="Inline sovereign checkout" data-intent-id={intentId}>
       <div className="hp-pop-head">
         <div className="hp-pop-title">
-          Inhale{" "}
+          Seal {" "}
           {amountUsd.toLocaleString(undefined, {
             style: "currency",
             currency: "USD",
           })}
+          : To ΦKey
         </div>
         <button type="button" className="hp-x" onClick={onClose} aria-label="Close checkout">
           ×
@@ -154,7 +155,7 @@ const InlineCardCheckout: React.FC<{
         </div>
         <div className="hp-actions">
           <button type="button" className="hp-primary" onClick={confirm} disabled={busy || !stripe || !elements}>
-            {busy ? "Confirming…" : "Inhale Sigil-Glyph"}
+            {busy ? "Confirming…" : "Mint Premium ΦKey "}
           </button>
           <button type="button" className="hp-secondary" onClick={onClose}>
             Cancel
@@ -407,7 +408,7 @@ export default function HomePriceChartCard({
               }}
               aria-haspopup="dialog"
             >
-              Inhale
+              Premium ΦKey
             </button>
           </div>
 
