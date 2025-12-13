@@ -60,11 +60,103 @@ type ParentPreview = {
 
 const ADD_CHAIN_MAX = 512;
 
+/** Explorer integration (no backend): persist + cross-tab notify */
+const EXPLORER_FALLBACK_LS_KEY = "sigil:urls";
+const EXPLORER_BC_NAME = "kai-sigil-registry";
+
 function safeDecodeURIComponent(v: string): string {
   try {
     return decodeURIComponent(v);
   } catch {
     return v;
+  }
+}
+
+function looksLikeBareToken(s: string): boolean {
+  const t = s.trim();
+  if (t.length < 16) return false;
+  return /^[A-Za-z0-9_-]+$/u.test(t);
+}
+
+function canonicalizeForStorage(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "";
+  try {
+    return new URL(t, canonicalBase().origin).toString();
+  } catch {
+    return t;
+  }
+}
+
+function persistUrlsForExplorer(urls: readonly string[]): void {
+  if (typeof window === "undefined") return;
+  if (typeof window.localStorage === "undefined") return;
+
+  try {
+    const raw = window.localStorage.getItem(EXPLORER_FALLBACK_LS_KEY);
+
+    const existing: string[] = [];
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        for (const v of parsed) if (typeof v === "string") existing.push(v);
+      }
+    }
+
+    const out: string[] = [];
+    const seen = new Set<string>();
+
+    for (const v of existing) {
+      const c = canonicalizeForStorage(v);
+      if (!c) continue;
+      if (seen.has(c)) continue;
+      seen.add(c);
+      out.push(c);
+    }
+
+    for (const u of urls) {
+      const c = canonicalizeForStorage(u);
+      if (!c) continue;
+      if (seen.has(c)) continue;
+      seen.add(c);
+      out.push(c);
+    }
+
+    window.localStorage.setItem(EXPLORER_FALLBACK_LS_KEY, JSON.stringify(out));
+  } catch {
+    // silent
+  }
+}
+
+function notifyExplorerOfNewUrl(url: string): void {
+  if (typeof window === "undefined") return;
+
+  // (1) In-page hook (if Explorer is mounted in this document)
+  try {
+    const w = window as unknown as {
+      __SIGIL__?: { registerSigilUrl?: (u: string) => void };
+    };
+    w.__SIGIL__?.registerSigilUrl?.(url);
+  } catch {
+    // silent
+  }
+
+  // (2) DOM event fallback
+  try {
+    window.dispatchEvent(new CustomEvent("sigil:url-registered", { detail: { url } }));
+  } catch {
+    // silent
+  }
+
+  // (3) Cross-tab BroadcastChannel
+  try {
+    if ("BroadcastChannel" in window) {
+      const bc = new BroadcastChannel(EXPLORER_BC_NAME);
+      bc.postMessage({ type: "sigil:add", url });
+      bc.close();
+    }
+  } catch {
+    // silent
   }
 }
 
@@ -81,6 +173,17 @@ function extractAddChainFromHref(href: string): string[] {
     for (const a of addsRaw) {
       const decoded = safeDecodeURIComponent(String(a)).trim();
       if (!decoded) continue;
+
+      // ✅ If add= is a bare token, convert into a canonical stream URL first
+      if (looksLikeBareToken(decoded)) {
+        try {
+          const canonTokUrl = expandShortAliasToCanonical(buildStreamUrl(decoded));
+          if (canonTokUrl && !out.includes(canonTokUrl)) out.push(canonTokUrl);
+          continue;
+        } catch {
+          // fall through to normal handling
+        }
+      }
 
       try {
         const canon = expandShortAliasToCanonical(decoded);
@@ -101,6 +204,9 @@ function extractPayloadTokenFromUrlString(rawUrl: string): string | null {
   const t = rawUrl.trim();
   if (!t) return null;
 
+  // ✅ NEW: bare token support (for #add=TOKEN)
+  if (looksLikeBareToken(t)) return t;
+
   let u: URL;
   try {
     u = new URL(t);
@@ -116,19 +222,19 @@ function extractPayloadTokenFromUrlString(rawUrl: string): string | null {
 
   // /stream/p/<token> | /feed/p/<token>
   {
-    const m = path.match(/\/(?:stream|feed)\/p\/([^/?#]+)/);
+    const m = path.match(/\/(?:stream|feed)\/p\/([^/?#]+)/u);
     if (m?.[1]) return m[1];
   }
 
   // /p/<token>
   {
-    const m = path.match(/\/p\/([^/?#]+)/);
+    const m = path.match(/\/p\/([^/?#]+)/u);
     if (m?.[1]) return m[1];
   }
 
   // /p~TOKEN or /p~/TOKEN (and %7E)
   {
-    const m = path.match(/\/p(?:\u007e|%7[Ee])\/?([^/?#]+)/);
+    const m = path.match(/\/p(?:\u007e|%7[Ee])\/?([^/?#]+)/u);
     if (m?.[1]) return m[1];
   }
 
@@ -196,8 +302,7 @@ function computeReplyContextFromWindow(): ReplyContext {
   const origin = addChain.length ? addChain[0] : replyTo;
 
   // Ancestors: if replyTo came from last add=, ancestors are everything before it
-  const ancestors =
-    replyToFallback && addChain.length ? addChain.slice(0, -1) : addChain.slice(0);
+  const ancestors = replyToFallback && addChain.length ? addChain.slice(0, -1) : addChain.slice(0);
 
   return {
     replyToUrl: replyTo,
@@ -352,7 +457,8 @@ export function Composer({
           ? (removed.size ?? 0)
           : 0;
 
-      const removedInlinedBytes = removed && removed.kind === "file-inline" ? (removed.size ?? 0) : 0;
+      const removedInlinedBytes =
+        removed && removed.kind === "file-inline" ? (removed.size ?? 0) : 0;
 
       return {
         version: 1,
@@ -440,7 +546,9 @@ export function Composer({
       const pulseNow = computeLocalKai(new Date()).pulse;
 
       const payloadBody =
-        replyTextTrimmed.length > 0 ? ({ kind: "text", text: replyTextTrimmed } as const) : undefined;
+        replyTextTrimmed.length > 0
+          ? ({ kind: "text", text: replyTextTrimmed } as const)
+          : undefined;
 
       // ✅ CRITICAL: do NOT embed parent/origin URLs inside the payload token.
       // Thread context is carried in the *link hash* as add= witness chain.
@@ -485,6 +593,17 @@ export function Composer({
       toasts.push("success", "Link kopied. Kai-sealed.");
 
       setReplyUrl(share);
+
+      // ✅ Auto-register into SigilExplorer (persist + live notify)
+      try {
+        const ancestryUrls: string[] = [];
+        for (const t of adds) ancestryUrls.push(buildStreamUrl(t));
+
+        persistUrlsForExplorer([...ancestryUrls, share]);
+        notifyExplorerOfNewUrl(share);
+      } catch {
+        // silent
+      }
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("[Composer] onGenerateReply:", err);
@@ -584,7 +703,11 @@ export function Composer({
         {linkItems.length > 0 && (
           <div className="sf-att-grid">
             {linkItems.map((it, i) => (
-              <div key={`${it.kind}:${it.url}:${i}`} className="sf-att-item" style={{ position: "relative" }}>
+              <div
+                key={`${it.kind}:${it.url}:${i}`}
+                className="sf-att-item"
+                style={{ position: "relative" }}
+              >
                 <AttachmentCard item={it} />
                 <button
                   className="sf-btn sf-btn--icon"
@@ -624,7 +747,12 @@ export function Composer({
       </div>
 
       <div className="sf-reply-actions">
-        <button className="sf-btn" onClick={() => void onGenerateReply()} disabled={replyBusy} type="button">
+        <button
+          className="sf-btn"
+          onClick={() => void onGenerateReply()}
+          disabled={replyBusy}
+          type="button"
+        >
           {replyBusy ? "Sealing…" : "Exhale Reply"}
         </button>
 

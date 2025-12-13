@@ -1,16 +1,15 @@
 // src/pages/SigilExplorer.tsx
-// v3.7 — Holographic Frost edition ✨
-// - Matches SealMomentModal colorway (Atlantean Priest-King Holographic Frost)
-// - Ultra-responsive, zero overflow, glassy/frosted, refined
-// - BroadcastChannel + storage sync + resilient ancestry reconstruction
-// - A11y-first: roles, aria labels, keyboard flow, focus styles
-// - Branch layout: non-overlapping, two-row node layout, mobile-safe
+// v3.8 — Composer Witness-Chain edition ✨
+// - ✅ Composer replies auto-register (global hook + DOM event + BroadcastChannel + storage)
+// - ✅ Thread reconstruction WITHOUT embedding parent/origin in payload:
+//      - Uses hash-based add= witness chain (#add=...)
+//      - Synthesizes parentUrl + originUrl in-registry (derived context), so trees render correctly
 // - Kai-time ordering: MOST RECENT first (highest pulse at the top)
 // - Branch priority: latest Kai moment + node count (bigger trees float higher)
 // - Φ display: per-pulse total Φ sent (if any), shown on each node row
 // - Node toggle: reveals per-glyph Memory Stream details, even for leaf nodes
 // - Detail panel: stacked, mobile-first, page remains scrollable when open
-// ✅ NEW: official Φ mark inside the top-left brand square (.kx-glyph)
+// - ✅ Official Φ mark inside the top-left brand square (.kx-glyph)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -22,7 +21,7 @@ import type { SigilSharePayloadLoose } from "../utils/sigilUrl";
 import "./SigilExplorer.css";
 
 /* ─────────────────────────────────────────────────────────────────────
-   Global typings for the optional hook the modal will call
+   Global typings for the optional hook the modal/composer will call
 ────────────────────────────────────────────────────────────────────── */
 declare global {
   interface Window {
@@ -55,12 +54,20 @@ type DetailEntry = {
   value: string;
 };
 
+type WitnessCtx = {
+  chain: string[]; // origin..parent (URLs), from #add=
+  originUrl?: string;
+  parentUrl?: string;
+};
+
 /* ─────────────────────────────────────────────────────────────────────
  *  Constants / Utilities
  *  ───────────────────────────────────────────────────────────────────── */
 const REGISTRY_LS_KEY = "kai:sigils:v1"; // explorer’s persisted URL list
-const MODAL_FALLBACK_LS_KEY = "sigil:urls"; // modal’s fallback URL list
+const MODAL_FALLBACK_LS_KEY = "sigil:urls"; // composer/modal fallback URL list
 const BC_NAME = "kai-sigil-registry";
+
+const WITNESS_ADD_MAX = 512;
 
 /**
  * Φ mark source.
@@ -115,6 +122,84 @@ function byKaiTime(a: SigilSharePayloadLoose, b: SigilSharePayloadLoose): number
 function formatPhi(value: number): string {
   const fixed = value.toFixed(6);
   return fixed.replace(/0+$/u, "").replace(/\.$/u, "");
+}
+
+function safeDecodeURIComponent(v: string): string {
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    return v;
+  }
+}
+
+function looksLikeBareToken(s: string): boolean {
+  const t = s.trim();
+  if (t.length < 16) return false;
+  return /^[A-Za-z0-9_-]+$/u.test(t);
+}
+
+/** Build a canonical stream URL from a bare token (Composer uses /stream/p/<token>). */
+function streamUrlFromToken(token: string): string {
+  const origin = hasWindow ? window.location.origin : "https://example.invalid";
+  return new URL(`/stream/p/${token}`, origin).toString();
+}
+
+/** Extract add= witness chain from BOTH query and hash; normalize to absolute URLs. */
+function extractWitnessChainFromUrl(url: string): string[] {
+  try {
+    const origin = hasWindow ? window.location.origin : "https://example.invalid";
+    const u = new URL(url, origin);
+
+    const hashStr = u.hash.startsWith("#") ? u.hash.slice(1) : "";
+    const h = new URLSearchParams(hashStr);
+
+    const rawAdds = [...u.searchParams.getAll("add"), ...h.getAll("add")];
+
+    const out: string[] = [];
+    for (const raw of rawAdds) {
+      const decoded = safeDecodeURIComponent(String(raw)).trim();
+      if (!decoded) continue;
+
+      // If add= is a bare token, treat it as /stream/p/<token>
+      if (looksLikeBareToken(decoded)) {
+        const abs = canonicalizeUrl(streamUrlFromToken(decoded));
+        if (!out.includes(abs)) out.push(abs);
+        continue;
+      }
+
+      // If it's already URL-ish (absolute or relative), canonicalize it
+      const abs = canonicalizeUrl(decoded);
+      if (!out.includes(abs)) out.push(abs);
+    }
+
+    return out.slice(-WITNESS_ADD_MAX);
+  } catch {
+    return [];
+  }
+}
+
+/** Derive originUrl/parentUrl from witness chain (#add=origin..parent). */
+function deriveWitnessContext(url: string): WitnessCtx {
+  const chain = extractWitnessChainFromUrl(url);
+  if (chain.length === 0) return { chain: [] };
+  return {
+    chain,
+    originUrl: chain[0],
+    parentUrl: chain[chain.length - 1],
+  };
+}
+
+/** Merge derived fields into a payload WITHOUT overriding explicit payload fields. */
+function mergeDerivedContext(
+  payload: SigilSharePayloadLoose,
+  ctx: WitnessCtx,
+): SigilSharePayloadLoose {
+  const next: SigilSharePayloadLoose = { ...payload };
+
+  if (ctx.originUrl && !next.originUrl) next.originUrl = ctx.originUrl;
+  if (ctx.parentUrl && !next.parentUrl) next.parentUrl = ctx.parentUrl;
+
+  return next;
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -178,28 +263,6 @@ function getPhiSentForPulse(pulse?: number): number | undefined {
   return seen ? total : undefined;
 }
 
-/** Load persisted URLs (if any) into memory registry. Includes modal fallback list. */
-function hydrateRegistryFromStorage(): void {
-  if (!canStorage) return;
-
-  const ingestList = (raw: string | null) => {
-    if (!raw) return;
-    try {
-      const urls: string[] = JSON.parse(raw);
-      urls.forEach((u) => {
-        const url = canonicalizeUrl(u);
-        const payload = extractPayloadFromUrl(url);
-        if (payload) memoryRegistry.set(url, payload);
-      });
-    } catch {
-      /* ignore bad entries */
-    }
-  };
-
-  ingestList(localStorage.getItem(REGISTRY_LS_KEY));
-  ingestList(localStorage.getItem(MODAL_FALLBACK_LS_KEY));
-}
-
 /** Persist memory registry to localStorage (Explorer’s canonical key). */
 function persistRegistryToStorage(): void {
   if (!canStorage) return;
@@ -207,30 +270,136 @@ function persistRegistryToStorage(): void {
   localStorage.setItem(REGISTRY_LS_KEY, JSON.stringify(urls));
 }
 
-/** Add a single URL (and optionally its ancestry chain) to the registry. */
-function addUrl(url: string, includeAncestry = true, broadcast = true): boolean {
-  const abs = canonicalizeUrl(url);
-  const payload = extractPayloadFromUrl(abs);
-  if (!payload) return false;
+/** Upsert a payload into registry; returns true if changed. */
+function upsertRegistryPayload(url: string, payload: SigilSharePayloadLoose): boolean {
+  const key = canonicalizeUrl(url);
+  const prev = memoryRegistry.get(key);
+  if (!prev) {
+    memoryRegistry.set(key, payload);
+    return true;
+  }
 
+  // Only treat as changed if derived topology fields materially changed.
+  const prevParent = prev.parentUrl ?? "";
+  const prevOrigin = prev.originUrl ?? "";
+  const nextParent = payload.parentUrl ?? "";
+  const nextOrigin = payload.originUrl ?? "";
+
+  if (prevParent !== nextParent || prevOrigin !== nextOrigin) {
+    memoryRegistry.set(key, payload);
+    return true;
+  }
+
+  return false;
+}
+
+/** Ensure a URL is present in registry (best-effort). Returns true if changed. */
+function ensureUrlInRegistry(url: string): boolean {
+  const abs = canonicalizeUrl(url);
+  const extracted = extractPayloadFromUrl(abs);
+  if (!extracted) return false;
+
+  const ctx = deriveWitnessContext(abs);
+  const merged = mergeDerivedContext(extracted, ctx);
+
+  return upsertRegistryPayload(abs, merged);
+}
+
+/** Given a witness chain (origin..parent) and a new leaf URL, synthesize edges:
+ *   origin.parentUrl = undefined
+ *   chain[i].parentUrl = chain[i-1]
+ *   leaf.parentUrl = chain[last]
+ *  Also stamps originUrl across the whole chain + leaf.
+ */
+function synthesizeEdgesFromWitnessChain(
+  chain: readonly string[],
+  leafUrl: string,
+): boolean {
+  if (chain.length === 0) return false;
+
+  const origin = canonicalizeUrl(chain[0]);
   let changed = false;
 
-  // Include ancestry chain (child → parent → ... → origin)
-  if (includeAncestry) {
-    const chain = resolveLineageBackwards(abs);
-    for (const link of chain) {
-      const p = extractPayloadFromUrl(link);
-      const key = canonicalizeUrl(link);
-      if (p && !memoryRegistry.has(key)) {
-        memoryRegistry.set(key, p);
-        changed = true;
+  // Ensure origin exists
+  changed = ensureUrlInRegistry(origin) || changed;
+
+  // Patch origin payload to have originUrl=self (only if missing) and clear parentUrl
+  {
+    const p = memoryRegistry.get(origin);
+    if (p) {
+      const next: SigilSharePayloadLoose = { ...p };
+      if (!next.originUrl) next.originUrl = origin;
+      // do not forcefully delete parentUrl if it exists; only set if missing
+      if (!next.parentUrl) {
+        // leave undefined
       }
+      changed = upsertRegistryPayload(origin, next) || changed;
     }
   }
 
-  if (!memoryRegistry.has(abs)) {
-    memoryRegistry.set(abs, payload);
-    changed = true;
+  // Walk chain nodes and synthesize parent relations
+  for (let i = 1; i < chain.length; i++) {
+    const child = canonicalizeUrl(chain[i]);
+    const parent = canonicalizeUrl(chain[i - 1]);
+
+    changed = ensureUrlInRegistry(child) || changed;
+
+    const p = memoryRegistry.get(child);
+    if (p) {
+      const next: SigilSharePayloadLoose = { ...p };
+      if (!next.originUrl) next.originUrl = origin;
+      if (!next.parentUrl) next.parentUrl = parent;
+      changed = upsertRegistryPayload(child, next) || changed;
+    }
+  }
+
+  // Patch leaf with parent=last chain entry and origin=origin
+  const leafAbs = canonicalizeUrl(leafUrl);
+  const leafPayload = memoryRegistry.get(leafAbs);
+  if (leafPayload) {
+    const next: SigilSharePayloadLoose = { ...leafPayload };
+    if (!next.originUrl) next.originUrl = origin;
+    if (!next.parentUrl) next.parentUrl = canonicalizeUrl(chain[chain.length - 1]);
+    changed = upsertRegistryPayload(leafAbs, next) || changed;
+  }
+
+  return changed;
+}
+
+/** Add a single URL (and optionally its ancestry chain) to the registry. */
+function addUrl(url: string, includeAncestry = true, broadcast = true): boolean {
+  const abs = canonicalizeUrl(url);
+
+  const extracted = extractPayloadFromUrl(abs);
+  if (!extracted) return false;
+
+  let changed = false;
+
+  // 1) Apply witness-derived context (from #add=) to the leaf itself
+  const ctx = deriveWitnessContext(abs);
+  const mergedLeaf = mergeDerivedContext(extracted, ctx);
+  changed = upsertRegistryPayload(abs, mergedLeaf) || changed;
+
+  // 2) If witness chain exists, synthesize edges for the whole chain (origin..parent) + leaf
+  if (includeAncestry && ctx.chain.length > 0) {
+    // ensure every URL in chain exists in registry
+    for (const link of ctx.chain) {
+      changed = ensureUrlInRegistry(link) || changed;
+    }
+    changed = synthesizeEdgesFromWitnessChain(ctx.chain, abs) || changed;
+  }
+
+  // 3) Fallback ancestry from older payload formats (where parentUrl/originUrl were embedded)
+  if (includeAncestry) {
+    const fallbackChain = resolveLineageBackwards(abs);
+    for (const link of fallbackChain) {
+      const key = canonicalizeUrl(link);
+      const p = extractPayloadFromUrl(key);
+      if (!p) continue;
+      const pCtx = deriveWitnessContext(key);
+      const merged = mergeDerivedContext(p, pCtx);
+      changed = upsertRegistryPayload(key, merged) || changed;
+    }
   }
 
   if (changed) {
@@ -240,6 +409,30 @@ function addUrl(url: string, includeAncestry = true, broadcast = true): boolean 
     }
   }
   return changed;
+}
+
+/** Load persisted URLs (if any) into memory registry. Includes modal/composer fallback list.
+ *  IMPORTANT: hydrate via addUrl() so witness-chain topology gets synthesized.
+ */
+function hydrateRegistryFromStorage(): void {
+  if (!canStorage) return;
+
+  const ingestList = (raw: string | null) => {
+    if (!raw) return;
+    try {
+      const urls: unknown = JSON.parse(raw);
+      if (!Array.isArray(urls)) return;
+      for (const u of urls) {
+        if (typeof u !== "string") continue;
+        addUrl(u, true, false);
+      }
+    } catch {
+      /* ignore bad entries */
+    }
+  };
+
+  ingestList(localStorage.getItem(REGISTRY_LS_KEY));
+  ingestList(localStorage.getItem(MODAL_FALLBACK_LS_KEY));
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -440,11 +633,7 @@ function buildDetailEntries(node: SigilNode): DetailEntry[] {
   ];
   for (const key of memoryKeys) {
     const v = record[key];
-    if (
-      typeof v === "string" &&
-      v.trim().length > 0 &&
-      !usedKeys.has(key)
-    ) {
+    if (typeof v === "string" && v.trim().length > 0 && !usedKeys.has(key)) {
       entries.push({
         label: key,
         value: v.trim(),
@@ -461,15 +650,12 @@ function buildDetailEntries(node: SigilNode): DetailEntry[] {
 
     const lower = key.toLowerCase();
     const looksLikeStream =
-      lower.includes("stream") ||
-      lower.includes("memory") ||
-      lower.includes("feed");
+      lower.includes("stream") || lower.includes("memory") || lower.includes("feed");
     if (!looksLikeStream) continue;
 
     if (typeof value === "string" && value.trim().length === 0) continue;
 
-    const printable =
-      typeof value === "string" ? value.trim() : JSON.stringify(value);
+    const printable = typeof value === "string" ? value.trim() : JSON.stringify(value);
 
     entries.push({ label: key, value: printable });
   }
@@ -506,10 +692,7 @@ const Styles: React.FC = () => (
  *  ───────────────────────────────────────────────────────────────────── */
 function KaiStamp({ p }: { p: SigilSharePayloadLoose }) {
   return (
-    <span
-      className="k-stamp"
-      title={`pulse ${p.pulse} • beat ${p.beat} • step ${p.stepIndex}`}
-    >
+    <span className="k-stamp" title={`pulse ${p.pulse} • beat ${p.beat} • step ${p.stepIndex}`}>
       <span className="k-pill">pulse {p.pulse}</span>
       <span className="k-dot">•</span>
       <span className="k-pill">beat {p.beat}</span>
@@ -543,16 +726,8 @@ function SigilTreeNode({ node }: { node: SigilNode }) {
             <span className={`tw ${open ? "open" : ""}`} />
           </button>
 
-          <a
-            className="node-link"
-            href={node.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={node.url}
-          >
-            <span style={{ opacity: 0.9 }}>
-              {short(sig ?? hash ?? "glyph", 12)}
-            </span>
+          <a className="node-link" href={node.url} target="_blank" rel="noopener noreferrer" title={node.url}>
+            <span style={{ opacity: 0.9 }}>{short(sig ?? hash ?? "glyph", 12)}</span>
           </a>
         </div>
 
@@ -564,17 +739,14 @@ function SigilTreeNode({ node }: { node: SigilNode }) {
             </span>
           )}
           {phiSentFromPulse !== undefined && (
-            <span
-              className="phi-pill"
-              title={`Total Φ sent from pulse ${node.payload.pulse}`}
-            >
+            <span className="phi-pill" title={`Total Φ sent from pulse ${node.payload.pulse}`}>
               Φ sent: {formatPhi(phiSentFromPulse)}Φ
             </span>
           )}
           <button
             className="node-copy"
             aria-label="Copy URL"
-            onClick={() => navigator.clipboard.writeText(node.url)}
+            onClick={() => void navigator.clipboard.writeText(node.url)}
             title="Copy URL"
             type="button"
           >
@@ -585,13 +757,9 @@ function SigilTreeNode({ node }: { node: SigilNode }) {
 
       {open && (
         <div className="node-children">
-          {/* Detail panel: mobile-first, stacked, not taking over viewport,
-              page still scrolls via outer .explorer-scroll */}
           <div className="node-detail">
             {detailEntries.length === 0 ? (
-              <div className="node-detail-empty">
-                No additional memory fields recorded on this glyph.
-              </div>
+              <div className="node-detail-empty">No additional memory fields recorded on this glyph.</div>
             ) : (
               <div className="node-detail-grid">
                 {detailEntries.map((entry) => (
@@ -606,8 +774,6 @@ function SigilTreeNode({ node }: { node: SigilNode }) {
             )}
           </div>
 
-          {/* Children remain vertically stacked; outer scroll container
-              still handles page scroll even when this is open */}
           {node.children.map((c) => (
             <SigilTreeNode key={c.url} node={c} />
           ))}
@@ -636,13 +802,7 @@ function OriginPanel({ root }: { root: SigilNode }) {
       <header className="origin-head">
         <div className="o-meta">
           <span className="o-title">Origin</span>
-          <a
-            className="o-link"
-            href={root.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={root.url}
-          >
+          <a className="o-link" href={root.url} target="_blank" rel="noopener noreferrer" title={root.url}>
             {short(originSig ?? originHash ?? "origin", 14)}
           </a>
         </div>
@@ -653,7 +813,7 @@ function OriginPanel({ root }: { root: SigilNode }) {
           </span>
           <button
             className="o-copy"
-            onClick={() => navigator.clipboard.writeText(root.url)}
+            onClick={() => void navigator.clipboard.writeText(root.url)}
             title="Copy origin URL"
             type="button"
           >
@@ -751,12 +911,7 @@ function ExplorerToolbar({
               />
               Inhale
             </label>
-            <button
-              className="kx-export"
-              onClick={onExport}
-              aria-label="Export registry to JSON"
-              type="button"
-            >
+            <button className="kx-export" onClick={onExport} aria-label="Export registry to JSON" type="button">
               Exhale
             </button>
           </div>
@@ -798,13 +953,16 @@ const SigilExplorer: React.FC = () => {
   useEffect(() => {
     hydrateRegistryFromStorage();
 
-    // Seed with current URL if it looks like a sigil
-    if (hasWindow && window.location.search.includes("p=")) {
-      addUrl(window.location.href, true, false);
-      setLastAdded(canonicalizeUrl(window.location.href));
+    // Seed with current URL if it contains a payload we can extract
+    if (hasWindow) {
+      const here = window.location.href;
+      if (extractPayloadFromUrl(here)) {
+        addUrl(here, true, false);
+        setLastAdded(canonicalizeUrl(here));
+      }
     }
 
-    // (1) Expose the global hook that the modal will call
+    // (1) Expose the global hook that the composer/modal will call
     const prev = window.__SIGIL__?.registerSigilUrl;
     if (!window.__SIGIL__) window.__SIGIL__ = {};
     window.__SIGIL__.registerSigilUrl = (u: string) => {
@@ -814,7 +972,7 @@ const SigilExplorer: React.FC = () => {
       }
     };
 
-    // (2) Listen for the modal’s fallback DOM event
+    // (2) Listen for composer/modal DOM event
     const onUrlRegistered = (e: Event) => {
       const anyEvent = e as CustomEvent<{ url: string }>;
       const u = anyEvent?.detail?.url;
@@ -825,10 +983,7 @@ const SigilExplorer: React.FC = () => {
         }
       }
     };
-    window.addEventListener(
-      "sigil:url-registered",
-      onUrlRegistered as EventListener,
-    );
+    window.addEventListener("sigil:url-registered", onUrlRegistered as EventListener);
 
     // (3) Back-compat: still listen for sigil:minted if other parts dispatch it
     const onMint = (e: Event) => {
@@ -846,9 +1001,10 @@ const SigilExplorer: React.FC = () => {
     let onMsg: ((ev: MessageEvent) => void) | undefined;
     if (channel) {
       onMsg = (ev: MessageEvent) => {
-        if (ev.data?.type === "sigil:add" && typeof ev.data.url === "string") {
-          if (addUrl(ev.data.url, true, false)) {
-            setLastAdded(canonicalizeUrl(ev.data.url));
+        const data = ev.data as unknown as { type?: unknown; url?: unknown };
+        if (data?.type === "sigil:add" && typeof data.url === "string") {
+          if (addUrl(data.url, true, false)) {
+            setLastAdded(canonicalizeUrl(data.url));
             refresh();
           }
         }
@@ -856,15 +1012,19 @@ const SigilExplorer: React.FC = () => {
       channel.addEventListener("message", onMsg);
     }
 
-    // (5) Also watch storage updates to the modal’s fallback list
+    // (5) Also watch storage updates to the composer/modal fallback list
     const onStorage = (ev: StorageEvent) => {
       if (ev.key === MODAL_FALLBACK_LS_KEY && ev.newValue) {
         try {
-          const urls: string[] = JSON.parse(ev.newValue);
+          const urls: unknown = JSON.parse(ev.newValue);
+          if (!Array.isArray(urls)) return;
+
           let changed = false;
           for (const u of urls) {
+            if (typeof u !== "string") continue;
             if (addUrl(u, true, false)) changed = true;
           }
+
           if (changed) {
             setLastAdded(undefined);
             persistRegistryToStorage();
@@ -877,13 +1037,12 @@ const SigilExplorer: React.FC = () => {
     };
     window.addEventListener("storage", onStorage);
 
+    refresh();
+
     return () => {
       // restore previous hook (if any)
       if (window.__SIGIL__) window.__SIGIL__.registerSigilUrl = prev;
-      window.removeEventListener(
-        "sigil:url-registered",
-        onUrlRegistered as EventListener,
-      );
+      window.removeEventListener("sigil:url-registered", onUrlRegistered as EventListener);
       window.removeEventListener("sigil:minted", onMint as EventListener);
       window.removeEventListener("storage", onStorage);
       if (channel && onMsg) channel.removeEventListener("message", onMsg);
@@ -891,14 +1050,6 @@ const SigilExplorer: React.FC = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    refresh();
-    return () => {
-      unmounted.current = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastAdded]);
 
   // Handlers
   const handleAdd = (url: string) => {
@@ -912,11 +1063,15 @@ const SigilExplorer: React.FC = () => {
   const handleImport = async (file: File) => {
     try {
       const text = await file.text();
-      const urls = JSON.parse(text) as string[];
+      const urls = JSON.parse(text) as unknown;
+      if (!Array.isArray(urls)) return;
+
       let n = 0;
       for (const u of urls) {
+        if (typeof u !== "string") continue;
         if (addUrl(u, true, false)) n++;
       }
+
       if (n > 0) {
         setLastAdded(undefined);
         persistRegistryToStorage();
@@ -951,11 +1106,7 @@ const SigilExplorer: React.FC = () => {
       />
 
       {/* Scroll viewport so content never gets cut off, even with details open */}
-      <div
-        className="explorer-scroll"
-        role="region"
-        aria-label="Kairos Sigil-Glyph Explorer Content"
-      >
+      <div className="explorer-scroll" role="region" aria-label="Kairos Sigil-Glyph Explorer Content">
         <div className="explorer-inner">
           {forest.length === 0 ? (
             <div className="kx-empty">
@@ -963,10 +1114,7 @@ const SigilExplorer: React.FC = () => {
               <ol>
                 <li>Import your keystream data.</li>
                 <li>Seal a moment — auto-registered here.</li>
-                <li>
-                  Inhale any sigil-glyph or memory URL above — for realignment of
-                  its lineage instantly.
-                </li>
+                <li>Inhale any sigil-glyph or memory URL above — lineage reconstructs instantly.</li>
               </ol>
             </div>
           ) : (

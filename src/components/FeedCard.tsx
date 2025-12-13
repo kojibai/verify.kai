@@ -3,18 +3,48 @@
 
 /**
  * FeedCard — Sigil-Glyph Capsule Renderer
- * v4.3.3 — PROD: Infinite thread context (render previous → previous → … until root)
- *          + Loop-safe (seen keys) + deep cap (THREAD_MAX_DEPTH)
- *          + Prefers previous/parent/replyTo/inReplyTo refs; ignores external links
- *          + FIX: Previous resolver scans *full decoded data* (not just capsule)
- *          + FIX: Ref-key recognition expanded (camelCase + snake_case + *Url variants)
- *          + FIX: Fallback thread stitching via threadKey (threadId/thread_id/deep scan + root-derived)
- *          + FIX: Thread index now notifies + cards subscribe to updates so prev stitches appear live
- *          + FIX: When refs point to thread/root (or low-confidence), stitched previous wins (reply→reply→reply)
- *          FIX: No conditional hooks (rules-of-hooks clean)
+ * v4.5.0 — RELEASE: v27.6 — Remember copies full previous-chain (add=...) so a fresh browser
+ *          repopulates the entire thread context with **zero local cache required**.
+ *
+ * ✅ True infinite-ready threading (URL refs + Content-ID mode)
+ *    - Loop-safe (seen keys) + deep cap (THREAD_MAX_DEPTH)
+ *    - Prefers explicit add= chain, then prevId/skip[1], then URL refs, then thread stitch
+ *
+ * ✅ Decode hardening:
+ *    - Previous resolver scans *full decoded data* (not just capsule)
+ *    - Ref-key recognition expanded (camelCase + snake_case + *Url variants)
+ *
+ * ✅ Content-ID mode:
+ *    - Supports cid:<hex64> + /stream/c/<hex64> + ?id=
+ *    - IndexedDB ContentStore (offline-first): id → payload
+ *    - Auto-cache decoded nodes under contentId (computed or provided)
+ *    - Prev chain can traverse by prevId with constant-size links
+ *
+ * ✅ Thread stitch fallback:
+ *    - threadKey (threadId/thread_id + deep scan + root-derived)
+ *    - Notifications are macrotask-deferred (no cascading “setState in effect” warnings)
+ *
+ * ✅ React correctness:
+ *    - Content-ID loading uses an external store (useSyncExternalStore)
+ *    - No derived contentId setState loops (explicitId memo; computedId async only)
+ *    - InputKind typing hardened (id optional on union) — no TS2339 in deps
+ *    - No conditional hooks (rules-of-hooks clean)
+ *
+ * ✅ v27.6 Remember guarantee:
+ *    - Remember computes share URL at click-time from a chain graph populated by layout effects,
+ *      plus any existing add= chain, then emits root→…→prev as add=...
+ *    - Opening that URL reconstructs the full thread **without** relying on local caches/index.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
+
 import KaiSigil from "../components/KaiSigil";
 import { decodeSigilUrl } from "../utils/sigilDecode";
 import {
@@ -61,19 +91,31 @@ const isNonEmpty = (val: unknown): val is string =>
 const upper = (v: unknown): string => String(v ?? "").toUpperCase();
 
 const TOKEN_HARD_LIMIT_SAFE =
-  typeof TOKEN_HARD_LIMIT === "number" && Number.isFinite(TOKEN_HARD_LIMIT) && TOKEN_HARD_LIMIT > 0
+  typeof TOKEN_HARD_LIMIT === "number" &&
+  Number.isFinite(TOKEN_HARD_LIMIT) &&
+  TOKEN_HARD_LIMIT > 0
     ? TOKEN_HARD_LIMIT
     : 140;
 
+/** Defer notifications to a macrotask (prevents React “setState in effect” cascade warnings). */
+function deferNotify(run: () => void): void {
+  if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
+    window.setTimeout(run, 0);
+    return;
+  }
+  run();
+}
+
 /* ─────────────────────────────────────────────────────────────
-   Decode normalization (ALL url/token forms)
+   Decode normalization (ALL url/token forms) + Content-ID forms
    ───────────────────────────────────────────────────────────── */
 
 type DecodeResult = ReturnType<typeof decodeSigilUrl>;
 type SmartDecode = { decoded: DecodeResult; resolvedUrl: string };
 
 function originFallback(): string {
-  if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
+  if (typeof window !== "undefined" && window.location?.origin)
+    return window.location.origin;
   return "https://kaiklok.com";
 }
 
@@ -125,6 +167,114 @@ function isLikelyToken(s: string): boolean {
   return /^[A-Za-z0-9_-]{16,}$/.test(s);
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Content-ID (constant-size link) support
+   ───────────────────────────────────────────────────────────── */
+
+function isLikelyContentId(s: string): boolean {
+  return /^[0-9a-fA-F]{64}$/.test(s.trim());
+}
+
+function normalizeContentId(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+function makeStreamOpenUrlFromContentId(idRaw: string): string {
+  const base = originFallback().replace(/\/+$/g, "");
+  const id = normalizeContentId(idRaw);
+  return `${base}/stream/c/${encodeURIComponent(id)}`;
+}
+
+function extractContentIdFromPath(pathname: string): string | null {
+  // /stream/c/<id>
+  {
+    const m = pathname.match(/\/stream\/c\/([0-9a-fA-F]{64})(?:\/|$)/);
+    if (m?.[1]) return m[1];
+  }
+  // /c/<id>
+  {
+    const m = pathname.match(/\/c\/([0-9a-fA-F]{64})(?:\/|$)/);
+    if (m?.[1]) return m[1];
+  }
+  return null;
+}
+
+function tryParseUrl(raw: string): URL | null {
+  const t = raw.trim();
+  try {
+    return new URL(t);
+  } catch {
+    try {
+      return new URL(t, originFallback());
+    } catch {
+      return null;
+    }
+  }
+}
+
+/** Extract content-id candidates from a raw URL (also tries nested add= urls once). */
+function extractContentIdCandidates(rawUrl: string, depth = 0): string[] {
+  const out: string[] = [];
+  const push = (v: string | null | undefined) => {
+    if (!v) return;
+    const s = stripEdgePunct(v);
+    if (!s) return;
+
+    // cid:HEX
+    const m = s.match(/^cid:([0-9a-fA-F]{64})$/);
+    if (m?.[1]) {
+      const id = normalizeContentId(m[1]);
+      if (!out.includes(id)) out.push(id);
+      return;
+    }
+
+    if (!isLikelyContentId(s)) return;
+    const id = normalizeContentId(s);
+    if (!out.includes(id)) out.push(id);
+  };
+
+  const raw = stripEdgePunct(rawUrl);
+
+  // bare id support
+  push(raw);
+
+  const u = tryParseUrl(raw);
+  if (!u) return out;
+
+  const hashStr = u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : "";
+  const hash = new URLSearchParams(hashStr);
+  const search = u.searchParams;
+
+  const keys = ["id", "cid", "contentId", "content_id"];
+  for (const k of keys) {
+    push(hash.get(k));
+    push(search.get(k));
+  }
+
+  push(extractContentIdFromPath(u.pathname));
+
+  // nested add= urls (common in reply/share wrappers)
+  if (depth < 1) {
+    const adds = [...search.getAll("add"), ...hash.getAll("add")];
+    for (const a of adds) {
+      const maybeUrl = stripEdgePunct(a);
+      if (!maybeUrl) continue;
+
+      let decoded = maybeUrl;
+      if (/%[0-9A-Fa-f]{2}/.test(decoded)) {
+        try {
+          decoded = decodeURIComponent(decoded);
+        } catch {
+          /* ignore */
+        }
+      }
+      for (const id of extractContentIdCandidates(decoded, depth + 1)) push(id);
+    }
+  }
+
+  return out;
+}
+
 function extractFromPath(pathname: string): string | null {
   // Legacy p-tilde path (allow /p~TOKEN and /p~/TOKEN), including percent-encoded tilde
   {
@@ -142,19 +292,6 @@ function extractFromPath(pathname: string): string | null {
     if (m?.[1]) return m[1];
   }
   return null;
-}
-
-function tryParseUrl(raw: string): URL | null {
-  const t = raw.trim();
-  try {
-    return new URL(t);
-  } catch {
-    try {
-      return new URL(t, originFallback());
-    } catch {
-      return null;
-    }
-  }
 }
 
 /** Extract token candidates from a raw URL (also tries nested add= urls once). */
@@ -218,10 +355,13 @@ function isSPayloadUrl(raw: string): boolean {
   return /^\/s(?:\/|$)/.test(path);
 }
 
-/** Normalize any non-/s URL into /stream/p/<token> when possible (supports nested add=). */
+/** Normalize any non-/s URL into /stream/(c|p)/... when possible. */
 function normalizeResolvedUrlForBrowser(rawUrl: string): string {
   const raw = stripEdgePunct(rawUrl);
   if (isSPayloadUrl(raw)) return raw;
+
+  const cid = extractContentIdCandidates(raw)[0];
+  if (cid) return makeStreamOpenUrlFromContentId(cid);
 
   const tok = extractTokenCandidates(raw)[0];
   return tok ? makeStreamOpenUrlFromToken(tok) : raw;
@@ -271,7 +411,284 @@ function decodeSigilUrlSmart(rawUrl: string): SmartDecode {
     }
   }
 
-  return { decoded: decodeSigilUrl(rawTrim), resolvedUrl: normalizeResolvedUrlForBrowser(rawTrim) };
+  return {
+    decoded: decodeSigilUrl(rawTrim),
+    resolvedUrl: normalizeResolvedUrlForBrowser(rawTrim),
+  };
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Offline-first ContentStore (IndexedDB): id → payload
+   ───────────────────────────────────────────────────────────── */
+
+const CONTENT_DB_NAME = "kai_content_store_v1";
+const CONTENT_STORE = "content";
+const CONTENT_DB_VERSION = 1;
+
+type ContentRow = { id: string; payload: unknown; savedAt: number };
+
+let CONTENT_DB_PROMISE: Promise<IDBDatabase> | null = null;
+
+function openContentDb(): Promise<IDBDatabase> {
+  if (CONTENT_DB_PROMISE) return CONTENT_DB_PROMISE;
+
+  CONTENT_DB_PROMISE = new Promise<IDBDatabase>((resolve, reject) => {
+    if (typeof window === "undefined" || typeof window.indexedDB === "undefined") {
+      reject(new Error("IndexedDB unavailable"));
+      return;
+    }
+
+    const req = window.indexedDB.open(CONTENT_DB_NAME, CONTENT_DB_VERSION);
+
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(CONTENT_STORE)) {
+        const store = db.createObjectStore(CONTENT_STORE, { keyPath: "id" });
+        store.createIndex("savedAt", "savedAt", { unique: false });
+      }
+    };
+
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error ?? new Error("IndexedDB open failed"));
+  });
+
+  return CONTENT_DB_PROMISE;
+}
+
+function idbGetContent(idRaw: string): Promise<unknown | null> {
+  const id = normalizeContentId(idRaw);
+  return openContentDb()
+    .then(
+      (db) =>
+        new Promise<unknown | null>((resolve, reject) => {
+          const tx = db.transaction(CONTENT_STORE, "readonly");
+          const store = tx.objectStore(CONTENT_STORE);
+          const req = store.get(id);
+
+          req.onsuccess = () => {
+            const row = req.result as ContentRow | undefined;
+            resolve(row?.payload ?? null);
+          };
+          req.onerror = () => reject(req.error ?? new Error("IndexedDB get failed"));
+        }),
+    )
+    .catch(() => null);
+}
+
+function idbPutContent(idRaw: string, payload: unknown): Promise<void> {
+  const id = normalizeContentId(idRaw);
+  return openContentDb()
+    .then(
+      (db) =>
+        new Promise<void>((resolve, reject) => {
+          const tx = db.transaction(CONTENT_STORE, "readwrite");
+          const store = tx.objectStore(CONTENT_STORE);
+          const row: ContentRow = { id, payload, savedAt: Date.now() };
+          const req = store.put(row);
+
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(req.error ?? new Error("IndexedDB put failed"));
+        }),
+    )
+    .catch(() => undefined);
+}
+
+async function fetchContentById(idRaw: string): Promise<unknown | null> {
+  const id = normalizeContentId(idRaw);
+  if (typeof window === "undefined") return null;
+
+  const base = originFallback().replace(/\/+$/g, "");
+  const candidates: string[] = [
+    `${base}/content/${id}`,
+    `${base}/keystream/content/${id}`,
+    `${base}/api/content/${id}`,
+    `${base}/content?id=${encodeURIComponent(id)}`,
+    `${base}/keystream/content?id=${encodeURIComponent(id)}`,
+    `${base}/api/content?id=${encodeURIComponent(id)}`,
+  ];
+
+  for (const href of candidates) {
+    try {
+      const res = await fetch(href, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+      if (!res.ok) continue;
+      const json: unknown = await res.json();
+      return json;
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return null;
+}
+
+async function getOrFetchContentById(idRaw: string): Promise<unknown | null> {
+  const id = normalizeContentId(idRaw);
+
+  const local = await idbGetContent(id);
+  if (local) return local;
+
+  const remote = await fetchContentById(id);
+  if (remote) {
+    void idbPutContent(id, remote);
+    return remote;
+  }
+
+  return null;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Content load external store (removes sync setState-from-effect)
+   ───────────────────────────────────────────────────────────── */
+
+type ContentState =
+  | { status: "idle"; payload: null }
+  | { status: "loading"; payload: null }
+  | { status: "ok"; payload: unknown }
+  | { status: "error"; payload: null; error: string };
+
+const CONTENT_STATE: Map<string, ContentState> = new Map();
+const CONTENT_STATE_VERSION: Map<string, number> = new Map();
+const CONTENT_STATE_LISTENERS: Set<(id: string) => void> = new Set();
+const CONTENT_INFLIGHT: Map<string, Promise<void>> = new Map();
+
+function contentStateGet(idRaw: string): ContentState {
+  const id = normalizeContentId(idRaw);
+  return CONTENT_STATE.get(id) ?? { status: "idle", payload: null };
+}
+
+function contentStateSame(a: ContentState, b: ContentState): boolean {
+  if (a.status !== b.status) return false;
+  if (a.status === "ok" && b.status === "ok") return a.payload === b.payload;
+  if (a.status === "error" && b.status === "error") return a.error === b.error;
+  return true;
+}
+
+function notifyContentStateChanged(idRaw: string): void {
+  const id = normalizeContentId(idRaw);
+  const listeners = Array.from(CONTENT_STATE_LISTENERS);
+  deferNotify(() => {
+    for (const fn of listeners) {
+      try {
+        fn(id);
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+}
+
+function contentStateSet(idRaw: string, next: ContentState): void {
+  const id = normalizeContentId(idRaw);
+  const prev = CONTENT_STATE.get(id) ?? { status: "idle", payload: null };
+
+  if (contentStateSame(prev, next)) return;
+
+  CONTENT_STATE.set(id, next);
+  const v = (CONTENT_STATE_VERSION.get(id) ?? 0) + 1;
+  CONTENT_STATE_VERSION.set(id, v);
+
+  notifyContentStateChanged(id);
+}
+
+function subscribeContentState(listener: (id: string) => void): () => void {
+  CONTENT_STATE_LISTENERS.add(listener);
+  return () => {
+    CONTENT_STATE_LISTENERS.delete(listener);
+  };
+}
+
+function ensureContentLoaded(idRaw: string): void {
+  const id = normalizeContentId(idRaw);
+  if (!isLikelyContentId(id)) return;
+
+  const cur = contentStateGet(id);
+  if (cur.status === "ok" || cur.status === "loading") return;
+
+  const inflight = CONTENT_INFLIGHT.get(id);
+  if (inflight) return;
+
+  contentStateSet(id, { status: "loading", payload: null });
+
+  const p = (async () => {
+    const payload = await getOrFetchContentById(id);
+    if (!payload) {
+      contentStateSet(id, {
+        status: "error",
+        payload: null,
+        error: "Content not found (id → payload).",
+      });
+      return;
+    }
+    contentStateSet(id, { status: "ok", payload });
+  })()
+    .catch(() => {
+      contentStateSet(id, {
+        status: "error",
+        payload: null,
+        error: "Content load failed.",
+      });
+    })
+    .finally(() => {
+      CONTENT_INFLIGHT.delete(id);
+    });
+
+  CONTENT_INFLIGHT.set(id, p);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Canonical SHA256 (for transitional auto-contentId)
+   ───────────────────────────────────────────────────────────── */
+
+function deepSortForJson(v: unknown): unknown {
+  if (v === null) return null;
+
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string" || typeof v === "boolean") return v;
+
+  if (typeof v === "bigint") return v.toString();
+
+  if (Array.isArray(v)) return v.map(deepSortForJson);
+
+  if (v && typeof v === "object") {
+    const rec = v as Record<string, unknown>;
+    const keys = Object.keys(rec).sort((a, b) => a.localeCompare(b));
+    const out: Record<string, unknown> = {};
+    for (const k of keys) out[k] = deepSortForJson(rec[k]);
+    return out;
+  }
+
+  return null;
+}
+
+async function sha256HexFromString(s: string): Promise<string | null> {
+  try {
+    if (typeof window === "undefined") return null;
+    const c = window.crypto;
+    if (!c || !c.subtle) return null;
+
+    const enc = new TextEncoder();
+    const data = enc.encode(s);
+    const hash = await c.subtle.digest("SHA-256", data);
+    const bytes = new Uint8Array(hash);
+
+    let out = "";
+    for (let i = 0; i < bytes.length; i++) {
+      const b = bytes[i];
+      out += (b < 16 ? "0" : "") + b.toString(16);
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+async function computeContentIdFromPayload(payload: unknown): Promise<string | null> {
+  const canon = JSON.stringify(deepSortForJson(payload));
+  return sha256HexFromString(canon);
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -410,26 +827,36 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 
 type RefScore = 0 | 1 | 2 | 3 | 8 | 9 | 10;
 
-const normalizeRefKey = (k: string): string => k.trim().toLowerCase().replace(/[_-]/g, "");
+const normalizeRefKey = (k: string): string =>
+  k.trim().toLowerCase().replace(/[_-]/g, "");
 
 const REF_KEYS_SET = new Set<string>([
   "prev",
   "previous",
+  "previd",
+  "previousid",
   "prevurl",
   "previousurl",
   "parent",
+  "parentid",
   "parenturl",
   "inreplyto",
+  "inreplytoid",
   "inreplytourl",
   "replyto",
+  "replytoid",
   "replytourl",
   "reply",
+  "replyid",
   "replyurl",
   "thread",
+  "threadid",
   "threadurl",
   "root",
+  "rootid",
   "rooturl",
   "ref",
+  "refid",
   "refurl",
 ]);
 
@@ -440,8 +867,13 @@ function isRefKey(k: string): boolean {
 function scoreRefKey(k: string): RefScore {
   const key = normalizeRefKey(k);
 
+  if (key === "previd" || key === "previousid") return 0;
   if (key === "prev" || key === "previous" || key === "prevurl" || key === "previousurl") return 0;
+
+  if (key === "parentid") return 1;
   if (key === "parent" || key === "parenturl") return 1;
+
+  if (key === "inreplytoid" || key === "replytoid") return 2;
   if (
     key === "inreplyto" ||
     key === "inreplytourl" ||
@@ -449,9 +881,18 @@ function scoreRefKey(k: string): RefScore {
     key === "replytourl"
   )
     return 2;
+
+  if (key === "replyid") return 3;
   if (key === "reply" || key === "replyurl") return 3;
+
+  if (key === "threadid") return 8;
   if (key === "thread" || key === "threadurl") return 8;
+
+  if (key === "rootid") return 9;
   if (key === "root" || key === "rooturl") return 9;
+
+  if (key === "refid") return 10;
+  if (key === "ref" || key === "refurl") return 10;
 
   return 10;
 }
@@ -465,6 +906,10 @@ const REF_VALUE_KEYS: readonly string[] = [
   "token",
   "t",
   "p",
+  "id",
+  "cid",
+  "contentId",
+  "content_id",
 ] as const;
 
 function isInternalHost(host: string): boolean {
@@ -480,12 +925,20 @@ function resolveThreadUrlCandidate(raw: string): string | null {
   const s = stripEdgePunct(raw);
   if (!s) return null;
 
-  // /s/... payload: keep untouched ONLY if same-origin; otherwise fall through to token extraction
+  // cid:...
+  const m = s.match(/^cid:([0-9a-fA-F]{64})$/);
+  if (m?.[1]) return makeStreamOpenUrlFromContentId(m[1]);
+
+  // /s/... payload: keep untouched ONLY if same-origin; otherwise fall through to token/id extraction
   if (isSPayloadUrl(s)) {
     const u = tryParseUrl(s);
     if (u && isInternalHost(u.host)) return u.toString();
-    // else: continue, try extracting token below
+    // else: continue, try extracting id/token below
   }
+
+  // content-id anywhere → internal stream open
+  const cid = extractContentIdCandidates(s)[0];
+  if (cid) return makeStreamOpenUrlFromContentId(cid);
 
   // token anywhere → internal stream open
   const tok = extractTokenCandidates(s)[0];
@@ -497,7 +950,7 @@ function resolveThreadUrlCandidate(raw: string): string | null {
   if (!isInternalHost(u.host)) return null;
 
   const p = u.pathname || "";
-  if (/^\/(stream|p)(\/|$)/.test(p) || /^\/p~/.test(p)) {
+  if (/^\/(stream|p|c)(\/|$)/.test(p) || /^\/p~/.test(p)) {
     return normalizeResolvedUrlForBrowser(u.toString());
   }
 
@@ -505,9 +958,184 @@ function resolveThreadUrlCandidate(raw: string): string | null {
 }
 
 function threadSeenKey(rawUrl: string): string {
+  const cid = extractContentIdCandidates(rawUrl)[0];
+  if (cid) return `cid:${normalizeContentId(cid)}`;
+
   const tok = extractTokenCandidates(rawUrl)[0];
   if (tok) return `t:${normalizeToken(tok)}`;
+
   return `u:${normalizeResolvedUrlForBrowser(rawUrl)}`;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Remember chain graph (full prev-chain → add=... URL)
+   ───────────────────────────────────────────────────────────── */
+
+const REMEMBER_CHAIN_MAX_ITEMS = 256;
+const REMEMBER_CHAIN_MAX_URL_CHARS = 6500;
+const CHAIN_GRAPH_MAX_NODES = 4096;
+
+type ChainEdge = {
+  key: string; // canonical key (cid:/t:/u:)
+  selfRef: string; // compact ref to represent THIS node in add= (id/token/url)
+  prevKey: string | null; // canonical-ish (may be raw, canonicalized on read)
+  savedAt: number;
+};
+
+const CHAIN_GRAPH: Map<string, ChainEdge> = new Map();
+const CHAIN_ALIAS: Map<string, string> = new Map();
+
+function canonicalChainKey(rawKey: string): string {
+  let k = rawKey;
+  for (let i = 0; i < 6; i++) {
+    const next = CHAIN_ALIAS.get(k);
+    if (!next || next === k) break;
+    k = next;
+  }
+  return k;
+}
+
+function setChainAlias(aliasKeyRaw: string, canonicalKeyRaw: string): void {
+  const aliasKey = aliasKeyRaw.trim();
+  const canonicalKey = canonicalKeyRaw.trim();
+  if (!aliasKey || !canonicalKey) return;
+  if (aliasKey === canonicalKey) return;
+  CHAIN_ALIAS.set(aliasKey, canonicalKey);
+}
+
+/** Prefer bare contentId, else bare token, else normalized url for compact add= refs. */
+function encodeChainRef(raw: string): string {
+  const cid = extractContentIdCandidates(raw)[0];
+  if (cid) return normalizeContentId(cid);
+
+  const tok = extractTokenCandidates(raw)[0];
+  if (tok) return normalizeToken(tok);
+
+  return normalizeResolvedUrlForBrowser(raw);
+}
+
+function chainGraphUpsert(
+  canonicalKeyRaw: string,
+  selfRefRaw: string,
+  prevUrlRaw: string | null,
+  aliasKeys: readonly string[],
+): void {
+  const canonicalKey = canonicalChainKey(canonicalKeyRaw);
+  if (!canonicalKey) return;
+
+  // Bind aliases → canonical (so token-key can resolve to cid-key later)
+  for (const ak of aliasKeys) setChainAlias(ak, canonicalKey);
+
+  const prevKey =
+    prevUrlRaw && isNonEmpty(prevUrlRaw)
+      ? canonicalChainKey(threadSeenKey(prevUrlRaw))
+      : null;
+
+  const next: ChainEdge = {
+    key: canonicalKey,
+    selfRef: selfRefRaw,
+    prevKey,
+    savedAt: Date.now(),
+  };
+
+  const prev = CHAIN_GRAPH.get(canonicalKey);
+  if (prev && prev.selfRef === next.selfRef && prev.prevKey === next.prevKey) return;
+
+  CHAIN_GRAPH.set(canonicalKey, next);
+
+  // Evict oldest (in insertion order) if over cap
+  while (CHAIN_GRAPH.size > CHAIN_GRAPH_MAX_NODES) {
+    const oldest = CHAIN_GRAPH.keys().next().value as string | undefined;
+    if (!oldest) break;
+    CHAIN_GRAPH.delete(oldest);
+  }
+}
+
+function buildPrevChainAddsFromGraph(selfKeyRaw: string, limit: number): string[] {
+  const adds: string[] = [];
+  const seen = new Set<string>();
+
+  const startKey = canonicalChainKey(selfKeyRaw);
+  const edge = CHAIN_GRAPH.get(startKey);
+  let prevKey = edge?.prevKey ?? null;
+
+  let steps = 0;
+  while (prevKey && steps < limit) {
+    const pk = canonicalChainKey(prevKey);
+    if (!pk || seen.has(pk)) break;
+    seen.add(pk);
+
+    const e = CHAIN_GRAPH.get(pk);
+    if (!e) break;
+
+    adds.push(e.selfRef);
+    prevKey = e.prevKey;
+    steps++;
+  }
+
+  adds.reverse(); // root → … → immediate prev
+  return adds;
+}
+
+function buildRememberUrlWithAdds(baseUrlRaw: string, adds: readonly string[]): string {
+  const base = normalizeResolvedUrlForBrowser(baseUrlRaw);
+  if (!adds.length) return base;
+
+  const u0 = tryParseUrl(base);
+  if (!u0) return base;
+
+  const baseSearch = new URLSearchParams(u0.searchParams);
+  baseSearch.delete("add");
+
+  const baseHashStr = u0.hash && u0.hash.startsWith("#") ? u0.hash.slice(1) : "";
+  const baseHash = new URLSearchParams(baseHashStr);
+  baseHash.delete("add");
+
+  // If the base already uses hash params (e.g. /stream#t=...), keep the chain in hash.
+  const useHashForAdds = baseHashStr.length > 0;
+
+  // Drop oldest adds until under URL length cap (keeps immediate context if needed)
+  for (let cut = 0; cut <= adds.length; cut++) {
+    const slice = adds.slice(cut);
+
+    const u = new URL(u0.toString());
+
+    if (useHashForAdds) {
+      const hp = new URLSearchParams(baseHash);
+      for (const a of slice) hp.append("add", a);
+      u.hash = hp.toString() ? `#${hp.toString()}` : "";
+      u.search = baseSearch.toString() ? `?${baseSearch.toString()}` : "";
+    } else {
+      const sp = new URLSearchParams(baseSearch);
+      for (const a of slice) sp.append("add", a);
+      u.search = sp.toString() ? `?${sp.toString()}` : "";
+      u.hash = baseHash.toString() ? `#${baseHash.toString()}` : "";
+    }
+
+    const out = u.toString();
+    if (out.length <= REMEMBER_CHAIN_MAX_URL_CHARS || slice.length === 0) return out;
+  }
+
+  return base;
+}
+
+function dedupAddsPreserveOrder(list: readonly string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const it of list) {
+    const s = String(it ?? "").trim();
+    if (!s) continue;
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
+function chooseAddsLongest(a: readonly string[], b: readonly string[]): string[] {
+  const aa = dedupAddsPreserveOrder(a);
+  const bb = dedupAddsPreserveOrder(b);
+  return aa.length >= bb.length ? aa : bb;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -521,6 +1149,7 @@ const THREAD_INDEX_MAX_ITEMS_PER_THREAD = 96;
 
 // In-memory (session)
 const THREAD_INDEX: Map<string, ThreadIndexItem[]> = new Map();
+const THREAD_INDEX_VERSION: Map<string, number> = new Map();
 
 // Light persistence (best effort)
 const THREAD_INDEX_LS_KEY = "kai_thread_index_v1";
@@ -599,13 +1228,17 @@ type ThreadIndexListener = (threadId: string) => void;
 const THREAD_INDEX_LISTENERS: Set<ThreadIndexListener> = new Set();
 
 function notifyThreadIndexChanged(threadId: string): void {
-  for (const fn of THREAD_INDEX_LISTENERS) {
-    try {
-      fn(threadId);
-    } catch {
-      /* ignore */
+  // ✅ Macrotask defer eliminates “setState synchronously within an effect” warnings.
+  const listeners = Array.from(THREAD_INDEX_LISTENERS);
+  deferNotify(() => {
+    for (const fn of listeners) {
+      try {
+        fn(threadId);
+      } catch {
+        /* ignore */
+      }
     }
-  }
+  });
 }
 
 function subscribeThreadIndex(listener: ThreadIndexListener): () => void {
@@ -666,6 +1299,10 @@ function threadIndexAdd(threadIdRaw: string, item: ThreadIndexItem): void {
 
   THREAD_INDEX.set(threadId, capped);
 
+  // ✅ bump version exactly once
+  const nextVer = (THREAD_INDEX_VERSION.get(threadId) ?? 0) + 1;
+  THREAD_INDEX_VERSION.set(threadId, nextVer);
+
   // Evict oldest threads if needed
   while (THREAD_INDEX.size > THREAD_INDEX_MAX_THREADS) {
     const oldest = THREAD_INDEX.keys().next().value as string | undefined;
@@ -721,12 +1358,7 @@ function readThreadIdLoose(v: unknown): string | undefined {
   if (!isRecord(v)) return undefined;
 
   const cand =
-    (v.threadId ??
-      v.thread_id ??
-      v.threadID ??
-      v.thread ??
-      v.thread_id ??
-      undefined) as unknown;
+    (v.threadId ?? v.thread_id ?? v.threadID ?? v.thread ?? undefined) as unknown;
 
   if (typeof cand === "string") {
     const t = cand.trim();
@@ -773,7 +1405,96 @@ function extractThreadAnchorUrlFromAny(root: unknown): string | null {
   return cands[0]?.url ?? null;
 }
 
+/* ─────────────────────────────────────────────────────────────
+   PrevId / RootId / Skip extraction (constant-size threading)
+   ───────────────────────────────────────────────────────────── */
+
+type SkipMap = Record<number, string>;
+
+function parseSkipMap(v: unknown): SkipMap | null {
+  if (!isRecord(v)) return null;
+  const out: SkipMap = {};
+  for (const [k, val] of Object.entries(v)) {
+    const n = Number(k);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    if (typeof val !== "string") continue;
+    const id = val.trim();
+    if (!isLikelyContentId(id)) continue;
+    out[Math.floor(n)] = normalizeContentId(id);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function extractIdLinksFromAny(root: unknown): {
+  id?: string;
+  prevId?: string;
+  rootId?: string;
+  height?: number;
+  skip?: SkipMap;
+} {
+  let id: string | undefined;
+  let prevId: string | undefined;
+  let rootId: string | undefined;
+  let height: number | undefined;
+  let skip: SkipMap | undefined;
+
+  const scan = (v: unknown, depth = 0) => {
+    if (depth > 7) return;
+    if (Array.isArray(v)) {
+      for (const it of v) scan(it, depth + 1);
+      return;
+    }
+    if (!isRecord(v)) return;
+
+    for (const [k, val] of Object.entries(v)) {
+      const nk = normalizeRefKey(k);
+
+      if (!id && (nk === "id" || nk === "contentid" || nk === "cid") && typeof val === "string") {
+        const t = val.trim();
+        if (isLikelyContentId(t)) id = normalizeContentId(t);
+      }
+
+      if (!prevId && (nk === "previd" || nk === "previousid") && typeof val === "string") {
+        const t = val.trim();
+        if (isLikelyContentId(t)) prevId = normalizeContentId(t);
+      }
+
+      if (!rootId && nk === "rootid" && typeof val === "string") {
+        const t = val.trim();
+        if (isLikelyContentId(t)) rootId = normalizeContentId(t);
+      }
+
+      if (
+        typeof height !== "number" &&
+        nk === "height" &&
+        typeof val === "number" &&
+        Number.isFinite(val)
+      ) {
+        height = Math.max(0, Math.floor(val));
+      }
+
+      if (!skip && nk === "skip") {
+        const m = parseSkipMap(val);
+        if (m) skip = m;
+      }
+
+      scan(val, depth + 1);
+    }
+  };
+
+  scan(root, 0);
+
+  // if prevId missing but skip[1] exists, treat it as prevId
+  if (!prevId && skip && typeof skip[1] === "string") prevId = skip[1];
+
+  return { id, prevId, rootId, height, skip };
+}
+
 function extractThreadKeyFromDecoded(decodedData: unknown, capsule: Capsule | null): string | undefined {
+  // 0) if explicit rootId exists, use it as constant-size thread key
+  const ids = extractIdLinksFromAny(decodedData);
+  if (ids.rootId) return `rootid:${normalizeContentId(ids.rootId)}`;
+
   // 1) direct payload fields (message/post/share/reaction + capsule)
   if (capsule) {
     const tMsg = readThreadIdLoose((capsule as Capsule).message as unknown);
@@ -905,8 +1626,6 @@ function extractPreviousUrlFromAnyDetailed(root: unknown): PrevExtract | null {
   return best ? { url: best.url, score: best.score } : null;
 }
 
-
-
 /* ─────────────────────────────────────────────────────────────
    Manual marker → Proof of Memory™
    ───────────────────────────────────────────────────────────── */
@@ -1024,6 +1743,93 @@ type ThreadProps = {
   addIndex?: number;
 };
 
+type InputKind =
+  | { kind: "contentId"; id: string; openUrl: string }
+  | { kind: "sigilUrl"; openUrl: string; id?: undefined }; // ✅ id exists on union (optional)
+
+function parseInputKind(rawUrl: string): InputKind {
+  const raw = stripEdgePunct(rawUrl);
+
+  // cid:HEX
+  const m = raw.match(/^cid:([0-9a-fA-F]{64})$/);
+  if (m?.[1]) {
+    const id = normalizeContentId(m[1]);
+    return { kind: "contentId", id, openUrl: makeStreamOpenUrlFromContentId(id) };
+  }
+
+  // URL/path/query forms with id
+  const cid = extractContentIdCandidates(raw)[0];
+  if (cid) {
+    const id = normalizeContentId(cid);
+    return { kind: "contentId", id, openUrl: makeStreamOpenUrlFromContentId(id) };
+  }
+
+  // otherwise token/url mode
+  return { kind: "sigilUrl", openUrl: normalizeResolvedUrlForBrowser(raw) };
+}
+
+type ResolvedNodeOk = {
+  ok: true;
+  openUrl: string;
+  dataRaw: unknown; // original object used for scans/badges
+  storePayload: unknown; // what we cache under contentId
+  pulse: number;
+  appId?: string;
+  userId?: unknown;
+  capsule: Capsule;
+};
+
+type ResolvedNodeErr = { ok: false; openUrl: string; error: string };
+
+type ResolvedNode = ResolvedNodeOk | ResolvedNodeErr;
+
+function readCapsuleLoose(v: unknown): Capsule | null {
+  // Prefer envelope.capsule
+  if (isRecord(v) && isRecord(v.capsule)) return v.capsule as unknown as Capsule;
+
+  // If it already looks like a Capsule (post/message/share/reaction/sigilId/etc)
+  if (isRecord(v) && ("post" in v || "message" in v || "share" in v || "reaction" in v)) {
+    return v as unknown as Capsule;
+  }
+
+  // Sometimes payloads nest under `data`
+  if (isRecord(v) && isRecord(v.data)) {
+    const d = v.data;
+    if (isRecord(d.capsule)) return d.capsule as unknown as Capsule;
+    if ("post" in d || "message" in d || "share" in d || "reaction" in d)
+      return d as unknown as Capsule;
+  }
+
+  return null;
+}
+
+function readPulseLoose(v: unknown): number {
+  if (isRecord(v) && typeof v.pulse === "number" && Number.isFinite(v.pulse)) return v.pulse;
+  if (
+    isRecord(v) &&
+    isRecord(v.data) &&
+    typeof v.data.pulse === "number" &&
+    Number.isFinite(v.data.pulse)
+  )
+    return v.data.pulse;
+  return 0;
+}
+
+function readAppIdLoose(v: unknown): string | undefined {
+  const a = isRecord(v) ? v.appId : undefined;
+  if (typeof a === "string" && a.trim()) return a;
+  const d = isRecord(v) && isRecord(v.data) ? v.data.appId : undefined;
+  if (typeof d === "string" && d.trim()) return d;
+  return undefined;
+}
+
+function readUserIdLoose(v: unknown): unknown {
+  const u = isRecord(v) ? v.userId : undefined;
+  if (typeof u !== "undefined") return u;
+  const d = isRecord(v) && isRecord(v.data) ? v.data.userId : undefined;
+  return d;
+}
+
 const FeedCardThread: React.FC<ThreadProps> = ({
   url,
   depth = 0,
@@ -1033,55 +1839,204 @@ const FeedCardThread: React.FC<ThreadProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
 
-  // ✅ tick to re-evaluate thread stitching when thread index changes
-  const [threadTick, setThreadTick] = useState(0);
+  // ✅ Input mode (token/url vs contentId)
+  const input = useMemo(() => parseInputKind(url), [url]);
 
-  // ✅ Smart decode
+  // ✅ Sigil decode (always computed, safe even if not used)
   const smart = useMemo(() => decodeSigilUrlSmart(url), [url]);
-  const decoded = smart.decoded;
 
-  // ✅ Single canonical URL for UI + copy (hard normalized)
-  const rememberUrl = useMemo(
-    () => normalizeResolvedUrlForBrowser(smart.resolvedUrl || url),
-    [smart.resolvedUrl, url],
+  // ✅ Content store subscription (no sync setState in effects)
+  const contentIdKey = input.kind === "contentId" && input.id ? normalizeContentId(input.id) : "";
+
+  const contentVersion = useSyncExternalStore(
+    (onStoreChange) => {
+      if (!contentIdKey) return () => {};
+      return subscribeContentState((changedId) => {
+        if (changedId === contentIdKey) onStoreChange();
+      });
+    },
+    () => (contentIdKey ? (CONTENT_STATE_VERSION.get(contentIdKey) ?? 0) : 0),
+    () => 0,
   );
 
-  const selfKey = useMemo(() => threadSeenKey(rememberUrl), [rememberUrl]);
+  // Ensure content load when entering contentId mode (effect has NO setState)
+  useEffect(() => {
+    if (!contentIdKey) return;
+    ensureContentLoaded(contentIdKey);
+  }, [contentIdKey]);
+
+  const contentState = useMemo<ContentState>(() => {
+    if (!contentIdKey) return { status: "idle", payload: null };
+    // contentVersion exists solely to re-run this memo when the store updates
+    void contentVersion;
+    return contentStateGet(contentIdKey);
+  }, [contentIdKey, contentVersion]);
+
+  // ✅ Build unified node (no conditional hooks; all branches inside memo)
+  const node: ResolvedNode = useMemo(() => {
+    if (input.kind === "contentId" && input.id) {
+      const openUrl = input.openUrl;
+
+      if (contentState.status === "loading" || contentState.status === "idle") {
+        return { ok: false, openUrl, error: "Loading content…" };
+      }
+      if (contentState.status === "error") {
+        return { ok: false, openUrl, error: contentState.error };
+      }
+
+      const payload = contentState.payload;
+      const capsule = readCapsuleLoose(payload);
+      if (!capsule) return { ok: false, openUrl, error: "Invalid content payload (missing capsule)." };
+
+      const pulse = readPulseLoose(payload);
+      const appId = readAppIdLoose(payload);
+      const userId = readUserIdLoose(payload);
+
+      return {
+        ok: true,
+        openUrl,
+        dataRaw: payload,
+        storePayload: payload,
+        pulse,
+        appId,
+        userId,
+        capsule,
+      };
+    }
+
+    // token/url mode
+    const decoded = smart.decoded;
+    const openUrl = normalizeResolvedUrlForBrowser(smart.resolvedUrl || url);
+
+    if (!decoded.ok) {
+      return {
+        ok: false,
+        openUrl,
+        error:
+          ("error" in decoded ? (decoded as { error?: string }).error : undefined) ??
+          "Decode failed.",
+      };
+    }
+
+    const data = decoded.data as unknown;
+    const capsule = (decoded.data as { capsule: Capsule }).capsule;
+
+    const pulse =
+      typeof (decoded.data as { pulse?: unknown }).pulse === "number" &&
+      Number.isFinite((decoded.data as { pulse?: unknown }).pulse)
+        ? (decoded.data as { pulse: number }).pulse
+        : 0;
+
+    const appId =
+      typeof (decoded.data as { appId?: unknown }).appId === "string" &&
+      (decoded.data as { appId?: string }).appId
+        ? (decoded.data as { appId: string }).appId
+        : undefined;
+
+    const userId = (decoded.data as { userId?: unknown }).userId;
+
+    return {
+      ok: true,
+      openUrl,
+      dataRaw: data,
+      storePayload: decoded.data,
+      pulse,
+      appId,
+      userId,
+      capsule,
+    };
+  }, [input.kind, input.id, input.openUrl, url, smart.decoded, smart.resolvedUrl, contentState]);
+
+  // Helpful stable projections for deps (avoid touching ok-only props on union in deps)
+  const nodeOk = node.ok;
+  const nodeDataRaw: unknown | null = nodeOk ? node.dataRaw : null;
+  const nodeCapsule: Capsule | null = nodeOk ? node.capsule : null;
+  const nodeStorePayload: unknown | null = nodeOk ? node.storePayload : null;
+  const nodePulse: number = nodeOk && Number.isFinite(node.pulse) ? node.pulse : 0;
+
+  // Derive id-links (prevId/rootId/skip/id)
+  const idLinks = useMemo(
+    () => (nodeOk && nodeDataRaw ? extractIdLinksFromAny(nodeDataRaw) : null),
+    [nodeOk, nodeDataRaw],
+  );
+
+  // ✅ Explicit contentId (derived, no setState)
+  const explicitContentId = useMemo(() => {
+    if (input.kind === "contentId" && input.id && isLikelyContentId(input.id))
+      return normalizeContentId(input.id);
+    const id = idLinks?.id;
+    return id && isLikelyContentId(id) ? normalizeContentId(id) : undefined;
+  }, [input.kind, input.id, idLinks?.id]);
+
+  // ✅ Computed contentId (async only)
+  const [computedContentId, setComputedContentId] = useState<string | undefined>(undefined);
+
+  // Cache node payload under explicit id immediately; otherwise compute id once and cache
+  useEffect(() => {
+    let alive = true;
+    if (!nodeOk || !nodeStorePayload || !nodeCapsule) return;
+
+    if (explicitContentId && isLikelyContentId(explicitContentId)) {
+      void idbPutContent(explicitContentId, nodeStorePayload);
+      return;
+    }
+
+    void (async () => {
+      const computed = await computeContentIdFromPayload(nodeCapsule as unknown);
+      if (!alive) return;
+      if (!computed || !isLikelyContentId(computed)) return;
+
+      const norm = normalizeContentId(computed);
+      setComputedContentId((prev) => (prev === norm ? prev : norm));
+      void idbPutContent(norm, nodeStorePayload);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [nodeOk, nodeStorePayload, nodeCapsule, explicitContentId]);
+
+  const contentId = explicitContentId ?? computedContentId;
+
+  // ✅ For copy base: prefer constant-size /stream/c/<contentId> when we have one
+  const copyBaseUrl = useMemo(() => {
+    if (contentId && isLikelyContentId(contentId)) return makeStreamOpenUrlFromContentId(contentId);
+    return node.openUrl;
+  }, [contentId, node.openUrl]);
+
+  const rememberUrl = node.openUrl;
+
+  const selfKey = useMemo(() => threadSeenKey(copyBaseUrl), [copyBaseUrl]);
   const nextSeen = useMemo(() => [...seen, selfKey], [seen, selfKey]);
-
-  // ✅ MUST be above any early return (rules-of-hooks)
-  const decodedData = decoded.ok ? decoded.data : null;
-  const capsuleOrNull: Capsule | null = decoded.ok ? decoded.data.capsule : null;
-
-  // ✅ Stable pulse value used by hooks (no touching decoded.data inside deps)
-  const pulseSafe = decoded.ok
-    ? typeof decoded.data.pulse === "number" && Number.isFinite(decoded.data.pulse)
-      ? decoded.data.pulse
-      : 0
-    : 0;
 
   // ✅ Thread key: supports message/post threadId, snake_case, deep scan, root-derived fallback
   const threadKey = useMemo(() => {
-    if (!decoded.ok) return undefined;
-    return extractThreadKeyFromDecoded(decodedData, capsuleOrNull);
-  }, [decoded.ok, decodedData, capsuleOrNull]);
+    if (!nodeOk || !nodeDataRaw || !nodeCapsule) return undefined;
+    return extractThreadKeyFromDecoded(nodeDataRaw, nodeCapsule);
+  }, [nodeOk, nodeDataRaw, nodeCapsule]);
 
-  // Subscribe to index updates for THIS threadKey so prev stitches appear immediately
-  useEffect(() => {
-    if (!threadKey) return;
-    return subscribeThreadIndex((changedId) => {
-      if (changedId !== threadKey) return;
-      setThreadTick((x) => x + 1);
-    });
-  }, [threadKey]);
+  // ✅ IMPORTANT: threadVersion MUST exist before any memo depends on it (no TDZ)
+  const threadVersion = useSyncExternalStore(
+    (onStoreChange) => {
+      if (!threadKey) return () => {};
+      return subscribeThreadIndex((changedId) => {
+        if (changedId === threadKey) onStoreChange();
+      });
+    },
+    () => {
+      loadThreadIndexFromStorageOnce();
+      return threadKey ? (THREAD_INDEX_VERSION.get(threadKey) ?? 0) : 0;
+    },
+    () => 0,
+  );
 
   // ✅ Render-time thread index registration MUST be an effect (side effect), not useMemo
   useEffect(() => {
-    if (!decoded.ok) return;
+    if (!nodeOk) return;
     if (!threadKey) return;
-    if (pulseSafe <= 0) return;
-    threadIndexAdd(threadKey, { pulse: pulseSafe, url: rememberUrl });
-  }, [decoded.ok, threadKey, pulseSafe, rememberUrl]);
+    if (nodePulse <= 0) return;
+    threadIndexAdd(threadKey, { pulse: nodePulse, url: copyBaseUrl });
+  }, [nodeOk, threadKey, nodePulse, copyBaseUrl]);
 
   // add= chain (explicit wrapper context)
   const addChain = useMemo(() => {
@@ -1100,32 +2055,44 @@ const FeedCardThread: React.FC<ThreadProps> = ({
     return addChain[addIndex] ?? null;
   }, [addChain, addIndex]);
 
-  // Primary previous resolution: scan full decoded data (covers composer variants)
+  // Primary previous resolution: constant-size prevId (or skip[1]) if present
+  const prevUrlFromId = useMemo(() => {
+    if (!nodeOk || !nodeDataRaw) return null;
+    const pid = idLinks?.prevId;
+    if (!pid || !isLikelyContentId(pid)) return null;
+    return `cid:${normalizeContentId(pid)}`;
+  }, [nodeOk, nodeDataRaw, idLinks?.prevId]);
+
+  // Primary URL previous resolution: scan full decoded data (covers composer variants)
   const prevFromRefs = useMemo(() => {
-    if (!decodedData) return null;
-    return extractPreviousUrlFromAnyDetailed(decodedData);
-  }, [decodedData]);
+    if (!nodeOk || !nodeDataRaw) return null;
+    return extractPreviousUrlFromAnyDetailed(nodeDataRaw);
+  }, [nodeOk, nodeDataRaw]);
 
   const prevUrlFromRefs = prevFromRefs?.url ?? null;
   const prevRefsScore = prevFromRefs?.score ?? null;
 
-  // Fallback previous resolution: stitch within a thread using thread index
+  // Fallback previous resolution: stitch within a thread using thread index (pulse order)
   const prevUrlFromThread = useMemo(() => {
-    if (!decoded.ok) return null;
+    if (!nodeOk) return null;
     if (!threadKey) return null;
-    if (pulseSafe <= 0) return null;
-    return threadIndexPrevUrl(threadKey, pulseSafe);
-  }, [decoded.ok, threadKey, pulseSafe, threadTick]);
+    if (nodePulse <= 0) return null;
+    return threadIndexPrevUrl(threadKey, nodePulse);
+  }, [nodeOk, threadKey, nodePulse, threadVersion]);
 
   const threadRootUrl = useMemo(() => {
     if (!threadKey) return null;
     return threadIndexRootUrl(threadKey);
-  }, [threadKey, threadTick]);
+  }, [threadKey, threadVersion]);
 
-  // ✅ REAL FIX: if refs only point at root/thread/ref (or low-confidence), let stitched previous win
+  // ✅ Previous selection:
+  // 1) add= chain always wins (explicit wrapper ordering)
+  // 2) prevId/skip[1] wins (constant-size threading)
+  // 3) URL refs (prev/parent/replyTo/...) unless low-confidence root/thread/ref
+  // 4) thread stitch fallback
   const prevUrlRaw = useMemo(() => {
-    // 1) explicit add= chain always wins
     if (prevUrlFromAdd) return prevUrlFromAdd;
+    if (prevUrlFromId) return prevUrlFromId;
 
     const refs = prevUrlFromRefs;
     const threadPrev = prevUrlFromThread;
@@ -1139,7 +2106,7 @@ const FeedCardThread: React.FC<ThreadProps> = ({
     if ((refsLooksRoot || lowConfidence) && threadPrev !== refs) return threadPrev;
 
     return refs;
-  }, [prevUrlFromAdd, prevUrlFromRefs, prevUrlFromThread, threadRootUrl, prevRefsScore]);
+  }, [prevUrlFromAdd, prevUrlFromId, prevUrlFromRefs, prevUrlFromThread, threadRootUrl, prevRefsScore]);
 
   const prevFromAddChain = useMemo(
     () => Boolean(prevUrlFromAdd && prevUrlRaw === prevUrlFromAdd),
@@ -1156,20 +2123,60 @@ const FeedCardThread: React.FC<ThreadProps> = ({
     return prevUrlRaw;
   }, [prevUrlRaw, depth, nextSeen]);
 
+  // ✅ Register chain edges + aliases (so Remember can export full prev-chain reliably)
+  const selfRef = useMemo(() => encodeChainRef(contentId ? `cid:${contentId}` : copyBaseUrl), [contentId, copyBaseUrl]);
+
+  const aliasKeys = useMemo(() => {
+    const keys: string[] = [];
+
+    keys.push(selfKey);
+    keys.push(threadSeenKey(url));
+    keys.push(threadSeenKey(node.openUrl));
+    keys.push(threadSeenKey(copyBaseUrl));
+
+    if (contentId && isLikelyContentId(contentId)) keys.push(`cid:${normalizeContentId(contentId)}`);
+
+    // Also bind token alias if we can see one in the open url (common in token-mode)
+    const tok = extractTokenCandidates(node.openUrl)[0] ?? extractTokenCandidates(url)[0];
+    if (tok) keys.push(`t:${normalizeToken(tok)}`);
+
+    // Deterministic + dedup
+    const uniq = Array.from(new Set(keys)).filter((k) => k.trim().length > 0);
+    uniq.sort((a, b) => a.localeCompare(b));
+    return uniq;
+  }, [selfKey, url, node.openUrl, copyBaseUrl, contentId]);
+
+  // ✅ Layout effect: populate chain graph BEFORE user can interact (v27.6 Remember guarantee)
+  useLayoutEffect(() => {
+    chainGraphUpsert(selfKey, selfRef, prevUrl, aliasKeys);
+  }, [selfKey, selfRef, prevUrl, aliasKeys]);
+
+  // ✅ Build “Remember” URL at click-time: graph chain (root→…→prev) + existing add= chain
+  const computeRememberCopyUrl = useCallback((): string => {
+    // Ensure current edge is present (covers ultra-fast clicks / strict-mode timing)
+    chainGraphUpsert(selfKey, selfRef, prevUrl, aliasKeys);
+
+    const fromGraph = buildPrevChainAddsFromGraph(selfKey, REMEMBER_CHAIN_MAX_ITEMS);
+    const fromAddParam = addChain.length ? addChain.map((u) => encodeChainRef(u)) : [];
+    const adds = chooseAddsLongest(fromGraph, fromAddParam);
+
+    return buildRememberUrlWithAdds(copyBaseUrl, adds);
+  }, [selfKey, selfRef, prevUrl, aliasKeys, addChain, copyBaseUrl]);
+
   const onCopy = useCallback(() => {
-    const text = normalizeResolvedUrlForBrowser(rememberUrl);
+    const text = computeRememberCopyUrl();
 
     const okSync = tryCopyExecCommand(text);
     if (okSync) {
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1100);
+      if (typeof window !== "undefined") window.setTimeout(() => setCopied(false), 1100);
       return;
     }
 
     const p = clipboardWriteTextPromise(text);
     if (p) {
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1100);
+      if (typeof window !== "undefined") window.setTimeout(() => setCopied(false), 1100);
       p.catch((e: unknown) => {
         // eslint-disable-next-line no-console
         console.warn("Remember failed:", e);
@@ -1180,9 +2187,9 @@ const FeedCardThread: React.FC<ThreadProps> = ({
 
     // eslint-disable-next-line no-console
     console.warn("Remember failed: no clipboard available");
-  }, [rememberUrl]);
+  }, [computeRememberCopyUrl]);
 
-  if (!decoded.ok) {
+  if (!node.ok) {
     return (
       <article className="fc fc--error" role="group" aria-label="Invalid Sigil-Glyph">
         <div className="fc-crystal" aria-hidden="true" />
@@ -1190,7 +2197,7 @@ const FeedCardThread: React.FC<ThreadProps> = ({
           <header className="fc-head">
             <div className="fc-titleRow">
               <span className="fc-chip fc-chip--danger">INVALID</span>
-              <span className="fc-muted">Sigil-Glyph capsule could not be decoded</span>
+              <span className="fc-muted">Sigil-Glyph capsule could not be resolved</span>
             </div>
             <div className="fc-url mono" title={url}>
               {url}
@@ -1198,7 +2205,7 @@ const FeedCardThread: React.FC<ThreadProps> = ({
           </header>
 
           <div className="fc-error" role="alert">
-            {"error" in decoded ? (decoded as { error?: string }).error : "Decode failed."}
+            {node.error}
           </div>
 
           <footer className="fc-actions" role="group" aria-label="Actions">
@@ -1208,6 +2215,7 @@ const FeedCardThread: React.FC<ThreadProps> = ({
               onClick={onCopy}
               aria-pressed={copied}
               data-state={copied ? "remembered" : "idle"}
+              title="Copies a shareable URL that includes the full previous-chain (add=...)"
             >
               {copied ? "Remembered" : "Remember"}
             </button>
@@ -1217,15 +2225,14 @@ const FeedCardThread: React.FC<ThreadProps> = ({
     );
   }
 
-  const { data } = decoded;
-  const capsule: Capsule = data.capsule;
+  const capsule: Capsule = node.capsule;
 
   const post: PostPayload | undefined = capsule.post;
   const message: MessagePayload | undefined = capsule.message;
   const share: SharePayload | undefined = capsule.share;
   const reaction: ReactionPayload | undefined = capsule.reaction;
 
-  const pulse = typeof data.pulse === "number" && Number.isFinite(data.pulse) ? data.pulse : 0;
+  const pulse = typeof node.pulse === "number" && Number.isFinite(node.pulse) ? node.pulse : 0;
 
   const m = momentFromPulse(pulse);
   const beatZ = Math.max(0, Math.floor(m.beat));
@@ -1239,15 +2246,15 @@ const FeedCardThread: React.FC<ThreadProps> = ({
   const inferredKind =
     post ? "post" : message ? "message" : share ? "share" : reaction ? "reaction" : "sigil";
 
-  const kind: string = kindFromDecodedData(data as unknown, inferredKind);
+  const kind: string = kindFromDecodedData(node.dataRaw, inferredKind);
   const kindText = String(kind);
 
   const appBadge =
-    typeof data.appId === "string" && data.appId ? `app ${short(data.appId, 10, 4)}` : undefined;
+    typeof node.appId === "string" && node.appId ? `app ${short(node.appId, 10, 4)}` : undefined;
 
   const userBadge =
-    typeof data.userId !== "undefined" && data.userId !== null
-      ? `user ${short(String(data.userId), 10, 4)}`
+    typeof node.userId !== "undefined" && node.userId !== null
+      ? `user ${short(String(node.userId), 10, 4)}`
       : undefined;
 
   const sigilId = isNonEmpty(capsule.sigilId) ? capsule.sigilId : undefined;
@@ -1258,7 +2265,7 @@ const FeedCardThread: React.FC<ThreadProps> = ({
   const authorBadge = isNonEmpty(capsule.author) ? capsule.author : undefined;
 
   const sourceBadge =
-    (isNonEmpty(capsule.source) ? capsule.source : undefined) ?? legacySourceFromData(data);
+    (isNonEmpty(capsule.source) ? capsule.source : undefined) ?? legacySourceFromData(node.dataRaw);
 
   const manualMarkerPresent =
     isManualMarkerText(kindText) || isManualMarkerText(sourceBadge) || hasManualMarkerDeep(capsule);
@@ -1510,13 +2517,7 @@ const FeedCardThread: React.FC<ThreadProps> = ({
             )}
 
             <footer className="fc-actions" role="group" aria-label="Actions">
-              <a
-                className="fc-btn"
-                href={rememberUrl}
-                target="_blank"
-                rel="noreferrer"
-                title={openTitle}
-              >
+              <a className="fc-btn" href={rememberUrl} target="_blank" rel="noreferrer" title={openTitle}>
                 {openLabel}
               </a>
 
@@ -1526,6 +2527,7 @@ const FeedCardThread: React.FC<ThreadProps> = ({
                 onClick={onCopy}
                 aria-pressed={copied}
                 data-state={copied ? "remembered" : "idle"}
+                title="Copies a shareable URL that includes the full previous-chain (add=...)"
               >
                 {copied ? "Remembered" : "Remember"}
               </button>

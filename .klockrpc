@@ -1,0 +1,30 @@
+
+{
+  "override_pulse": 95978261,
+  "beat": 11,
+  "stepIndex": 22,
+  "chakraDay": "Dream",
+  "weekday": "Kaelith",
+  "arc": "Dream",
+  "calendar": {
+    "day": 4,
+    "month": 6,
+    "year": 3
+  },
+  "kaiLabel": "11:22 | 4:6:3 | #95978261",
+  "signature_author": "Kai Rex Klok (K℞K)",
+  "use_mock_sigil": false,
+  "debug_mode": true,
+  "notes": "Kairos-local override file for sigil rendering and pulse replay. No Chronos time is stored or needed. All values are derived from override_pulse using KKS‑1.0."
+}
+
+
+⸻
+
+🔍 Behavior
+	•	override_pulse is the only required input
+	•	All other fields should be auto-derived at runtime from that pulse
+	•	This file serves as a pulse-seed for deterministic render, not a timestamp reference
+	•	Ensures all builds remain offline-verifiable, time-consistent, and breath-sealed
+
+Would you like a CLI function or utility module that consumes this .klockrc and returns full Kai time state in your app (getKaiStateFromPulse)?
