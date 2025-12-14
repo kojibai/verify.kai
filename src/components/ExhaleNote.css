@@ -46,22 +46,7 @@
     --kk-focus: 0 0 0 3px var(--kk-ring), 0 0 24px rgba(86,255,227,0.25);
   }
   
-  @media (prefers-color-scheme: light) {
-    :root {
-      --kk-bg: #f7fafc;
-      --kk-surface: #ffffff;
-      --kk-surface-2: #f9fbff;
-      --kk-text: #111318;
-      --kk-text-dim: #2b3241;
-      --kk-text-mute: #5e6a80;
-  
-      --kk-border: rgba(0, 20, 40, 0.12);
-      --kk-crystal: rgba(0, 0, 0, 0.035);
-  
-      --kk-shadow-1: 0 10px 24px rgba(10, 24, 44, 0.10), inset 0 1px 0 rgba(255,255,255,0.6);
-      --kk-shadow-2: 0 20px 48px rgba(10, 24, 44, 0.14), inset 0 1px 0 rgba(255,255,255,0.65);
-    }
-  }
+
   
   /* --- Base & Layout --------------------------------------------------------- */
   

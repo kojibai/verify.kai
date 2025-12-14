@@ -311,20 +311,7 @@
     .valuehist-actions { justify-content: center; }
   }
   
-  /* ——— Light mode resilience ——— */
-  @media (prefers-color-scheme: light) {
-    .valuehist-overlay {
-      --bg-0: rgba(248, 252, 255, 0.86);
-      --bg-1: rgba(235, 247, 250, 0.88);
-      --ink-0: #062920;
-      --ink-1: rgba(6, 41, 32, 0.85);
-      --ink-dim: rgba(6, 41, 32, 0.65);
-      --line: rgba(0, 30, 22, 0.12);
-      --line-2: rgba(0, 30, 22, 0.18);
-    }
-    .valuehist-head .badge { color: #062920; }
-    .valuehist-ranges .btn-ghost.btn-primary { color: #00110c; }
-  }
+
   
   /* ——— Selection ——— */
   .valuehist-overlay *::selection {

@@ -84,29 +84,7 @@
   --sigil-tint-rgb: 120 190 255;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #fbfcfe;
-    --bg-2: #f5f7fb;
-    --bg-3: #eef2f8;
 
-    --text: #0d1117;
-    --text-dim: #223046;
-    --text-soft: #4a5668;
-
-    --glass: rgba(0, 0, 0, 0.05);
-    --glass-2: rgba(0, 0, 0, 0.07);
-    --glass-3: rgba(0, 0, 0, 0.10);
-
-    --stroke: rgba(0, 0, 0, 0.14);
-    --stroke-soft: rgba(0, 0, 0, 0.10);
-
-    --shadow-1: 0 10px 22px rgba(21, 31, 44, 0.10);
-    --shadow-2: 0 18px 42px rgba(21, 31, 44, 0.16);
-    --shadow-glow: 0 0 0 1px rgba(180, 120, 20, 0.18),
-      0 0 38px rgba(240, 200, 120, 0.12);
-  }
-}
 
 /* ────────────────────────────────────────────────────────────────
    1) Global hardening (overflow-proof)

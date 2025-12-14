@@ -372,26 +372,7 @@
   }
 }
 
-/* ----------------------------------------------------------------
-   Light Mode (optional, if app supports)
----------------------------------------------------------------- */
-@media (prefers-color-scheme: light){
-  .stargate-viewer{
-    box-shadow:
-      0 0 calc(var(--size)*.06)  hsl(var(--hue) 60% 45% / .35),
-      0 0 calc(var(--size)*.12)  hsl(calc(var(--hue) + 26) 60% 55% / .22) inset;
-  }
-  .pulse-tag{
-    background:hsl(var(--hue) 85% 95% / .65);
-    color:#041616;
-    border-color:hsl(var(--hue) 60% 55% / .5);
-    text-shadow:none;
-  }
-  .gate-controls button{
-    color:#073032;
-    border-color:hsl(var(--hue) 40% 45% / .35);
-  }
-}
+
 
 /* ----------------------------------------------------------------
    Bonus: subtle grain (opt-in by setting data-grain="1")

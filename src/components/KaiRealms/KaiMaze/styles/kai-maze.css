@@ -16,16 +16,7 @@
   --km-accent: #00ffd0;                  /* used on focus & hover states */
 }
 
-/* Respect user color scheme if the app toggles it */
-@media (prefers-color-scheme: light) {
-  :root {
-    --km-bg: rgba(0,0,0,.06);
-    --km-border: rgba(0,0,0,.12);
-    --km-shadow: 0 8px 24px rgba(0,0,0,.12), inset 0 0 0 1px rgba(0,0,0,.03);
-    --km-fg: #0b0b0e;
-    --km-fg-dim: rgba(10,10,12,.75);
-  }
-}
+
 
 /* ------------------ Layout shell ------------------ */
 .km-wrap {

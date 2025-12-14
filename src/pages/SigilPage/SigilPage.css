@@ -1194,16 +1194,7 @@ body.bp-open :where(.sigilpage, .sp-viewport, .sp-shell, .sp-veil, .sp-veil-star
     .verifier-btn { animation: none !important; }
     .verifier-btn::before { opacity: .35 !important; filter: blur(8px) !important; }
   }
-  
-  /* Light mode resilience */
-  @media (prefers-color-scheme: light) {
-    .verifier-cta {
-      --ink: #062920;
-      --ink-dim: rgba(6, 41, 32, 0.75);
-      --bgA: rgba(248, 252, 255, 0.86);
-      --bgB: rgba(235, 247, 250, 0.88);
-    }
-  }
+
   /* Mobile overlay fixes (Breath Proof, charts, etc.) */
 .sp-breathproof__backdrop{
   position: fixed; inset: 0; z-index: 9999;

@@ -39,20 +39,7 @@
     --ks-focus: 0 0 0 2px #06151b, 0 0 0 4px var(--ks-accent);
   }
   
-  @media (prefers-color-scheme: light) {
-    :root {
-      --ks-fg: #0e1b22;
-      --ks-fg-dim: #3b5363;
-      --ks-bg: rgba(255,255,255,.6);
-      --ks-panel: rgba(255,255,255,.75);
-      --ks-border: 1px solid rgba(0,0,0,.08);
-      --ks-border-quiet: 1px solid rgba(0,0,0,.06);
-      --ks-input-bg: rgba(0,0,0,.04);
-      --ks-input-bg-focus: rgba(0,0,0,.06);
-      --ks-chip-bg: rgba(0,0,0,.05);
-      --ks-shadow: 0 10px 30px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.8);
-    }
-  }
+
   
   /* Base reset */
   .ks-panel, .publisher {
