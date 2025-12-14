@@ -1,5 +1,5 @@
 // src/pages/SigilExplorer.tsx
-// v3.8 — Composer Witness-Chain edition ✨
+// v3.9.0 — LAH-MAH-TOR Sync edition ✨
 // - ✅ Composer replies auto-register (global hook + DOM event + BroadcastChannel + storage)
 // - ✅ Thread reconstruction WITHOUT embedding parent/origin in payload:
 //      - Uses hash-based add= witness chain (#add=...)
@@ -10,6 +10,12 @@
 // - Node toggle: reveals per-glyph Memory Stream details, even for leaf nodes
 // - Detail panel: stacked, mobile-first, page remains scrollable when open
 // - ✅ Official Φ mark inside the top-left brand square (.kx-glyph)
+//
+// NEW v3.9.0 (Seamless Cloud Sync over KKS-1.0 pulses)
+// - ✅ Every local add → POST /sigils/inhale (batched, deduped, fail-soft)
+// - ✅ Every φ-pulse (~5.236s) → GET /sigils/seal; if changed → pull /sigils/urls and import new
+// - ✅ No echo loops: remote imports do NOT re-inhale back to the API
+// - ✅ Uses deterministic seals (ETag candidate) and Kai-only ordering; no Chronos ordering anywhere
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -21,16 +27,10 @@ import type { SigilSharePayloadLoose } from "../utils/sigilUrl";
 import "./SigilExplorer.css";
 
 /* ─────────────────────────────────────────────────────────────────────
-   Global typings for the optional hook the modal/composer will call
+   Live base (API + canonical sync target)
 ────────────────────────────────────────────────────────────────────── */
-declare global {
-  interface Window {
-    __SIGIL__?: {
-      registerSigilUrl?: (url: string) => void;
-      registerSend?: (rec: unknown) => void;
-    };
-  }
-}
+const LIVE_BASE_URL = "https://align.kaiklok.com";
+
 
 /* ─────────────────────────────────────────────────────────────────────
  *  Types
@@ -60,6 +60,31 @@ type WitnessCtx = {
   parentUrl?: string;
 };
 
+type AddSource = "local" | "remote";
+
+type ApiSealResponse = { seal: string };
+
+type ApiUrlsPageResponse = {
+  status: "ok";
+  state_seal: string;
+  total: number;
+  offset: number;
+  limit: number;
+  urls: string[];
+};
+
+type ApiInhaleResponse = {
+  status: "ok" | "error";
+  files_received: number;
+  crystals_total: number;
+  crystals_imported: number;
+  crystals_failed: number;
+  registry_urls: number;
+  latest_pulse: number | null;
+  errors: string[];
+  urls?: string[] | null;
+};
+
 /* ─────────────────────────────────────────────────────────────────────
  *  Constants / Utilities
  *  ───────────────────────────────────────────────────────────────────── */
@@ -78,12 +103,31 @@ const PHI_MARK_SRC = "/phi.svg";
 const hasWindow = typeof window !== "undefined";
 const canStorage = hasWindow && typeof window.localStorage !== "undefined";
 
+/** KKS-1.0 φ-breath pulse cadence (ms). Used ONLY for polling cadence, never for ordering. */
+const PULSE_POLL_MS = 5236;
+
+/** Remote sync endpoints (LAH-MAH-TOR). */
+const API_BASE = LIVE_BASE_URL;
+const API_SEAL = `${API_BASE}/sigils/seal`;
+const API_URLS = `${API_BASE}/sigils/urls`;
+const API_INHALE = `${API_BASE}/sigils/inhale`;
+
+/** Remote pull limits. */
+const URLS_PAGE_LIMIT = 5000;
+const URLS_MAX_PAGES_PER_SYNC = 24; // hard cap safety (5000*24 = 120k)
+
+/** Inhale batching. */
+const INHALE_BATCH_MAX = 200;
+const INHALE_DEBOUNCE_MS = 180;
+const INHALE_RETRY_BASE_MS = 1200;
+const INHALE_RETRY_MAX_MS = 12000;
+
 /** Make an absolute, normalized URL (stable key). */
 function canonicalizeUrl(url: string): string {
   try {
     return new URL(
       url,
-      hasWindow ? window.location.origin : "https://example.invalid",
+      hasWindow ? window.location.origin : LIVE_BASE_URL,
     ).toString();
   } catch {
     return url;
@@ -93,10 +137,7 @@ function canonicalizeUrl(url: string): string {
 /** Attempt to parse hash from a /s/:hash URL (for display only). */
 function parseHashFromUrl(url: string): string | undefined {
   try {
-    const u = new URL(
-      url,
-      hasWindow ? window.location.origin : "https://example.invalid",
-    );
+    const u = new URL(url, hasWindow ? window.location.origin : LIVE_BASE_URL);
     const m = u.pathname.match(/\/s\/([^/]+)/u);
     return m?.[1] ? decodeURIComponent(m[1]) : undefined;
   } catch {
@@ -140,15 +181,13 @@ function looksLikeBareToken(s: string): boolean {
 
 /** Build a canonical stream URL from a bare token (Composer uses /stream/p/<token>). */
 function streamUrlFromToken(token: string): string {
-  const origin = hasWindow ? window.location.origin : "https://example.invalid";
-  return new URL(`/stream/p/${token}`, origin).toString();
+  return new URL(`/stream/p/${token}`, LIVE_BASE_URL).toString();
 }
 
 /** Extract add= witness chain from BOTH query and hash; normalize to absolute URLs. */
 function extractWitnessChainFromUrl(url: string): string[] {
   try {
-    const origin = hasWindow ? window.location.origin : "https://example.invalid";
-    const u = new URL(url, origin);
+    const u = new URL(url, hasWindow ? window.location.origin : LIVE_BASE_URL);
 
     const hashStr = u.hash.startsWith("#") ? u.hash.slice(1) : "";
     const h = new URLSearchParams(hashStr);
@@ -160,7 +199,7 @@ function extractWitnessChainFromUrl(url: string): string[] {
       const decoded = safeDecodeURIComponent(String(raw)).trim();
       if (!decoded) continue;
 
-      // If add= is a bare token, treat it as /stream/p/<token>
+      // If add= is a bare token, treat it as /stream/p/<token> on LIVE_BASE_URL
       if (looksLikeBareToken(decoded)) {
         const abs = canonicalizeUrl(streamUrlFromToken(decoded));
         if (!out.includes(abs)) out.push(abs);
@@ -204,7 +243,7 @@ function mergeDerivedContext(
 
 /* ─────────────────────────────────────────────────────────────────────
  *  Global, in-memory registry + helpers
- *  (no backend, can persist to localStorage, and sync via BroadcastChannel)
+ *  (no backend required; can persist to localStorage, and sync via BroadcastChannel)
  *  ───────────────────────────────────────────────────────────────────── */
 const memoryRegistry: Registry = new Map();
 const channel =
@@ -366,8 +405,136 @@ function synthesizeEdgesFromWitnessChain(
   return changed;
 }
 
+/* ─────────────────────────────────────────────────────────────────────
+ *  LAH-MAH-TOR Sync (API inhale/exhale)
+ *  ───────────────────────────────────────────────────────────────────── */
+
+const inhaleQueue: Map<string, Record<string, unknown>> = new Map();
+let inhaleFlushTimer: number | null = null;
+let inhaleInFlight = false;
+let inhaleRetryMs = 0;
+
+function isOnline(): boolean {
+  if (!hasWindow) return false;
+  if (typeof navigator === "undefined") return true;
+  return navigator.onLine;
+}
+
+function randId(): string {
+  if (hasWindow && typeof window.crypto?.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+  return Math.random().toString(16).slice(2);
+}
+
+/** Enqueue one krystal for /sigils/inhale (deduped by URL). */
+function enqueueInhaleKrystal(url: string, payload: SigilSharePayloadLoose): void {
+  const abs = canonicalizeUrl(url);
+  const rec = payload as unknown as Record<string, unknown>;
+  // Krystal format: payload fields at top-level + url for identity.
+  const krystal: Record<string, unknown> = { url: abs, ...rec };
+  inhaleQueue.set(abs, krystal);
+
+  if (!hasWindow) return;
+  if (inhaleFlushTimer != null) window.clearTimeout(inhaleFlushTimer);
+  inhaleFlushTimer = window.setTimeout(() => {
+    inhaleFlushTimer = null;
+    void flushInhaleQueue();
+  }, INHALE_DEBOUNCE_MS);
+}
+
+async function flushInhaleQueue(): Promise<void> {
+  if (!hasWindow) return;
+  if (!isOnline()) return;
+  if (inhaleInFlight) return;
+  if (inhaleQueue.size === 0) return;
+
+  inhaleInFlight = true;
+
+  try {
+    const batch: Record<string, unknown>[] = [];
+    const keys: string[] = [];
+
+    for (const [k, v] of inhaleQueue) {
+      batch.push(v);
+      keys.push(k);
+      if (batch.length >= INHALE_BATCH_MAX) break;
+    }
+
+    const json = JSON.stringify(batch);
+    const blob = new Blob([json], { type: "application/json" });
+    const fd = new FormData();
+    fd.append("file", blob, `sigils_${randId()}.json`);
+
+    // Keep response light; we only need server to ingest.
+    const url = new URL(API_INHALE);
+    url.searchParams.set("include_state", "false");
+    url.searchParams.set("include_urls", "false");
+
+    const res = await fetch(url.toString(), {
+      method: "POST",
+      body: fd,
+      // keepalive helps when user navigates away mid-upload (supported in most modern browsers)
+      keepalive: true,
+    });
+
+    if (!res.ok) {
+      throw new Error(`inhale failed: ${res.status}`);
+    }
+
+    // Optional read; do not block UX on parsing.
+    let parsed: ApiInhaleResponse | null = null;
+    try {
+      parsed = (await res.json()) as ApiInhaleResponse;
+    } catch {
+      parsed = null;
+    }
+
+    // Remove successfully submitted batch from queue (idempotent server-side).
+    for (const k of keys) inhaleQueue.delete(k);
+
+    // Reset retry
+    inhaleRetryMs = 0;
+
+    // If server reported errors, we still continue; the queue is already drained for this batch.
+    // If anything remains, schedule next flush.
+    if (inhaleQueue.size > 0) {
+      inhaleFlushTimer = window.setTimeout(() => {
+        inhaleFlushTimer = null;
+        void flushInhaleQueue();
+      }, 10);
+    }
+
+    // If server returns urls/state, we intentionally ignore here: remote pull handles convergence.
+    void parsed;
+  } catch {
+    inhaleRetryMs = Math.min(
+      inhaleRetryMs ? inhaleRetryMs * 2 : INHALE_RETRY_BASE_MS,
+      INHALE_RETRY_MAX_MS,
+    );
+
+    // Retry later (fail-soft).
+    inhaleFlushTimer = window.setTimeout(() => {
+      inhaleFlushTimer = null;
+      void flushInhaleQueue();
+    }, inhaleRetryMs);
+  } finally {
+    inhaleInFlight = false;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ *  Add URL (local registry) — now with seamless API inhale
+ *  ───────────────────────────────────────────────────────────────────── */
+
 /** Add a single URL (and optionally its ancestry chain) to the registry. */
-function addUrl(url: string, includeAncestry = true, broadcast = true): boolean {
+function addUrl(
+  url: string,
+  includeAncestry = true,
+  broadcast = true,
+  persist = true,
+  source: AddSource = "local",
+): boolean {
   const abs = canonicalizeUrl(url);
 
   const extracted = extractPayloadFromUrl(abs);
@@ -403,12 +570,126 @@ function addUrl(url: string, includeAncestry = true, broadcast = true): boolean 
   }
 
   if (changed) {
-    persistRegistryToStorage();
+    if (persist) persistRegistryToStorage();
+
     if (channel && broadcast) {
       channel.postMessage({ type: "sigil:add", url: abs });
     }
+
+    // NEW: On any local add, inhale to LAH-MAH-TOR (deduped + batched).
+    // Remote-sourced imports do NOT echo back.
+    if (source === "local") {
+      const latest = memoryRegistry.get(abs);
+      if (latest) enqueueInhaleKrystal(abs, latest);
+    }
   }
+
   return changed;
+}
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Enqueue a raw krystal object (already shaped) for /sigils/inhale.
+ * Must include or imply a `url` field (string). We canonicalize it.
+ */
+function enqueueInhaleRawKrystal(krystal: Record<string, unknown>): void {
+  const urlVal = krystal.url;
+  if (typeof urlVal !== "string" || !urlVal.trim()) return;
+
+  const abs = canonicalizeUrl(urlVal.trim());
+  // Ensure canonical URL is stamped into the object (server dedupe key).
+  inhaleQueue.set(abs, { ...krystal, url: abs });
+
+  if (!hasWindow) return;
+  if (inhaleFlushTimer != null) window.clearTimeout(inhaleFlushTimer);
+  inhaleFlushTimer = window.setTimeout(() => {
+    inhaleFlushTimer = null;
+    void flushInhaleQueue();
+  }, INHALE_DEBOUNCE_MS);
+}
+
+/**
+ * Parse an imported JSON file into:
+ * - urls: any URLs we can add to the local registry (for rendering)
+ * - rawKrystals: if the file already contains krystal objects, preserve them for API upload
+ */
+function parseImportedJson(
+  value: unknown,
+): { urls: string[]; rawKrystals: Record<string, unknown>[] } {
+  const urls: string[] = [];
+  const rawKrystals: Record<string, unknown>[] = [];
+
+  const pushUrl = (u: string) => {
+    const abs = canonicalizeUrl(u);
+    if (!urls.includes(abs)) urls.push(abs);
+  };
+
+  // Case A: [ "url", "url", ... ]
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (typeof item === "string") {
+        if (item.trim()) pushUrl(item.trim());
+        continue;
+      }
+      // Case B: [ { url: "...", ... }, ... ]
+      if (isRecord(item)) {
+        const u = item.url;
+        if (typeof u === "string" && u.trim()) {
+          const abs = canonicalizeUrl(u.trim());
+          if (!urls.includes(abs)) urls.push(abs);
+          rawKrystals.push({ ...item, url: abs });
+        }
+      }
+    }
+    return { urls, rawKrystals };
+  }
+
+  // Case C: { urls: [...] } (e.g. exhale response)
+  if (isRecord(value)) {
+    const maybeUrls = value.urls;
+    if (Array.isArray(maybeUrls)) {
+      for (const item of maybeUrls) {
+        if (typeof item === "string" && item.trim()) pushUrl(item.trim());
+      }
+    }
+
+    // Case D: single { url: "...", ... }
+    const u = value.url;
+    if (typeof u === "string" && u.trim()) {
+      const abs = canonicalizeUrl(u.trim());
+      if (!urls.includes(abs)) urls.push(abs);
+      rawKrystals.push({ ...value, url: abs });
+    }
+
+    return { urls, rawKrystals };
+  }
+
+  return { urls, rawKrystals };
+}
+
+/**
+ * Force an API inhale for a set of URLs (even if registry already had them),
+ * by deriving krystals from the URL payloads or registry payloads.
+ */
+function forceInhaleUrls(urls: readonly string[]): void {
+  for (const u of urls) {
+    const abs = canonicalizeUrl(u);
+
+    // Prefer the registry payload (already merged with witness-derived context).
+    const p0 = memoryRegistry.get(abs) ?? extractPayloadFromUrl(abs);
+    if (!p0) continue;
+
+    const ctx = deriveWitnessContext(abs);
+    const merged = mergeDerivedContext(p0, ctx);
+
+    // Ensures inhale happens even if addUrl() reported "no change".
+    enqueueInhaleKrystal(abs, merged);
+  }
+
+  // Kick an immediate flush (still batched + fail-soft).
+  void flushInhaleQueue();
 }
 
 /** Load persisted URLs (if any) into memory registry. Includes modal/composer fallback list.
@@ -424,7 +705,8 @@ function hydrateRegistryFromStorage(): void {
       if (!Array.isArray(urls)) return;
       for (const u of urls) {
         if (typeof u !== "string") continue;
-        addUrl(u, true, false);
+        // Local hydrate: treat as local so it can converge to API over time (batched).
+        addUrl(u, true, false, true, "local");
       }
     } catch {
       /* ignore bad entries */
@@ -433,6 +715,79 @@ function hydrateRegistryFromStorage(): void {
 
   ingestList(localStorage.getItem(REGISTRY_LS_KEY));
   ingestList(localStorage.getItem(MODAL_FALLBACK_LS_KEY));
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ *  Remote pull (seal → urls) — every φ-pulse
+ *  ───────────────────────────────────────────────────────────────────── */
+
+async function fetchJson<T>(
+  input: string,
+  init?: RequestInit,
+): Promise<{ ok: true; value: T; status: number } | { ok: false; status: number }> {
+  try {
+    const res = await fetch(input, init);
+    if (!res.ok) return { ok: false, status: res.status };
+    const value = (await res.json()) as T;
+    return { ok: true, value, status: res.status };
+  } catch {
+    return { ok: false, status: 0 };
+  }
+}
+
+/** Pull remote urls list (paged) and import any new urls into local registry. */
+async function pullAndImportRemoteUrls(
+  signal: AbortSignal,
+): Promise<{ imported: number; remoteSeal?: string }> {
+  let imported = 0;
+  let remoteSeal: string | undefined;
+
+  for (let page = 0; page < URLS_MAX_PAGES_PER_SYNC; page++) {
+    const offset = page * URLS_PAGE_LIMIT;
+    const url = new URL(API_URLS);
+    url.searchParams.set("offset", String(offset));
+    url.searchParams.set("limit", String(URLS_PAGE_LIMIT));
+
+    const r = await fetchJson<ApiUrlsPageResponse>(url.toString(), {
+      method: "GET",
+      signal,
+      cache: "no-store",
+    });
+
+    if (!r.ok) break;
+
+    remoteSeal = r.value.state_seal;
+
+    const urls = r.value.urls;
+    if (!Array.isArray(urls) || urls.length === 0) break;
+
+    let pageAdded = 0;
+
+    // Batch import without persisting each time; persist once if anything changes.
+    for (const u of urls) {
+      if (typeof u !== "string") continue;
+      const abs = canonicalizeUrl(u);
+      if (memoryRegistry.has(abs)) continue;
+
+      const changed = addUrl(abs, true, false, false, "remote");
+      if (changed) {
+        imported += 1;
+        pageAdded += 1;
+      }
+    }
+
+    // If this page had nothing new, we can stop early (urls are newest-first).
+    if (pageAdded === 0) break;
+
+    // If fewer than limit, no more pages.
+    if (urls.length < URLS_PAGE_LIMIT) break;
+  }
+
+  if (imported > 0) {
+    persistRegistryToStorage();
+  }
+
+  return { imported, remoteSeal };
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -664,6 +1019,38 @@ function buildDetailEntries(node: SigilNode): DetailEntry[] {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+ *  Clipboard helper
+ *  ───────────────────────────────────────────────────────────────────── */
+async function copyText(text: string): Promise<void> {
+  if (!hasWindow) return;
+
+  try {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+  } catch {
+    // fall through
+  }
+
+  // Fallback: hidden textarea
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "true");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    ta.style.top = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+  } catch {
+    // ignore
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
  *  Scoped inline styles (tiny surgical rules only; CSS file still owns layout)
  *  ───────────────────────────────────────────────────────────────────── */
 const Styles: React.FC = () => (
@@ -746,7 +1133,7 @@ function SigilTreeNode({ node }: { node: SigilNode }) {
           <button
             className="node-copy"
             aria-label="Copy URL"
-            onClick={() => void navigator.clipboard.writeText(node.url)}
+            onClick={() => void copyText(node.url)}
             title="Copy URL"
             type="button"
           >
@@ -813,7 +1200,7 @@ function OriginPanel({ root }: { root: SigilNode }) {
           </span>
           <button
             className="o-copy"
-            onClick={() => void navigator.clipboard.writeText(root.url)}
+            onClick={() => void copyText(root.url)}
             title="Copy origin URL"
             type="button"
           >
@@ -941,6 +1328,10 @@ const SigilExplorer: React.FC = () => {
   const [lastAdded, setLastAdded] = useState<string | undefined>(undefined);
   const unmounted = useRef(false);
 
+  // Remote sync state (seal-based)
+  const remoteSealRef = useRef<string | null>(null);
+  const remotePollInFlightRef = useRef(false);
+
   /** Rebuild derived forest + light re-render. */
   const refresh = () => {
     if (unmounted.current) return;
@@ -949,7 +1340,7 @@ const SigilExplorer: React.FC = () => {
     force((v) => v + 1);
   };
 
-  // Initial hydrate, global hook, event listeners
+  // Initial hydrate, global hook, event listeners, and LAH-MAH-TOR pulse polling
   useEffect(() => {
     hydrateRegistryFromStorage();
 
@@ -957,7 +1348,7 @@ const SigilExplorer: React.FC = () => {
     if (hasWindow) {
       const here = window.location.href;
       if (extractPayloadFromUrl(here)) {
-        addUrl(here, true, false);
+        addUrl(here, true, false, true, "local");
         setLastAdded(canonicalizeUrl(here));
       }
     }
@@ -966,7 +1357,7 @@ const SigilExplorer: React.FC = () => {
     const prev = window.__SIGIL__?.registerSigilUrl;
     if (!window.__SIGIL__) window.__SIGIL__ = {};
     window.__SIGIL__.registerSigilUrl = (u: string) => {
-      if (addUrl(u, true, true)) {
+      if (addUrl(u, true, true, true, "local")) {
         setLastAdded(canonicalizeUrl(u));
         refresh();
       }
@@ -977,7 +1368,7 @@ const SigilExplorer: React.FC = () => {
       const anyEvent = e as CustomEvent<{ url: string }>;
       const u = anyEvent?.detail?.url;
       if (typeof u === "string" && u.length) {
-        if (addUrl(u, true, true)) {
+        if (addUrl(u, true, true, true, "local")) {
           setLastAdded(canonicalizeUrl(u));
           refresh();
         }
@@ -989,7 +1380,7 @@ const SigilExplorer: React.FC = () => {
     const onMint = (e: Event) => {
       const anyEvent = e as CustomEvent<{ url: string }>;
       if (anyEvent?.detail?.url) {
-        if (addUrl(anyEvent.detail.url, true, true)) {
+        if (addUrl(anyEvent.detail.url, true, true, true, "local")) {
           setLastAdded(canonicalizeUrl(anyEvent.detail.url));
           refresh();
         }
@@ -1003,7 +1394,7 @@ const SigilExplorer: React.FC = () => {
       onMsg = (ev: MessageEvent) => {
         const data = ev.data as unknown as { type?: unknown; url?: unknown };
         if (data?.type === "sigil:add" && typeof data.url === "string") {
-          if (addUrl(data.url, true, false)) {
+          if (addUrl(data.url, true, false, true, "local")) {
             setLastAdded(canonicalizeUrl(data.url));
             refresh();
           }
@@ -1022,7 +1413,7 @@ const SigilExplorer: React.FC = () => {
           let changed = false;
           for (const u of urls) {
             if (typeof u !== "string") continue;
-            if (addUrl(u, true, false)) changed = true;
+            if (addUrl(u, true, false, false, "local")) changed = true;
           }
 
           if (changed) {
@@ -1039,6 +1430,59 @@ const SigilExplorer: React.FC = () => {
 
     refresh();
 
+    // ── LAH-MAH-TOR: pulse polling loop (seal → urls)
+    const ac = new AbortController();
+
+    const pollOnce = async () => {
+      if (unmounted.current) return;
+      if (!isOnline()) return;
+      if (remotePollInFlightRef.current) return;
+
+      remotePollInFlightRef.current = true;
+
+      try {
+        // 1) Check seal
+        const sealRes = await fetchJson<ApiSealResponse>(API_SEAL, {
+          method: "GET",
+          signal: ac.signal,
+          cache: "no-store",
+        });
+
+        if (!sealRes.ok) return;
+
+        const nextSeal = sealRes.value.seal;
+        const prevSeal = remoteSealRef.current;
+
+        // If unchanged, nothing to do
+        if (prevSeal && nextSeal === prevSeal) return;
+
+        // 2) Pull urls and import
+        const importedRes = await pullAndImportRemoteUrls(ac.signal);
+
+        // 3) Update seal if we got one (prefer urls state_seal if present)
+        if (importedRes.remoteSeal) {
+          remoteSealRef.current = importedRes.remoteSeal;
+        } else {
+          remoteSealRef.current = nextSeal;
+        }
+
+        if (importedRes.imported > 0) {
+          setLastAdded(undefined);
+          refresh();
+        }
+      } finally {
+        remotePollInFlightRef.current = false;
+      }
+    };
+
+    // Immediate pull on mount (so you converge instantly)
+    void pollOnce();
+
+    // Then every φ-pulse
+    const intervalId = window.setInterval(() => {
+      void pollOnce();
+    }, PULSE_POLL_MS);
+
     return () => {
       // restore previous hook (if any)
       if (window.__SIGIL__) window.__SIGIL__.registerSigilUrl = prev;
@@ -1046,6 +1490,8 @@ const SigilExplorer: React.FC = () => {
       window.removeEventListener("sigil:minted", onMint as EventListener);
       window.removeEventListener("storage", onStorage);
       if (channel && onMsg) channel.removeEventListener("message", onMsg);
+      window.clearInterval(intervalId);
+      ac.abort();
       unmounted.current = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1053,34 +1499,51 @@ const SigilExplorer: React.FC = () => {
 
   // Handlers
   const handleAdd = (url: string) => {
-    const changed = addUrl(url, true, true);
+    const changed = addUrl(url, true, true, true, "local");
     if (changed) {
       setLastAdded(canonicalizeUrl(url));
       refresh();
     }
   };
 
-  const handleImport = async (file: File) => {
-    try {
-      const text = await file.text();
-      const urls = JSON.parse(text) as unknown;
-      if (!Array.isArray(urls)) return;
+const handleImport = async (file: File) => {
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text) as unknown;
 
-      let n = 0;
-      for (const u of urls) {
-        if (typeof u !== "string") continue;
-        if (addUrl(u, true, false)) n++;
-      }
+    const { urls, rawKrystals } = parseImportedJson(parsed);
+    if (urls.length === 0 && rawKrystals.length === 0) return;
 
-      if (n > 0) {
-        setLastAdded(undefined);
-        persistRegistryToStorage();
-        refresh();
-      }
-    } catch {
-      // ignore
+    // 1) Always ingest into local registry (for rendering)
+    //    (keeps exact behavior: addUrl() builds witness topology, then we persist once)
+    let changed = false;
+    for (const u of urls) {
+      if (addUrl(u, true, false, false, "local")) changed = true;
     }
-  };
+
+    if (changed) {
+      setLastAdded(undefined);
+      persistRegistryToStorage();
+      refresh();
+    } else {
+      // Even if nothing "changed", the user still intentionally inhaled this file.
+      // We keep UI stable, but still ensure API inhale below.
+      setLastAdded(undefined);
+    }
+
+    // 2) NEW: Force-send the imported JSON to the API (deduped, batched, fail-soft)
+    //    - If the file contains krystal objects already, upload those as-is.
+    //    - Otherwise derive krystals from the URLs and upload them.
+    if (rawKrystals.length > 0) {
+      for (const k of rawKrystals) enqueueInhaleRawKrystal(k);
+      void flushInhaleQueue();
+    } else if (urls.length > 0) {
+      forceInhaleUrls(urls);
+    }
+  } catch {
+    // ignore
+  }
+};
 
   const handleExport = () => {
     const data = JSON.stringify(Array.from(memoryRegistry.keys()), null, 2);

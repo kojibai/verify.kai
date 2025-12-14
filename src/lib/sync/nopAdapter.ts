@@ -7,16 +7,16 @@
 
 import type { IpfsLike, PublishResult } from "./ipfsAdapter";
 
+// Re-export the interface/types so consumers can import from this module too.
+export type { IpfsLike, PublishResult } from "./ipfsAdapter";
+
 /**
  * A no-op implementation of the IpfsLike interface.
  * It satisfies the interface but never actually publishes.
  */
 export const NoopIpfs: IpfsLike = {
   async publish(_buf: Uint8Array): Promise<PublishResult> {
-    // Explicitly mark the argument as unused to satisfy ESLint
     void _buf;
-
-    // Always return a dummy CID to indicate "nothing published"
     return { headCid: "" };
   },
 };

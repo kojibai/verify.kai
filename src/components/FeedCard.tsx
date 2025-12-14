@@ -54,6 +54,7 @@ import type {
   ReactionPayload,
 } from "../utils/sigilDecode";
 import "./FeedCard.css";
+import { ShortUrlTool } from "./shortner";
 
 type Props = {
   url: string;
@@ -2384,6 +2385,49 @@ const FeedCardThread: React.FC<ThreadProps> = ({
                 )}
               </section>
             )}
+<footer className="fc-actions" role="group" aria-label="Actions">
+  <a className="fc-btn" href={openHref} target="_blank" rel="noreferrer" title={openTitle}>
+    {openLabel}
+  </a>
+
+  <button
+    className="fc-btn"
+    type="button"
+    onClick={onCopy}
+    aria-pressed={copied}
+    data-state={copied ? "remembered" : "idle"}
+    title="Copies canonical /stream/p moment URL when possible; otherwise copies the primary (latest) self-contained Memory Stream URL. If overflow exists, use Pack to copy all segments."
+  >
+    {copied ? "Remembered" : "Remember"}
+  </button>
+
+  {hasArchives ? (
+    <button
+      className="fc-btn"
+      type="button"
+      onClick={onCopyPack}
+      aria-pressed={packed}
+      data-state={packed ? "packed" : "idle"}
+      title="Copies the full segment pack (primary + archive segments) as newline-separated URLs for infinite offline recovery."
+    >
+      {packed ? "Packed" : `Pack ${1 + rememberPack.archives.length}`}
+    </button>
+  ) : null}
+
+  <span className="fc-live" aria-live="polite">
+    {copied ? "Inhaled to Memory" : packed ? "Packed to Memory" : ""}
+  </span>
+
+  {/* Add ShortUrlTool below the 'Remember' button */}
+  <div style={{ marginTop: 20 }}>
+    <ShortUrlTool
+      url={openHref}  // Passing the same URL to ShortUrlTool for shortening
+      routePrefix="/go/"
+      title="Shorten and Share This Sigil!"
+      className="fc-btn" // Optional className for styling
+    />
+  </div>
+</footer>
 
             {message && (
               <section className="fc-bodywrap" aria-label="Message body">
