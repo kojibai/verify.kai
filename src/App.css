@@ -132,6 +132,12 @@ body,
     height: 100dvh;
   }
 }
+input,
+textarea,
+select,
+button {
+  font-size: 16px;
+}
 
 /* lock viewport like an app */
 body {

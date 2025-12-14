@@ -1,8 +1,8 @@
 /* src/pages/SigilExplorer.css
-   Kairos Keystream Explorer — Holographic Frost v2
-   - Ultra-compact footer (more vertical room for keys)
-   - Non-overlapping, two-row node layout, mobile-perfect
-   - Rail / branch styling = “is this alive?” but still readable
+   Kairos Keystream Explorer — KRYSTAL ETCH v3 (Atlantean Glass)
+   - Per-node chakra tint (root/sacral/solar/heart/throat/thirdEye/crown)
+   - Etched refraction + caustic drift + micro-noise overlay
+   - Breath motion (φ cadence) with reduced-motion compliance
    - Fully scoped to .sigil-explorer
 */
 
@@ -11,91 +11,137 @@
    ───────────────────────────────────────────────────────────── */
 .sigil-explorer {
   /* Ink */
-  --sx-text: #e8fbf8;
-  --sx-text-dim: #aee8df;
-  --sx-accent: #37ffe4;
-  --sx-accent-2: #a78bfa;
-  --sx-accent-3: #5ce1ff;
+  --sx-text: #ecffff;
+  --sx-text-dim: #a9f6ee;
 
-  /* Kai breath (for subtle UI life) */
+  /* Atlantean triad */
+  --sx-accent: #23fff0;
+  --sx-accent-2: #b7a3ff;
+  --sx-accent-3: #62daff;
+
+  /* Chakra defaults (used if node doesn’t override --sx-chakra) */
+  --sx-chakra: var(--sx-accent);
+
+  /* Kai breath */
   --sx-breath: 5.236s;
 
   /* Mono */
-  --sx-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
+  --sx-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
   /* Background glass */
-  --sx-bg: rgba(10, 16, 18, 0.72);
-  --sx-bg-tint-top: rgba(19, 32, 36, 0.65);
-  --sx-bg-tint-bot: rgba(10, 16, 18, 0.65);
+  --sx-bg: rgba(6, 10, 14, 0.76);
+  --sx-bg-tint-top: rgba(14, 30, 36, 0.68);
+  --sx-bg-tint-bot: rgba(6, 10, 14, 0.70);
 
-  --sx-veil: radial-gradient(
-      1200px 800px at 50% 20%,
-      rgba(0, 255, 222, 0.1),
-      transparent 60%
-    ),
-    radial-gradient(
-      800px 600px at 10% 90%,
-      rgba(0, 180, 255, 0.1),
-      transparent 60%
-    ),
-    radial-gradient(
-      900px 700px at 90% 80%,
-      rgba(175, 110, 255, 0.1),
-      transparent 60%
-    );
-
-  --sx-border: rgba(60, 220, 205, 0.35);
-  --sx-border-soft: rgba(255, 255, 255, 0.12);
-  --sx-border-strong: rgba(55, 255, 228, 0.55);
+  /* Borders / rings */
+  --sx-border: rgba(35, 255, 240, 0.34);
+  --sx-border-soft: rgba(255, 255, 255, 0.11);
+  --sx-border-strong: rgba(35, 255, 240, 0.66);
 
   --sx-shadow: 0 30px 80px rgba(0, 0, 0, 0.55),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
   --sx-shadow-card: 0 18px 40px rgba(0, 0, 0, 0.55);
-  --sx-ring: 0 0 0 2px rgba(55, 255, 228, 0.25),
-    0 0 0 6px rgba(55, 255, 228, 0.12);
+
+  --sx-ring: 0 0 0 2px rgba(35, 255, 240, 0.25),
+    0 0 0 6px rgba(35, 255, 240, 0.12);
 
   --sx-radius: 18px;
   --sx-radius-sm: 12px;
   --sx-pad: clamp(10px, 3vw, 18px);
   --sx-maxw: 1100px;
 
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
-    "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial,
+    "Apple Color Emoji", "Segoe UI Emoji";
   color: var(--sx-text);
+
   background:
-    radial-gradient(1200px 800px at 50% -10%, rgba(0, 0, 0, 0.6), #000000a6 60%),
-    var(--sx-veil),
+    radial-gradient(1200px 800px at 50% -10%, rgba(0, 0, 0, 0.64), #000000a6 60%),
+    radial-gradient(1200px 800px at 50% 20%, rgba(35, 255, 240, 0.13), transparent 60%),
+    radial-gradient(800px 600px at 10% 90%, rgba(98, 218, 255, 0.12), transparent 60%),
+    radial-gradient(900px 700px at 90% 80%, rgba(183, 163, 255, 0.12), transparent 60%),
     linear-gradient(180deg, var(--sx-bg-tint-top), var(--sx-bg-tint-bot));
+
   min-height: 100dvh;
   width: 100%;
   display: grid;
   grid-template-rows: auto 1fr;
   overflow: hidden;
+  position: relative;
 }
 
-.sigil-explorer * {
-  box-sizing: border-box;
+.sigil-explorer * { box-sizing: border-box; }
+
+/* ─────────────────────────────────────────────────────────────
+   GLOBAL KRYSTAL OVERLAY (etched + caustic drift)
+   ───────────────────────────────────────────────────────────── */
+.sigil-explorer::before,
+.sigil-explorer::after{
+  content:"";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
 }
+
+.sigil-explorer::before{
+  /* micro-noise + etch lines */
+  background:
+    repeating-linear-gradient(
+      180deg,
+      rgba(255,255,255,0.022) 0px,
+      rgba(255,255,255,0.022) 1px,
+      rgba(0,0,0,0.00) 3px,
+      rgba(0,0,0,0.00) 7px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255,255,255,0.012) 0px,
+      rgba(255,255,255,0.012) 1px,
+      rgba(0,0,0,0.00) 5px,
+      rgba(0,0,0,0.00) 11px
+    );
+  mix-blend-mode: overlay;
+  opacity: .35;
+}
+
+.sigil-explorer::after{
+  /* caustic aurora drift */
+  background:
+    radial-gradient(900px 600px at 30% 20%, rgba(35,255,240,0.10), transparent 60%),
+    radial-gradient(800px 620px at 80% 70%, rgba(183,163,255,0.10), transparent 60%),
+    radial-gradient(760px 560px at 15% 85%, rgba(98,218,255,0.08), transparent 62%);
+  filter: blur(10px) saturate(1.05);
+  opacity: .55;
+  animation: sx-aurora var(--sx-breath) ease-in-out infinite;
+}
+
+@keyframes sx-aurora{
+  0%   { transform: translate3d(0,0,0) scale(1); opacity:.48; }
+  50%  { transform: translate3d(0,-10px,0) scale(1.03); opacity:.62; }
+  100% { transform: translate3d(0,0,0) scale(1); opacity:.48; }
+}
+
+/* Ensure content sits above overlays */
+.kx-toolbar,
+.explorer-scroll { position: relative; z-index: 1; }
 
 /* ─────────────────────────────────────────────────────────────
    STICKY TOOLBAR
    ───────────────────────────────────────────────────────────── */
-.kx-toolbar {
+.kx-toolbar{
   position: sticky;
   top: 0;
   z-index: 10;
-  -webkit-backdrop-filter: blur(10px) saturate(120%);
-  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02))
-      border-box,
-    linear-gradient(180deg, var(--sx-bg-tint-top), var(--sx-bg-tint-bot));
-  border-bottom: 1px solid var(--sx-border);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)) border-box,
+    linear-gradient(180deg, rgba(10, 18, 22, 0.82), rgba(6, 10, 14, 0.78));
+  border-bottom: 1px solid rgba(255,255,255,0.10);
   box-shadow: var(--sx-shadow);
 }
 
-.kx-toolbar-inner {
+.kx-toolbar-inner{
   max-width: var(--sx-maxw);
   margin: 0 auto;
   padding: var(--sx-pad);
@@ -104,15 +150,15 @@
   gap: 12px;
 }
 
-@media (min-width: 860px) {
-  .kx-toolbar-inner {
+@media (min-width: 860px){
+  .kx-toolbar-inner{
     grid-template-columns: 1fr auto;
     align-items: center;
   }
 }
 
 /* Brand */
-.kx-brand {
+.kx-brand{
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
@@ -120,122 +166,142 @@
   min-width: 0;
 }
 
-.kx-glyph {
+.kx-glyph{
   width: 40px;
   height: 40px;
   border-radius: 12px;
   background:
-    radial-gradient(
-      120% 120% at 50% 0%,
-      rgba(55, 255, 228, 0.35),
-      rgba(255, 255, 255, 0) 60%
+    radial-gradient(120% 120% at 50% 0%, rgba(55,255,228,0.35), rgba(255,255,255,0) 62%),
+    conic-gradient(
+      from 220deg,
+      rgba(55,255,228,0.10),
+      rgba(92,225,255,0.10),
+      rgba(167,139,250,0.12),
+      rgba(55,255,228,0.10)
     ),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.06));
-  border: 1px solid var(--sx-border);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18),
-    0 10px 26px rgba(0, 0, 0, 0.38);
+    linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.05));
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.18),
+    0 12px 30px rgba(0,0,0,0.44);
+  position: relative;
+  overflow: hidden;
 }
 
-.kx-title {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
+.kx-glyph::after{
+  content:"";
+  position:absolute;
+  inset:-40%;
+  background:
+    radial-gradient(closest-side, rgba(255,255,255,0.16), rgba(255,255,255,0) 70%);
+  transform: translate3d(-20%, -18%, 0) rotate(18deg);
+  opacity:.7;
+  filter: blur(10px);
+  animation: sx-glyph-sheen calc(var(--sx-breath) * 1.2) ease-in-out infinite;
 }
 
-.kx-title h1 {
+@keyframes sx-glyph-sheen{
+  0%   { transform: translate3d(-22%, -20%, 0) rotate(16deg); opacity:.55; }
+  50%  { transform: translate3d(6%, 2%, 0) rotate(20deg); opacity:.78; }
+  100% { transform: translate3d(-22%, -20%, 0) rotate(16deg); opacity:.55; }
+}
+
+.kx-title{ display: grid; gap: 6px; min-width: 0; }
+
+.kx-title h1{
   margin: 0;
   font-size: clamp(18px, 3.2vw, 24px);
   letter-spacing: 0.14em;
   word-spacing: 0.1em;
 }
 
-.kx-title h1 span {
+.kx-title h1 span{
   color: var(--sx-accent);
-  text-shadow: 0 0 1px var(--sx-accent),
-    0 0 18px rgba(55, 255, 228, 0.25);
+  text-shadow: 0 0 1px var(--sx-accent), 0 0 22px rgba(55,255,228,0.25);
   letter-spacing: 0.02em;
 }
 
-.kx-tagline {
+.kx-tagline{
   color: var(--sx-text-dim);
   font-size: 12px;
-  opacity: 0.9;
+  opacity: 0.92;
 }
 
 /* Controls */
-.kx-controls {
+.kx-controls{
   display: grid;
   gap: 10px;
   grid-template-columns: 1fr;
 }
 
-@media (min-width: 680px) {
-  .kx-controls {
+@media (min-width: 680px){
+  .kx-controls{
     grid-template-columns: 1fr auto auto;
     align-items: center;
   }
 }
 
 /* Add form */
-.kx-add-form {
+.kx-add-form{
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 8px;
 }
 
-.kx-input {
+.kx-input{
   width: 100%;
   padding: 11px 14px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(180deg, rgba(7, 12, 14, 0.7), rgba(7, 12, 14, 0.5));
+  border: 1px solid rgba(255,255,255,0.14);
+  background:
+    radial-gradient(140% 220% at 0% 0%, rgba(55,255,228,0.08), transparent 55%),
+    linear-gradient(180deg, rgba(7,12,14,0.74), rgba(7,12,14,0.52));
   color: var(--sx-text);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
   outline: none;
   min-width: 0;
   font-size: 13px;
 }
 
-.kx-input::placeholder {
+.kx-input::placeholder{
   color: color-mix(in oklab, var(--sx-text-dim) 70%, transparent);
 }
 
-.kx-input:focus-visible {
-  border-color: var(--sx-border-strong);
+.kx-input:focus-visible{
+  border-color: rgba(255,255,255,0.22);
   box-shadow: var(--sx-ring);
 }
 
 /* Primary button */
-.kx-button {
+.kx-button{
   padding: 11px 16px;
   border-radius: 14px;
-  border: 1px solid var(--sx-border-strong);
+  border: 1px solid rgba(255,255,255,0.20);
   color: #081917;
-  font-weight: 800;
-  letter-spacing: 0.06em;
+  font-weight: 900;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
   background:
-    radial-gradient(
-      120% 160% at 0% 0%,
-      rgba(55, 255, 228, 0.25),
-      transparent 40%
-    ),
-    linear-gradient(180deg, rgba(55, 255, 228, 0.18), rgba(55, 255, 228, 0.08));
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
-  box-shadow: 0 12px 30px rgba(55, 255, 228, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.25);
-  transition: transform 0.1s ease, box-shadow 0.2s ease;
+    radial-gradient(120% 160% at 0% 0%, rgba(55,255,228,0.28), transparent 42%),
+    linear-gradient(180deg, rgba(55,255,228,0.22), rgba(55,255,228,0.10));
+  text-shadow: 0 1px 0 rgba(255,255,255,0.30);
+  box-shadow:
+    0 14px 34px rgba(55,255,228,0.20),
+    inset 0 1px 0 rgba(255,255,255,0.26);
+  transition: transform .12s ease, box-shadow .18s ease, filter .18s ease;
 }
 
-.kx-button:hover {
+.kx-button:hover{
   transform: translateY(-1px);
-  box-shadow: 0 18px 40px rgba(55, 255, 228, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  filter: saturate(1.06) brightness(1.03);
+  box-shadow:
+    0 18px 44px rgba(55,255,228,0.24),
+    inset 0 1px 0 rgba(255,255,255,0.32);
 }
 
 /* Import / export */
-.kx-io {
+.kx-io{
   display: grid;
   grid-auto-flow: column;
   gap: 8px;
@@ -244,197 +310,68 @@
 }
 
 .kx-import,
-.kx-export {
+.kx-export{
   padding: 10px 14px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.06),
-    rgba(255, 255, 255, 0.02)
-  );
+  border: 1px solid rgba(255,255,255,0.14);
+  background:
+    radial-gradient(120% 180% at 0% 0%, rgba(183,163,255,0.08), transparent 55%),
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
   color: var(--sx-text);
   cursor: pointer;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 6px 18px rgba(0, 0, 0, 0.35);
-  transition: transform 0.1s ease, box-shadow 0.2s ease,
-    border-color 0.2s ease, color 0.15s ease;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.04),
+    0 6px 18px rgba(0,0,0,0.35);
+  transition: transform .1s ease, box-shadow .2s ease, border-color .2s ease, color .15s ease;
   font-size: 12px;
 }
 
 .kx-import:hover,
-.kx-export:hover {
+.kx-export:hover{
   transform: translateY(-1px);
-  border-color: var(--sx-border-strong);
+  border-color: rgba(255,255,255,0.24);
   color: var(--sx-accent);
 }
 
-.kx-import {
+.kx-import{
   position: relative;
   display: inline-flex;
   align-items: center;
 }
 
-.kx-import input[type="file"] {
+.kx-import input[type="file"]{
   position: absolute;
   inset: 0;
   opacity: 0;
   cursor: pointer;
 }
 
-/* ─────────────────────────────────────────────────────────────
-   KX CLOSE BUTTON — “best X ever” (pixel-perfect centered)
-   Usage:
-     <button className="kx-x" aria-label="Close" type="button">×</button>
-   (If you already have text "×" inside, it's safely hidden.)
-   ───────────────────────────────────────────────────────────── */
-.kx-x{
-  /* tuning */
-  --kx-x-size: 36px;
-  --kx-x-radius: 14px;
-  --kx-x-line: 2.6px;      /* thickness */
-  --kx-x-len: 18px;        /* line length */
-
-  width: var(--kx-x-size);
-  height: var(--kx-x-size);
-  padding: 0;
-  border-radius: var(--kx-x-radius);
-
-  display: inline-grid;
-  place-items: center;
-  position: relative;
-  flex: 0 0 auto;
-
-  /* hide any glyph/text inside (prevents font-metric drift) */
-  font-size: 0;
-  line-height: 0;
-  color: transparent;
-  text-shadow: none;
-
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-
-  /* fallback border if color-mix unsupported */
-  border: 1px solid rgba(55, 255, 228, 0.42);
-
-  background:
-    radial-gradient(16px 16px at 28% 26%, rgba(255,255,255,0.18), rgba(255,255,255,0.00) 62%),
-    radial-gradient(22px 22px at 70% 78%, rgba(55,255,228,0.14), rgba(0,0,0,0.00) 64%),
-    radial-gradient(22px 22px at 78% 30%, rgba(167,139,250,0.12), rgba(0,0,0,0.00) 66%),
-    conic-gradient(
-      from 180deg,
-      rgba(55,255,228,0.00),
-      rgba(55,255,228,0.18),
-      rgba(92,225,255,0.12),
-      rgba(167,139,250,0.16),
-      rgba(55,255,228,0.00)
-    ),
-    linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.18));
-
-  box-shadow:
-    0 10px 28px rgba(0,0,0,0.55),
-    0 0 0 1px rgba(55,255,228,0.10),
-    inset 0 1px 0 rgba(255,255,255,0.10),
-    inset 0 0 0 1px rgba(255,255,255,0.04);
-
-  transform: translateZ(0);
-  will-change: transform, filter, box-shadow;
-  transition: transform .14s ease, box-shadow .18s ease, border-color .18s ease, filter .18s ease;
-  animation: kx-x-breathe var(--sx-breath) ease-in-out infinite;
-}
-
-@supports (border: 1px solid color-mix(in oklab, white, black)) {
-  .kx-x{
-    border-color: color-mix(in oklab, var(--sx-border-strong) 65%, rgba(255,255,255,0.14));
-  }
-}
-
-/* The X is drawn with pseudo-elements (no font metrics = no off-center). */
-.kx-x::before,
-.kx-x::after{
-  content:"";
-  position:absolute;
-  inset: 0;            /* ✅ perfect centering box */
-  margin: auto;        /* ✅ centers the bar */
-  width: var(--kx-x-len);
-  height: var(--kx-x-line);
-  border-radius: 999px;
-  transform-origin: center;
-  pointer-events: none;
-
-  background: linear-gradient(
-    90deg,
-    rgba(255,255,255,0.14),
-    rgba(55,255,228,0.98),
-    rgba(167,139,250,0.86),
-    rgba(255,255,255,0.14)
-  );
-
-  opacity: .96;
-  filter:
-    drop-shadow(0 0 10px rgba(55,255,228,0.18))
-    drop-shadow(0 0 18px rgba(167,139,250,0.14));
-
-  animation: kx-x-lines var(--sx-breath) ease-in-out infinite;
-}
-
-.kx-x::before{ transform: rotate(45deg); }
-.kx-x::after { transform: rotate(-45deg); }
-
-.kx-x:hover{
-  transform: translateY(-1px) rotate(0.35deg);
-  border-color: var(--sx-border-strong);
-  box-shadow:
-    0 14px 34px rgba(0,0,0,0.62),
-    0 0 0 1px rgba(55,255,228,0.16),
-    0 0 54px rgba(55,255,228,0.10),
-    0 0 44px rgba(167,139,250,0.08),
-    inset 0 1px 0 rgba(255,255,255,0.12),
-    inset 0 0 0 1px rgba(92,225,255,0.10);
-  filter: saturate(1.08) brightness(1.05);
-}
-
-.kx-x:active{
-  transform: translateY(0) scale(0.98);
-  filter: brightness(1.02);
-}
-
-.sigil-explorer .kx-x:focus-visible{
-  box-shadow: var(--sx-ring), 0 14px 34px rgba(0,0,0,0.62);
-  border-color: var(--sx-border-strong);
-}
-
 /* Stats */
-.kx-stats {
+.kx-stats{
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
 
-.kx-pill {
+.kx-pill{
   padding: 6px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.06),
-    rgba(255, 255, 255, 0.02)
-  );
+  border: 1px solid rgba(255,255,255,0.14);
+  background:
+    radial-gradient(140% 240% at 0% 0%, rgba(98,218,255,0.08), transparent 58%),
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
   color: var(--sx-text-dim);
   font-size: 11px;
   white-space: nowrap;
 }
 
-.kx-pill.subtle {
-  opacity: 0.85;
-}
+.kx-pill.subtle{ opacity: 0.88; }
 
 /* ─────────────────────────────────────────────────────────────
    SCROLL VIEWPORT
    ───────────────────────────────────────────────────────────── */
-.explorer-scroll {
+.explorer-scroll{
   overflow: auto;
   padding: var(--sx-pad);
   display: grid;
@@ -444,7 +381,7 @@
   scroll-behavior: smooth;
 }
 
-.explorer-inner {
+.explorer-inner{
   max-width: var(--sx-maxw);
   margin: 0 auto;
   width: 100%;
@@ -455,79 +392,82 @@
 /* ─────────────────────────────────────────────────────────────
    EMPTY STATE
    ───────────────────────────────────────────────────────────── */
-.kx-empty {
-  border: 1px dashed var(--sx-border);
+.kx-empty{
+  border: 1px dashed rgba(255,255,255,0.18);
   border-radius: var(--sx-radius);
   background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.06),
-      rgba(255, 255, 255, 0.02)
-    )
-      border-box,
-    linear-gradient(180deg, var(--sx-bg-tint-top), var(--sx-bg-tint-bot));
+    radial-gradient(120% 200% at 0% 0%, rgba(35,255,240,0.10), transparent 58%),
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
   padding: 16px 14px 18px;
   color: var(--sx-text-dim);
   font-size: 13px;
 }
 
-.kx-empty p {
-  margin: 0 0 6px;
-}
-
-.kx-empty ol {
-  margin: 6px 0 0;
-  padding-left: 20px;
-}
+.kx-empty p{ margin: 0 0 6px; }
+.kx-empty ol{ margin: 6px 0 0; padding-left: 20px; }
 
 /* ─────────────────────────────────────────────────────────────
-   FOREST / ORIGINS
+   FOREST / ORIGINS (chakra-tinted)
    ───────────────────────────────────────────────────────────── */
-.forest {
-  display: grid;
-  gap: 14px;
-}
+.forest{ display: grid; gap: 14px; }
 
-/* Origin card */
-.origin {
-  border: 1px solid var(--sx-border);
+.origin{
+  --sx-chakra: var(--sx-chakra);
+  border: 1px solid rgba(255,255,255,0.16);
   border-radius: var(--sx-radius);
   background:
-    linear-gradient(
-      to bottom right,
-      rgba(255, 255, 255, 0.06),
-      rgba(255, 255, 255, 0.02)
-    )
-      border-box,
-    linear-gradient(180deg, var(--sx-bg-tint-top), var(--sx-bg-tint-bot));
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
-  backdrop-filter: blur(16px) saturate(160%);
+    radial-gradient(120% 180% at 0% 0%, color-mix(in oklab, var(--sx-chakra) 18%, transparent), transparent 60%),
+    radial-gradient(120% 180% at 100% 100%, color-mix(in oklab, var(--sx-chakra) 10%, transparent), transparent 62%),
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
   box-shadow: var(--sx-shadow-card);
   overflow: clip;
+  position: relative;
+  animation: sx-card-breathe var(--sx-breath) ease-in-out infinite;
+}
+
+.origin::before{
+  content:"";
+  position:absolute;
+  inset: 0;
+  pointer-events:none;
+  background:
+    radial-gradient(900px 420px at 20% 10%, rgba(255,255,255,0.10), transparent 60%),
+    repeating-linear-gradient(
+      135deg,
+      rgba(255,255,255,0.05) 0px,
+      rgba(255,255,255,0.05) 1px,
+      rgba(0,0,0,0.0) 10px,
+      rgba(0,0,0,0.0) 16px
+    );
+  mix-blend-mode: overlay;
+  opacity: .35;
+}
+
+@keyframes sx-card-breathe{
+  0%   { filter: brightness(1) saturate(1); }
+  50%  { filter: brightness(1.04) saturate(1.06); }
+  100% { filter: brightness(1) saturate(1); }
 }
 
 /* Origin header */
-.origin-head {
+.origin-head{
   display: grid;
   gap: 8px;
   padding: 11px 14px;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.06),
-    rgba(255, 255, 255, 0.02)
-  );
+  border-bottom: 1px dashed rgba(255,255,255,0.10);
+  background:
+    radial-gradient(140% 240% at 0% 0%, color-mix(in oklab, var(--sx-chakra) 16%, transparent), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
   grid-template-columns: 1fr;
 }
 
-@media (min-width: 720px) {
-  .origin-head {
-    grid-template-columns: 1fr auto;
-    align-items: center;
-  }
+@media (min-width: 720px){
+  .origin-head{ grid-template-columns: 1fr auto; align-items: center; }
 }
 
-.o-meta {
+.o-meta{
   display: flex;
   gap: 10px;
   align-items: center;
@@ -535,31 +475,44 @@
   min-width: 0;
 }
 
-.o-title {
-  font-weight: 800;
-  letter-spacing: 0.12em;
+.o-title{
+  font-weight: 900;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--sx-accent);
+  color: color-mix(in oklab, var(--sx-chakra) 78%, var(--sx-text));
   font-size: 11px;
 }
 
-.o-link {
+.o-link{
   color: var(--sx-text);
   text-decoration: none;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.14);
+  border-bottom: 1px dashed rgba(255,255,255,0.18);
   max-width: 60ch;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-weight: 600;
+  font-weight: 700;
 }
 
-.o-link:hover {
+.o-link:hover{
   color: var(--sx-accent-3);
-  text-shadow: 0 0 12px rgba(92, 225, 255, 0.28);
+  text-shadow: 0 0 14px rgba(92,225,255,0.30);
 }
 
-.o-right {
+.o-chakra{
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--sx-chakra) 55%, rgba(255,255,255,0.12));
+  background:
+    radial-gradient(120% 200% at 0% 0%, color-mix(in oklab, var(--sx-chakra) 22%, transparent), transparent 60%),
+    linear-gradient(180deg, color-mix(in oklab, var(--sx-chakra) 26%, transparent), rgba(255,255,255,0.02));
+  color: #f8fbff;
+  font-size: 11px;
+  white-space: nowrap;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.25);
+}
+
+.o-right{
   display: flex;
   gap: 8px;
   align-items: center;
@@ -567,87 +520,130 @@
   justify-content: flex-end;
 }
 
-.o-count {
-  color: var(--sx-text-dim);
-  font-size: 11px;
-}
+.o-count{ color: var(--sx-text-dim); font-size: 11px; }
 
-.o-copy {
+.o-copy{
   padding: 7px 11px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.06),
-    rgba(255, 255, 255, 0.02)
-  );
+  border: 1px solid rgba(255,255,255,0.14);
+  background:
+    radial-gradient(140% 220% at 0% 0%, color-mix(in oklab, var(--sx-chakra) 12%, transparent), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
   color: var(--sx-text);
   cursor: pointer;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 6px 18px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.04),
+    0 6px 18px rgba(0,0,0,0.35);
   font-size: 11px;
+  transition: transform .12s ease, filter .18s ease, border-color .18s ease;
 }
 
-.o-copy:hover {
+.o-copy:hover{
   transform: translateY(-1px);
-  border-color: var(--sx-border-strong);
-  color: var(--sx-accent);
+  border-color: color-mix(in oklab, var(--sx-chakra) 60%, rgba(255,255,255,0.16));
+  filter: saturate(1.06) brightness(1.03);
 }
 
-/* Origin body (tree rail area) */
-.origin-body {
+/* Origin body */
+.origin-body{
   padding: 8px 9px 10px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
 /* ─────────────────────────────────────────────────────────────
-   TREE / NODES
+   TREE / NODES (chakra-tinted, etched, breathing)
    ───────────────────────────────────────────────────────────── */
-.tree {
+.tree{
   display: flex;
   flex-direction: column;
   gap: 7px;
-  min-width: min-content; /* prevents right cut-off on deep trees */
+  min-width: min-content;
 }
 
-/* Single node container */
-.node {
-  position: relative;
+.node{
+  /* per-node chakra tint injected by TS via style: --sx-chakra */
   border-radius: var(--sx-radius-sm);
-  background: radial-gradient(
-      110% 220% at -5% 0%,
-      rgba(55, 255, 228, 0.07),
-      transparent 45%
-    ),
-    radial-gradient(
-      130% 200% at 110% 100%,
-      rgba(167, 139, 250, 0.06),
-      transparent 50%
-    ),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255,255,255,0.16);
+  background:
+    radial-gradient(140% 260% at 0% 0%, color-mix(in oklab, var(--sx-chakra) 22%, transparent), transparent 58%),
+    radial-gradient(160% 240% at 110% 100%, color-mix(in oklab, var(--sx-chakra) 12%, transparent), transparent 62%),
+    linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+  box-shadow:
+    0 14px 34px rgba(0,0,0,0.58),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+  position: relative;
+  overflow: hidden;
+  animation: sx-node-breathe var(--sx-breath) ease-in-out infinite;
 }
 
-/* Main row: two bands (left = sig / controls, right = meta pills) */
-.node-row {
+.node::before{
+  content:"";
+  position:absolute;
+  inset: 0;
+  pointer-events:none;
+  background:
+    radial-gradient(900px 420px at 20% 10%, rgba(255,255,255,0.10), transparent 62%),
+    radial-gradient(620px 320px at 90% 80%, color-mix(in oklab, var(--sx-chakra) 14%, transparent), transparent 65%),
+    repeating-linear-gradient(
+      135deg,
+      rgba(255,255,255,0.05) 0px,
+      rgba(255,255,255,0.05) 1px,
+      rgba(0,0,0,0.0) 11px,
+      rgba(0,0,0,0.0) 18px
+    );
+  mix-blend-mode: overlay;
+  opacity: .34;
+}
+
+.node::after{
+  content:"";
+  position:absolute;
+  inset:-40%;
+  pointer-events:none;
+  background:
+    conic-gradient(
+      from 180deg,
+      rgba(255,255,255,0.00),
+      color-mix(in oklab, var(--sx-chakra) 14%, transparent),
+      rgba(255,255,255,0.00),
+      color-mix(in oklab, var(--sx-chakra) 10%, transparent),
+      rgba(255,255,255,0.00)
+    );
+  filter: blur(18px);
+  opacity: .26;
+  transform: translate3d(-8%, -10%, 0);
+  animation: sx-node-caustic calc(var(--sx-breath) * 1.4) ease-in-out infinite;
+}
+
+@keyframes sx-node-breathe{
+  0%   { filter: brightness(1) saturate(1); }
+  50%  { filter: brightness(1.05) saturate(1.08); }
+  100% { filter: brightness(1) saturate(1); }
+}
+
+@keyframes sx-node-caustic{
+  0%   { transform: translate3d(-10%, -12%, 0) rotate(0deg); opacity:.20; }
+  50%  { transform: translate3d(6%, 4%, 0) rotate(6deg); opacity:.34; }
+  100% { transform: translate3d(-10%, -12%, 0) rotate(0deg); opacity:.20; }
+}
+
+/* Node row layout (desktop = 2 columns, mobile = stacked two-row) */
+.node-row{
   display: grid;
   grid-template-columns: minmax(0, 2.2fr) minmax(0, 2fr);
   gap: 8px 10px;
   align-items: center;
-  padding: 7px 9px;
+  padding: 8px 10px;
 }
 
-@media (max-width: 640px) {
-  .node-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
+@media (max-width: 760px){
+  .node-row{ grid-template-columns: minmax(0, 1fr); }
+  .node-meta{ justify-content: flex-start; }
 }
 
 /* Left */
-.node-main {
+.node-main{
   display: flex;
   align-items: center;
   gap: 8px;
@@ -655,7 +651,7 @@
 }
 
 /* Right */
-.node-meta {
+.node-meta{
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -663,68 +659,73 @@
   gap: 6px;
 }
 
-/* Twirl arrow */
-.twirl {
+/* Twirl */
+.twirl{
   width: 30px;
   height: 30px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.08),
-    rgba(255, 255, 255, 0.03)
-  );
+  border: 1px solid rgba(255,255,255,0.18);
+  background:
+    radial-gradient(140% 240% at 0% 0%, color-mix(in oklab, var(--sx-chakra) 14%, transparent), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
   color: var(--sx-text);
   display: inline-grid;
   place-items: center;
   cursor: pointer;
   flex-shrink: 0;
+  transition: transform .12s ease, filter .16s ease, border-color .16s ease;
 }
 
-.tw {
+.twirl:hover{
+  transform: translateY(-1px);
+  filter: brightness(1.05) saturate(1.06);
+  border-color: color-mix(in oklab, var(--sx-chakra) 55%, rgba(255,255,255,0.14));
+}
+
+.tw{
   width: 10px;
   height: 10px;
   border-right: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
   transform: rotate(-45deg);
-  transition: transform 0.18s ease;
-  opacity: 0.9;
+  transition: transform .18s ease, color .18s ease;
+  opacity: .92;
 }
 
-.tw.open {
+.tw.open{
   transform: rotate(45deg);
-  color: var(--sx-accent);
+  color: color-mix(in oklab, var(--sx-chakra) 80%, white);
 }
 
 /* Node link */
-.node-link {
+.node-link{
   min-width: 0;
   color: var(--sx-text);
   text-decoration: none;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-weight: 600;
+  font-weight: 700;
 }
 
-.node-link span {
-  padding: 5px 8px;
-  border-radius: 8px;
-  background: linear-gradient(
-    180deg,
-    rgba(55, 255, 228, 0.22),
-    rgba(55, 255, 228, 0.07)
-  );
-  border: 1px solid rgba(55, 255, 228, 0.6);
-  text-shadow: 0 0 16px rgba(55, 255, 228, 0.45);
+.node-link span{
+  padding: 6px 9px;
+  border-radius: 10px;
+  background:
+    radial-gradient(140% 220% at 0% 0%, color-mix(in oklab, var(--sx-chakra) 32%, transparent), transparent 60%),
+    linear-gradient(180deg, color-mix(in oklab, var(--sx-chakra) 16%, transparent), rgba(255,255,255,0.02));
+  border: 1px solid color-mix(in oklab, var(--sx-chakra) 70%, rgba(255,255,255,0.14));
+  text-shadow:
+    0 0 18px color-mix(in oklab, var(--sx-chakra) 35%, transparent),
+    0 1px 0 rgba(0,0,0,0.25);
 }
 
-.node-link:hover {
+.node-link:hover{
   color: var(--sx-accent-3);
 }
 
 /* Kai time pills */
-.k-stamp {
+.k-stamp{
   display: inline-flex;
   gap: 6px;
   align-items: center;
@@ -733,128 +734,92 @@
   color: var(--sx-text-dim);
 }
 
-.k-pill {
+.k-pill{
   padding: 5px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.06),
-    rgba(255, 255, 255, 0.02)
-  );
+  border: 1px solid rgba(255,255,255,0.15);
+  background:
+    radial-gradient(140% 220% at 0% 0%, rgba(255,255,255,0.05), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
   white-space: nowrap;
 }
 
-.k-dot {
-  opacity: 0.6;
-}
+.k-dot{ opacity: 0.6; }
 
-/* Chakra badge */
-.chakra {
+/* Chakra badge (NOW chakra-colored, not purple) */
+.chakra{
   padding: 5px 9px;
   border-radius: 999px;
-  border: 1px solid rgba(167, 139, 250, 0.45);
-  background: linear-gradient(
-    180deg,
-    rgba(167, 139, 250, 0.24),
-    rgba(167, 139, 250, 0.08)
-  );
-  color: #f5f0ff;
+  border: 1px solid color-mix(in oklab, var(--sx-chakra) 55%, rgba(255,255,255,0.12));
+  background:
+    radial-gradient(140% 220% at 0% 0%, color-mix(in oklab, var(--sx-chakra) 22%, transparent), transparent 60%),
+    linear-gradient(180deg, color-mix(in oklab, var(--sx-chakra) 18%, transparent), rgba(255,255,255,0.02));
+  color: #f8fbff;
   font-size: 11px;
   white-space: nowrap;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+  text-shadow: 0 1px 0 rgba(0,0,0,0.25);
 }
 
 /* Φ pill */
-.phi-pill {
+.phi-pill{
   padding: 5px 9px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 215, 128, 0.6);
-  background: linear-gradient(
-    180deg,
-    rgba(255, 215, 128, 0.28),
-    rgba(255, 215, 128, 0.08)
-  );
+  border: 1px solid rgba(255, 215, 128, 0.62);
+  background:
+    radial-gradient(140% 220% at 0% 0%, rgba(255,215,128,0.22), transparent 62%),
+    linear-gradient(180deg, rgba(255,215,128,0.22), rgba(255,215,128,0.06));
   color: #fff8e0;
   font-size: 11px;
   white-space: nowrap;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+  text-shadow: 0 1px 0 rgba(0,0,0,0.25);
 }
 
 /* Copy button */
-.node-copy {
+.node-copy{
   width: 30px;
   height: 30px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.06),
-    rgba(255, 255, 255, 0.02)
-  );
+  border: 1px solid rgba(255,255,255,0.16);
+  background:
+    radial-gradient(140% 220% at 0% 0%, color-mix(in oklab, var(--sx-chakra) 14%, transparent), transparent 62%),
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
   color: var(--sx-text);
   cursor: pointer;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 6px 18px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.04),
+    0 6px 18px rgba(0,0,0,0.35);
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
+  transition: transform .12s ease, filter .16s ease, border-color .16s ease;
 }
 
-.node-copy:hover {
+.node-copy:hover{
   transform: translateY(-1px);
-  border-color: var(--sx-border-strong);
-  color: var(--sx-accent);
+  border-color: color-mix(in oklab, var(--sx-chakra) 60%, rgba(255,255,255,0.14));
+  filter: brightness(1.05) saturate(1.06);
 }
 
-/* Children rail */
-.node-children {
-  border-top: 1px dashed rgba(255, 255, 255, 0.16);
-  margin: 4px 0 6px 20px;
-  padding: 6px 0 4px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  position: relative;
+/* Open area */
+.node-open{
+  border-top: 1px dashed rgba(255,255,255,0.14);
 }
 
-.node-children::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 2px;
-  bottom: 10px;
-  width: 2px;
-  background: linear-gradient(
-    180deg,
-    rgba(55, 255, 228, 0.45),
-    rgba(55, 255, 228, 0)
-  );
-  border-radius: 1px;
-}
-
-/* ─────────────────────────────────────────────────────────────
-   NODE DETAIL PANEL (opened via twirl)
-   ───────────────────────────────────────────────────────────── */
+/* Detail panel */
 .node-detail,
-.node-details {
-  border-top: 1px dashed rgba(255, 255, 255, 0.18);
-  margin: 0 0 4px;
-  padding: 6px 9px 8px;
+.node-details{
+  padding: 8px 10px 10px;
   font-size: 11px;
   color: var(--sx-text-dim);
-  background: radial-gradient(
-      120% 200% at 0% 0%,
-      rgba(55, 255, 228, 0.08),
-      transparent 55%
-    ),
-    linear-gradient(180deg, rgba(5, 10, 11, 0.9), rgba(5, 10, 11, 0.8));
+  background:
+    radial-gradient(140% 220% at 0% 0%, color-mix(in oklab, var(--sx-chakra) 12%, transparent), transparent 62%),
+    linear-gradient(180deg, rgba(5,10,11,0.92), rgba(5,10,11,0.82));
 }
 
 .node-detail-grid,
-.node-details-grid {
+.node-details-grid{
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   column-gap: 10px;
@@ -862,22 +827,20 @@
   align-items: baseline;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 640px){
   .node-detail-grid,
-  .node-details-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  .node-details-grid{ grid-template-columns: minmax(0, 1fr); }
 }
 
-.detail-label {
-  opacity: 0.8;
+.detail-label{
+  opacity: 0.82;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 10px;
 }
 
-.detail-value {
+.detail-value{
   font-family: var(--sx-mono);
   min-width: 0;
   white-space: nowrap;
@@ -885,37 +848,47 @@
   text-overflow: ellipsis;
 }
 
-.detail-value strong {
-  font-weight: 600;
-  color: var(--sx-text);
+.detail-value strong{ font-weight: 700; color: var(--sx-text); }
+
+.node-detail-empty{
+  opacity: 0.88;
+  padding: 4px 0 2px;
 }
 
-.detail-memo {
-  margin-top: 6px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+/* Children rail (NOW chakra-tinted per parent node) */
+.node-children{
+  margin: 6px 0 8px 20px;
+  padding: 8px 0 4px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  position: relative;
+}
+
+.node-children::before{
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 10px;
+  width: 2px;
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.04),
-    rgba(255, 255, 255, 0.02)
+    color-mix(in oklab, var(--sx-chakra) 70%, transparent),
+    rgba(0,0,0,0)
   );
-  font-size: 11px;
-  line-height: 1.4;
-  white-space: pre-line;
-  max-height: 140px;
-  overflow-y: auto;
+  border-radius: 1px;
+  box-shadow:
+    0 0 18px color-mix(in oklab, var(--sx-chakra) 26%, transparent);
 }
 
 /* Empty branch inside origin */
-.origin-body .kx-empty {
-  margin: 4px 2px 6px;
-}
+.origin-body .kx-empty{ margin: 4px 2px 6px; }
 
 /* ─────────────────────────────────────────────────────────────
    FOOTER — ULTRA SLIM
    ───────────────────────────────────────────────────────────── */
-.kx-footer {
+.kx-footer{
   color: var(--sx-text-dim);
   text-align: center;
   font-size: 11px;
@@ -923,121 +896,99 @@
   opacity: 0.9;
 }
 
-.kx-footer .row {
+.kx-footer .row{
   display: inline-flex;
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
 }
 
-.kx-footer .dot {
-  opacity: 0.6;
-}
+.kx-footer .dot{ opacity: 0.6; }
 
 /* ─────────────────────────────────────────────────────────────
    SCROLLBAR POLISH (scoped)
    ───────────────────────────────────────────────────────────── */
 .explorer-scroll,
-.origin-body {
+.origin-body{
   scrollbar-width: thin;
   scrollbar-color: rgba(55, 255, 228, 0.5) transparent;
 }
 
 .explorer-scroll::-webkit-scrollbar,
-.origin-body::-webkit-scrollbar {
+.origin-body::-webkit-scrollbar{
   height: 8px;
   width: 8px;
 }
 
 .explorer-scroll::-webkit-scrollbar-thumb,
-.origin-body::-webkit-scrollbar-thumb {
-  background: linear-gradient(
-    180deg,
-    rgba(55, 255, 228, 0.35),
-    rgba(55, 255, 228, 0.15)
-  );
+.origin-body::-webkit-scrollbar-thumb{
+  background: linear-gradient(180deg, rgba(55,255,228,0.35), rgba(55,255,228,0.15));
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 .explorer-scroll::-webkit-scrollbar-track,
-.origin-body::-webkit-scrollbar-track {
+.origin-body::-webkit-scrollbar-track{
   background: transparent;
 }
 
 /* ─────────────────────────────────────────────────────────────
    A11Y / MOTION
    ───────────────────────────────────────────────────────────── */
-.sigil-explorer :is(button, a, input) {
+.sigil-explorer :is(button, a, input){
   outline: none;
 }
 
-.sigil-explorer :is(button, a, input):focus-visible {
+.sigil-explorer :is(button, a, input):focus-visible{
   box-shadow: var(--sx-ring);
-  border-color: var(--sx-border-strong);
+  border-color: rgba(255,255,255,0.24);
 }
 
-@media (prefers-reduced-motion: reduce) {
+@media (prefers-reduced-motion: reduce){
+  .sigil-explorer::after,
+  .origin,
+  .node,
   .kx-button,
   .tw,
-  .kx-x,
-  .kx-x::before,
-  .kx-x::after {
+  .kx-glyph::after{
     transition: none !important;
     animation: none !important;
   }
 }
-
 /* ─────────────────────────────────────────────────────────────
-   X animations (breath-synced, subtle)
+   CLOSE BUTTON — PERFECTLY CENTERED “X” (font-proof)
    ───────────────────────────────────────────────────────────── */
-@keyframes kx-x-breathe{
-  0%{
-    filter: brightness(1) saturate(1);
-    box-shadow:
-      0 10px 28px rgba(0,0,0,0.55),
-      0 0 0 1px rgba(55,255,228,0.10),
-      inset 0 1px 0 rgba(255,255,255,0.10),
-      inset 0 0 0 1px rgba(255,255,255,0.04);
-  }
-  50%{
-    filter: brightness(1.06) saturate(1.08);
-    box-shadow:
-      0 14px 34px rgba(0,0,0,0.62),
-      0 0 0 1px rgba(55,255,228,0.16),
-      0 0 54px rgba(55,255,228,0.10),
-      0 0 44px rgba(167,139,250,0.08),
-      inset 0 1px 0 rgba(255,255,255,0.12),
-      inset 0 0 0 1px rgba(92,225,255,0.10);
-  }
-  100%{
-    filter: brightness(1) saturate(1);
-    box-shadow:
-      0 10px 28px rgba(0,0,0,0.55),
-      0 0 0 1px rgba(55,255,228,0.10),
-      inset 0 1px 0 rgba(255,255,255,0.10),
-      inset 0 0 0 1px rgba(255,255,255,0.04);
-  }
+
+/* Update this selector if your close button uses a different class */
+.sigil-explorer .kx-close{
+  display: grid;
+  place-items: center;
+  padding: 0;
+  line-height: 0;
+  position: relative;
 }
 
-@keyframes kx-x-lines{
-  0%{
-    opacity: .84;
-    filter:
-      drop-shadow(0 0 8px rgba(55,255,228,0.14))
-      drop-shadow(0 0 14px rgba(167,139,250,0.10));
-  }
-  50%{
-    opacity: 1;
-    filter:
-      drop-shadow(0 0 14px rgba(55,255,228,0.22))
-      drop-shadow(0 0 22px rgba(167,139,250,0.16));
-  }
-  100%{
-    opacity: .84;
-    filter:
-      drop-shadow(0 0 8px rgba(55,255,228,0.14))
-      drop-shadow(0 0 14px rgba(167,139,250,0.10));
-  }
+/* If the button currently contains "×" text, hide it visually (we draw our own X) */
+.sigil-explorer .kx-close{
+  color: transparent;
+  text-shadow: none;
+  font-size: 0;
 }
+
+/* Draw a perfectly centered X */
+.sigil-explorer .kx-close::before,
+.sigil-explorer .kx-close::after{
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;        /* tweak if you want thicker/bigger */
+  height: 2.5px;
+  border-radius: 999px;
+  background: rgba(236, 255, 255, 0.92);
+  transform-origin: center;
+}
+
+.sigil-explorer .kx-close::before{ transform: translate(-50%, -50%) rotate(45deg); }
+.sigil-explorer .kx-close::after{  transform: translate(-50%, -50%) rotate(-45deg); }
