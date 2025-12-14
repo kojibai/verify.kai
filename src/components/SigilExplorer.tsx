@@ -1149,7 +1149,7 @@ function ExplorerToolbar({
             <h1>
               KAIROS <span>Keystream</span>
             </h1>
-            <div className="kx-tagline">Atlantean Krystal • Breath-Live • No DB</div>
+            <div className="kx-tagline">Sovereign Lineage • No DB • Pure Φ</div>
           </div>
         </div>
 
