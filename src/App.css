@@ -227,6 +227,12 @@ a:hover {
 .skip-link:focus {
   transform: translateY(0);
 }
+input,
+textarea,
+select,
+button {
+  font-size: 16px;
+}
 
 /* ────────────────────────────────────────────────────────────────
    3) Atlantean App Shell + background layers

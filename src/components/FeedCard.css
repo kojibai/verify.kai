@@ -6,6 +6,9 @@
    • Works with BOTH:
        - New markup: .fc--crystal / .fc-shell / .fc-chip / .fc-btn / .fc-metaRow
        - Legacy markup: .pill / .btn / .sig / .fc-meta
+   • FORCED DARK THEME:
+       - No prefers-color-scheme light overrides
+       - Cards render dark even when OS/browser is in Light Mode
    ───────────────────────────────────────────────────────────── */
 
 /* ========== 0) ROOT TOKENS (fallbacks) ========================= */
@@ -118,11 +121,36 @@
 /* ========== 4) CARD ROOT (NEW + LEGACY) ======================= */
 /* New: .fc.fc--crystal  |  Legacy: .fc */
 .fc{
+  /* FORCE DARK UI EVEN IN LIGHT MODE */
+  color-scheme: dark;
+
+  /* Freeze critical palette/tokens at the card level so global light-mode vars
+     (or other files) can’t wash this card out. */
+  --bg: 10, 14, 22;
+  --ink: 236, 241, 251;
+  --muted: 180, 192, 210;
+  --glass: 255, 255, 255;
+  --ring: 255, 255, 255;
+
+  --gold: 42, 197, 255;
+  --gold-ink: 255, 215, 128;
+  --danger: 255, 88, 88;
+  --ok: 88, 255, 174;
+
+  --a-card: 0.065;
+  --a-border: 0.13;
+  --a-border-strong: 0.20;
+  --a-pill: 0.11;
+  --a-pill-border: 0.18;
+
+  --shadow-1: 0 10px 30px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.04);
+  --shadow-2: 0 16px 54px rgba(0,0,0,.36), inset 0 1px 0 rgba(255,255,255,.05);
+  --noise-a: 0.028;
+
   /* Accent is per-card if provided by component style vars */
   --accent-r: var(--fc-accent-r, var(--gold));
   --accent-g: var(--fc-accent-g, var(--gold));
   --accent-b: var(--fc-accent-b, var(--gold));
-  
 
   /* Breath timings */
   --pulse-dur: var(--fc-pulse-dur, var(--dur-breath));
@@ -250,12 +278,13 @@
   animation: fc-shimmer var(--pulse-dur) var(--ease-flow) infinite;
   animation-delay: var(--pulse-offset);
 }
-.fc-btn--prev {
+
+.fc-btn--prev{
   position: relative;
   padding-left: 14px;
 }
 
-.fc-btn--prev::before {
+.fc-btn--prev::before{
   content: "";
   position: absolute;
   left: 8px;
@@ -281,12 +310,8 @@
 }
 
 /* Legacy layout fallback: old markup uses flex (.fc-left + .fc-right directly) */
-.fc-left{
-  min-width:0;
-}
-.fc-right{
-  min-width:0;
-}
+.fc-left{ min-width:0; }
+.fc-right{ min-width:0; }
 
 /* If legacy markup is used, keep it nice */
 .fc:not(:has(.fc-shell)){
@@ -392,9 +417,8 @@
 .fc-stamp__sep{ opacity:.55; }
 
 /* Legacy sigil holder (old markup) still looks great */
-.fc-sigil{
-  min-width:0;
-}
+.fc-sigil{ min-width:0; }
+
 .fc:not(:has(.fc-sigilStage)) .fc-sigil{
   width: 120px;
   height: 120px;
@@ -407,9 +431,7 @@
 }
 
 /* ========== 8) META HEADER (new + legacy) ====================== */
-.fc-head{
-  min-width:0;
-}
+.fc-head{ min-width:0; }
 
 /* New */
 .fc-metaRow{
@@ -691,7 +713,8 @@
   color: rgba(var(--muted), .95);
   opacity:.9;
 }
-.fc-memoryMark {
+
+.fc-memoryMark{
   width: 100%;
   height: 100%;
   display: grid;
@@ -753,40 +776,7 @@
   .fc-btn, .btn{ padding: .46rem .78rem; }
 }
 
-/* ========== 16) LIGHT SCHEME (optional) ======================== */
-@media (prefers-color-scheme: light){
-  :root{
-    --bg: 247, 249, 255;
-    --ink: 18, 22, 30;
-    --muted: 88, 92, 104;
-
-    --a-card: 0.78;
-    --a-border: 0.16;
-    --a-pill: 0.22;
-    --a-pill-border: 0.26;
-
-    --shadow-1: 0 10px 30px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.45);
-    --shadow-2: 0 18px 54px rgba(0,0,0,.10), inset 0 1px 0 rgba(255,255,255,.55);
-    --noise-a: 0.018;
-  }
-
-  .fc{
-    background:
-      radial-gradient(900px 420px at 18% 0%,
-        rgba(var(--accent-r), var(--accent-g), var(--accent-b), .10),
-        transparent 62%),
-      linear-gradient(180deg,
-        rgba(255,255,255,.92),
-        rgba(255,255,255,.82));
-  }
-
-  .fc-kai{
-    background: linear-gradient(180deg, rgba(255,255,255,.82), rgba(255,255,255,.72));
-    border-color: rgba(0,0,0,.08);
-  }
-}
-
-/* ========== 17) PRINT ========================================= */
+/* ========== 16) PRINT ========================================= */
 @media print{
   .fc{
     backdrop-filter:none !important;
