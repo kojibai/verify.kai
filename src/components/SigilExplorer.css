@@ -956,39 +956,3 @@
     animation: none !important;
   }
 }
-/* ─────────────────────────────────────────────────────────────
-   CLOSE BUTTON — PERFECTLY CENTERED “X” (font-proof)
-   ───────────────────────────────────────────────────────────── */
-
-/* Update this selector if your close button uses a different class */
-.sigil-explorer .kx-close{
-  display: grid;
-  place-items: center;
-  padding: 0;
-  line-height: 0;
-  position: relative;
-}
-
-/* If the button currently contains "×" text, hide it visually (we draw our own X) */
-.sigil-explorer .kx-close{
-  color: transparent;
-  text-shadow: none;
-  font-size: 0;
-}
-
-/* Draw a perfectly centered X */
-.sigil-explorer .kx-close::before,
-.sigil-explorer .kx-close::after{
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 18px;        /* tweak if you want thicker/bigger */
-  height: 2.5px;
-  border-radius: 999px;
-  background: rgba(236, 255, 255, 0.92);
-  transform-origin: center;
-}
-
-.sigil-explorer .kx-close::before{ transform: translate(-50%, -50%) rotate(45deg); }
-.sigil-explorer .kx-close::after{  transform: translate(-50%, -50%) rotate(-45deg); }
