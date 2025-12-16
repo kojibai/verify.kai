@@ -1,6 +1,6 @@
 /* ──────────────────────────────────────────────────────────────────────────────
    App.tsx · ΦNet Sovereign Gate Shell (KaiOS-style PWA)
-   v27.9.6 · Zero-jank Live Header + Bulletproof Popovers + Native Zoom Lock
+   v28.3.0 · Zero-jank Live Header + Bulletproof Popovers + Native Zoom Lock
    ──────────────────────────────────────────────────────────────────────────────
    KEY UX/PERF UPGRADES (no look/behavior regressions):
    ✅ Live header updates are isolated (no 250ms full-app rerender)
@@ -1389,10 +1389,10 @@ function AppChrome(): React.JSX.Element {
                       href="https://github.com/phinetwork/phi.network"
                       target="_blank"
                       rel="noreferrer"
-                      aria-label="Version 28.2 (opens GitHub)"
+                      aria-label="Version 28.3 (opens GitHub)"
                       title="Open GitHub"
                     >
-                      28.2
+                      28.3
                     </a>
                   </div>
                 </footer>

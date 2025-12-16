@@ -1,4 +1,5 @@
 // src/pages/sigilstream/identity/SigilActionUrl.tsx
+// v1.1.0 — Proof-of-Memory URL Normalization (prefer t=, fallback p=, NEVER v=)
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -22,42 +23,61 @@ type ReturnShape = {
   node: React.JSX.Element;
 };
 
-/** Pick the first useful URL-ish field out of sigil metadata. */
-function extractFromMeta(meta: Record<string, unknown> | null): string {
-  if (!meta || !isRecord(meta)) return "";
-  // Priority order (most specific first)
-  const keys = [
-    "sigilActionUrl",
-    "sigilUrl",
-    "actionUrl",
-    "claimedUrl",
-    "loginUrl",
-    "sourceUrl",
-    "originUrl",
-    "url",
-    "link",
-    "href",
-  ];
-  for (const k of keys) {
+/** Priority order (most specific first) */
+const META_URL_KEYS: ReadonlyArray<string> = [
+  "sigilActionUrl",
+  "sigilUrl",
+  "actionUrl",
+  "claimedUrl",
+  "loginUrl",
+  "sourceUrl",
+  "originUrl",
+  "url",
+  "link",
+  "href",
+];
+
+/** Collect URL-ish candidates out of sigil metadata (keeps priority order). */
+function collectFromMeta(meta: Record<string, unknown> | null): string[] {
+  if (!meta || !isRecord(meta)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const k of META_URL_KEYS) {
     const v = readStringProp(meta, k);
-    if (typeof v === "string" && v.trim().length) return v.trim();
+    if (typeof v !== "string") continue;
+    const t = v.trim();
+    if (!t) continue;
+    if (seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
   }
-  return "";
+  return out;
 }
 
-/** Fallback URL scrape from raw SVG text (first http/https absolute URL). */
-function extractFromSvg(svgText: string | null): string {
-  if (!svgText) return "";
+/** Collect absolute http(s) URLs from raw SVG text (best-effort). */
+function collectFromSvg(svgText: string | null): string[] {
+  if (!svgText) return [];
   try {
-    const m = svgText.match(/https?:\/\/[^\s"'<>)#]+/i);
-    return m?.[0] ?? "";
+    const re = /https?:\/\/[^\s"'<>)#]+/gi;
+    const matches = svgText.match(re) ?? [];
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const m of matches) {
+      const t = (m ?? "").trim();
+      if (!t) continue;
+      if (seen.has(t)) continue;
+      seen.add(t);
+      out.push(t);
+    }
+    return out;
   } catch {
-    return "";
+    return [];
   }
 }
 
 function isHttpUrl(s: string): boolean {
-  return /^https?:\/\//i.test(s.trim());
+  return /^https?:\/\//i.test((s ?? "").trim());
 }
 
 function safeParseUrl(s: string): URL | null {
@@ -66,6 +86,148 @@ function safeParseUrl(s: string): URL | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Legacy cleanup:
+ * - NEVER allow `v=` in returned URLs (cards must not render v= anymore)
+ * - If `v=` exists and `t=` does not, treat `v` as `t`
+ * - Prefer `t=` over `p=` when both exist
+ * - Keep everything else intact (including add-chains, etc.)
+ */
+function normalizeProofUrl(raw: string): string {
+  const input = (raw ?? "").trim();
+  if (!input) return "";
+
+  // String-level normalization (works even when URL parsing fails)
+  let s = input;
+
+  // Path variants (rare but we harden anyway)
+  s = s.replace(/\/stream\/v=/gi, "/stream/t=");
+  s = s.replace(/\/stream\/v\//gi, "/stream/t/");
+  s = s.replace(/\/stream\/v(\?|&|#)/gi, "/stream/t$1");
+
+  // Query/hash param rename (v= -> t=)
+  // - only transforms key name; value stays the same
+  s = s.replace(/([?&#])v=/gi, "$1t=");
+
+  const u = safeParseUrl(s);
+  if (!u) {
+    // Non-parseable strings: at least guarantee no remaining "v="
+    return s.replace(/([?&#])v=/gi, "$1t=");
+  }
+
+  // Query params: enforce t>p, drop v
+  const qp = u.searchParams;
+  const hasT = (qp.get("t") ?? "").trim().length > 0;
+  const vVal = (qp.get("v") ?? "").trim();
+
+  if (!hasT && vVal) qp.set("t", vVal);
+  qp.delete("v");
+
+  // Prefer t= when available (long memories)
+  if ((qp.get("t") ?? "").trim().length > 0) {
+    qp.delete("p");
+  }
+
+  // Hash params: ensure no v= leaks through in query-like hashes
+  // (We only touch hashes that look like k=v&k2=v2; we avoid pathy hashes.)
+  if (u.hash && u.hash.length > 1) {
+    const h0 = u.hash.startsWith("#") ? u.hash.slice(1) : u.hash;
+    const looksQueryLike = h0.includes("=") && !h0.startsWith("/");
+    if (looksQueryLike) {
+      const parts = h0.split("&").filter(Boolean);
+      const kept: string[] = [];
+      let hasHashT = false;
+
+      for (const part of parts) {
+        const eq = part.indexOf("=");
+        if (eq <= 0) {
+          kept.push(part);
+          continue;
+        }
+        const k = part.slice(0, eq);
+        const v = part.slice(eq + 1);
+
+        const keyLower = k.toLowerCase();
+
+        if (keyLower === "v") {
+          // convert v -> t (only if hash doesn't already have t)
+          if (!hasHashT && v.trim().length) {
+            kept.push(`t=${v}`);
+            hasHashT = true;
+          }
+          continue;
+        }
+
+        if (keyLower === "t") hasHashT = true;
+        kept.push(part);
+      }
+
+      // Prefer t over p in hash too (only if BOTH exist)
+      if (hasHashT) {
+        const kept2: string[] = [];
+        for (const part of kept) {
+          const eq = part.indexOf("=");
+          const k = eq > 0 ? part.slice(0, eq).toLowerCase() : "";
+          if (k === "p") continue;
+          kept2.push(part);
+        }
+        u.hash = kept2.length ? `#${kept2.join("&")}` : "";
+      } else {
+        u.hash = kept.length ? `#${kept.join("&")}` : "";
+      }
+    } else {
+      // Still guarantee no raw v= pattern leaks
+      u.hash = u.hash.replace(/([?&#])v=/gi, "$1t=");
+    }
+  }
+
+  return u.toString();
+}
+
+function scoreProofUrl(value: string): number {
+  const v = (value ?? "").trim();
+  if (!v) return -1;
+
+  const lower = v.toLowerCase();
+  let s = 0;
+
+  // Hard rule: never allow v=
+  if (/[?&#]v=/.test(lower) || lower.includes("/stream/v")) s -= 10_000;
+
+  // Prefer t= (long memory/thread form)
+  if (/[?&#]t=/.test(lower) || lower.includes("/stream/t") || lower.includes("stream/t=")) s += 500;
+
+  // Fallback: p= (short memory/pulse form)
+  if (/[?&#]p=/.test(lower) || lower.includes("/stream/p") || lower.includes("stream/p=")) s += 280;
+
+  // Prefer sealed/canonical sigil URLs
+  if (isLikelySigilUrl(v)) s += 160;
+
+  // Prefer https
+  if (lower.startsWith("https://")) s += 20;
+  else if (lower.startsWith("http://")) s += 10;
+
+  // Slight preference for shorter strings (but t= still dominates)
+  s += Math.max(0, 120 - Math.min(120, Math.floor(v.length / 6)));
+
+  return s;
+}
+
+function pickBestCandidate(candidates: string[]): string {
+  let best = "";
+  let bestScore = -1;
+
+  for (const raw of candidates) {
+    const norm = normalizeProofUrl(raw);
+    const sc = scoreProofUrl(norm);
+    if (sc > bestScore) {
+      bestScore = sc;
+      best = norm;
+    }
+  }
+  return best;
 }
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -143,8 +305,9 @@ function SigilActionUrlNode({ value, isCanonical }: { value: string; isCanonical
   }, []);
 
   const host = url?.host ?? "";
-  const pretty =
-    url ? `${url.hostname}${url.pathname}${url.search}${url.hash}`.replace(/\/{2,}/g, "/") : value;
+  const pretty = url
+    ? `${url.hostname}${url.pathname}${url.search}${url.hash}`.replace(/\/{2,}/g, "/")
+    : value;
 
   return (
     <div className="sf-reply-row sf-actionurl">
@@ -170,7 +333,11 @@ function SigilActionUrlNode({ value, isCanonical }: { value: string; isCanonical
             aria-label="Proof of Breath™ Sigil-Glyph"
           />
           <div className="sf-actionurl__meta" aria-hidden="true">
-            {host ? <span className="sf-actionurl__host">{host}</span> : <span className="sf-actionurl__host">URL</span>}
+            {host ? (
+              <span className="sf-actionurl__host">{host}</span>
+            ) : (
+              <span className="sf-actionurl__host">URL</span>
+            )}
             <span className="sf-actionurl__dot">•</span>
             <span className="sf-actionurl__pretty">{pretty}</span>
           </div>
@@ -232,12 +399,18 @@ function SigilActionUrlEmpty() {
 
 /**
  * SigilActionUrl — extracts a canonical sigil/action URL and returns both the value
- * and a prebuilt UI node. Consumers can either use `.node` directly or read `.value`
- * and `.isCanonical` for custom layouts.
+ * and a prebuilt UI node. Returned URL is normalized to:
+ * - Prefer t= (long/thread) if present (or if legacy v= was present)
+ * - Otherwise use p= (short/pulse)
+ * - NEVER return v=
  */
 export function SigilActionUrl({ meta, svgText }: Props): ReturnShape {
-  const candidate = extractFromMeta(meta) || extractFromSvg(svgText) || "";
-  const value = candidate;
+  const metaCandidates = collectFromMeta(meta);
+  const svgCandidates = collectFromSvg(svgText);
+
+  const candidates = [...metaCandidates, ...svgCandidates];
+
+  const value = candidates.length ? pickBestCandidate(candidates) : "";
   const isCanonical = value.length > 0 && isLikelySigilUrl(value);
 
   const node = value ? <SigilActionUrlNode value={value} isCanonical={isCanonical} /> : <SigilActionUrlEmpty />;

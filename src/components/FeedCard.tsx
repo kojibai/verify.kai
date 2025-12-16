@@ -3,19 +3,20 @@
 
 /**
  * FeedCard — Sigil-Glyph Capsule Renderer
- * v4.8.2 — FULL ACTIONS ON ALL BLOCKS (OPEN+REMEMBER) + FEED DE-DUPE HARDENED
+ * v4.9.5 — STREAM TOKEN CANON (t=) + ORIGIN v→t FIX IN REPLIES
  *
- * ✅ FIX: Replies no longer cause the Origin (Proof of Breath) to appear “again” as separate feed items
- * - Feed always collapses to THREAD ROOT
- * - Aggressive prune removes reply-URLs from FEED even when they lack addChain
+ * CORE FIXES:
+ * ✅ Stream links NEVER output /stream/p/<token> anymore
+ * ✅ Token links ALWAYS output as /stream#t=<token> (hash-based = safest for very long tokens)
+ * ✅ Any legacy token links using v=<LONG_TOKEN> are normalized → t=
+ * ✅ FIX: thread “Origin” (especially for long-token origins) now always normalizes v=<token> → t=<token>
+ *    (and will also look inside the payload for a token when the URL doesn’t carry it)
  *
- * ✅ CHANGE: Every rendered block (origin, prev-chain, thread replies) has:
- * - Open (Proof of Breath/Memory) link
- * - Remember button
- * - Pack button when segmented overflow exists
- *
- * ✅ KEEP: Collapsible long-form behavior (no visual regressions required)
- * ✅ KEEP: Thread rendering + registry bridge behavior
+ * KEEP (same behavior + same look/classes):
+ * ✅ Replies no longer cause the Origin to appear again as separate feed items
+ * ✅ Every rendered block has Open + Remember; Pack appears only when segmented overflow exists
+ * ✅ Collapsible long-form behavior
+ * ✅ Thread rendering + registry bridge behavior
  */
 
 import React, {
@@ -47,7 +48,13 @@ import type {
   SharePayload,
   ReactionPayload,
 } from "../utils/sigilDecode";
+
 import "./FeedCard.css";
+import { canonicalPostLinkFromHash, STREAM_BASE_URL } from "../utils/streamLink";
+
+/* ─────────────────────────────────────────────────────────────
+   Types / Props
+   ───────────────────────────────────────────────────────────── */
 
 type Props = {
   url: string;
@@ -58,11 +65,13 @@ type Props = {
   threadMode?: "thread" | "self";
 };
 
-/** Safe string shortener */
+/* ─────────────────────────────────────────────────────────────
+   Tiny helpers
+   ───────────────────────────────────────────────────────────── */
+
 const short = (s: string, head = 8, tail = 4): string =>
   s.length <= head + tail ? s : `${s.slice(0, head)}…${s.slice(-tail)}`;
 
-/** Host label helper */
 const hostOf = (href?: string): string | undefined => {
   if (!href) return undefined;
   try {
@@ -76,14 +85,16 @@ const hostOf = (href?: string): string | undefined => {
 const isNonEmpty = (val: unknown): val is string =>
   typeof val === "string" && val.trim().length > 0;
 
-/** Uppercase without type drama (guards union→never narrowing) */
 const upper = (v: unknown): string => String(v ?? "").toUpperCase();
 
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  Boolean(v) && typeof v === "object" && !Array.isArray(v);
+
 /* ─────────────────────────────────────────────────────────────
-   Long-form collapse helpers (no CSS required; you’ll style later)
+   Long-form collapse helpers
    ───────────────────────────────────────────────────────────── */
 
-type CollapseKind = "text" | "code"; // code covers code/html/pre-like bodies
+type CollapseKind = "text" | "code";
 
 function textMetrics(t: string): { lines: number; chars: number } {
   const s = String(t ?? "");
@@ -99,31 +110,24 @@ function collapseSpecFor(text: string, kind: CollapseKind): {
   maxHeightPx: number;
 } {
   const { lines, chars } = textMetrics(text);
-
-  // Tuned for “preview cards”: keep them compact, but not too aggressive.
   const maxLines = kind === "code" ? 18 : 10;
   const maxChars = kind === "code" ? 1400 : 700;
-
   const shouldCollapse = lines > maxLines || chars > maxChars;
-
-  // Inline cap so user doesn’t scroll forever even before CSS arrives.
   const maxHeightPx = kind === "code" ? 320 : 240;
-
   return { shouldCollapse, lines, chars, maxHeightPx };
 }
 
 function isInteractiveEl(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
-  const el = target;
   return Boolean(
-    el.closest(
+    target.closest(
       'a,button,input,textarea,select,summary,[role="button"],[role="link"],[data-no-open="true"]',
     ),
   );
 }
 
 /* ─────────────────────────────────────────────────────────────
-   URL / token normalization (ALL forms) + Memory Stream forms
+   URL / token normalization (NO /stream/p OUTPUT; token canon = t=)
    ───────────────────────────────────────────────────────────── */
 
 type DecodeResult = ReturnType<typeof decodeSigilUrl>;
@@ -133,16 +137,11 @@ const STREAM_PATH = "/stream";
 const SIGIL_PATH = "/s";
 const MEM_V = "2";
 
-/** Large deterministic cap (browser-dependent; we keep it high, segment only if needed). */
 const URL_HARD_CAP = 120_000;
 
-/** Payload embedding prefix for add/root params */
 const PAYLOAD_PREFIX = "j:";
-
-/** Segment header prefix for #seg= */
 const SEG_PREFIX = "s:";
 
-/** Remove trailing punctuation often introduced by chat apps / markdown */
 function stripEdgePunct(s: string): string {
   let t = s.trim();
   t = t.replace(/[)\].,;:!?]+$/g, "");
@@ -150,7 +149,6 @@ function stripEdgePunct(s: string): string {
   return t.trim();
 }
 
-/** Normalize token: decode %xx, restore +, normalize base64 -> base64url, strip '=' */
 function normalizeToken(raw: string): string {
   let t = stripEdgePunct(raw);
 
@@ -159,14 +157,12 @@ function normalizeToken(raw: string): string {
       t = decodeURIComponent(t);
     } catch (e: unknown) {
       void e;
-      /* keep raw */
     }
   }
 
-  // query/base64 legacy: '+' may come through as space
   if (t.includes(" ")) t = t.replaceAll(" ", "+");
 
-  // base64 -> base64url
+  // base64 -> base64url (keeps '.' if JWT-like)
   if (/[+/=]/.test(t)) {
     t = t.replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
   }
@@ -174,31 +170,48 @@ function normalizeToken(raw: string): string {
   return stripEdgePunct(t);
 }
 
-function isLikelyToken(s: string): boolean {
-  return /^[A-Za-z0-9_-]{16,}$/.test(s);
+/**
+ * Token detector (supports base64url and JWT-like dot-separated base64url chunks).
+ * MUST ignore numeric version markers like v=2.
+ */
+function looksLikeToken(sRaw: string): boolean {
+  const s = normalizeToken(sRaw);
+  if (!s) return false;
+  if (/^\d{1,4}$/.test(s)) return false;
+  if (s === MEM_V) return false;
+
+  // base64url-ish
+  if (/^[A-Za-z0-9_-]{16,}$/.test(s)) return true;
+
+  // JWT-like: <b64url>.<b64url>(.<b64url>)?
+  if (/^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(\.[A-Za-z0-9_-]{8,})?$/.test(s)) return true;
+
+  return false;
+}
+
+function baseRootForLinks(): string {
+  const sb = typeof STREAM_BASE_URL === "string" ? STREAM_BASE_URL.trim() : "";
+  if (sb) return sb.replace(/\/+$/g, "").replace(/\/stream\/?$/g, "");
+  if (typeof window === "undefined") return "";
+  const o = window.location?.origin;
+  if (o && o !== "null") return o.replace(/\/+$/g, "");
+  return "";
 }
 
 function originForParse(): string {
-  if (typeof window === "undefined") return "https://x.invalid";
-  const o = window.location?.origin;
-  if (!o || o === "null") return "https://x.invalid";
-  return o;
+  const base = baseRootForLinks();
+  if (base) return base;
+  return "https://x.invalid";
 }
 
-/** Build stream base href WITHOUT requiring server rewrites (hash-only routing works). */
 function streamBaseHref(): string {
-  if (typeof window === "undefined") return STREAM_PATH;
-  const o = window.location?.origin;
-  if (o && o !== "null") return `${o.replace(/\/+$/g, "")}${STREAM_PATH}`;
-  return STREAM_PATH;
+  const base = baseRootForLinks();
+  return base ? `${base}${STREAM_PATH}` : STREAM_PATH;
 }
 
-/** Build /s base href. */
 function sigilBaseHref(): string {
-  if (typeof window === "undefined") return SIGIL_PATH;
-  const o = window.location?.origin;
-  if (o && o !== "null") return `${o.replace(/\/+$/g, "")}${SIGIL_PATH}`;
-  return SIGIL_PATH;
+  const base = baseRootForLinks();
+  return base ? `${base}${SIGIL_PATH}` : SIGIL_PATH;
 }
 
 function tryParseUrl(raw: string): URL | null {
@@ -216,7 +229,6 @@ function tryParseUrl(raw: string): URL | null {
   }
 }
 
-/** Keep sigil payload (/s/...) untouched. */
 function isSPayloadUrl(raw: string): boolean {
   const t = stripEdgePunct(raw);
   const u = tryParseUrl(t);
@@ -225,18 +237,17 @@ function isSPayloadUrl(raw: string): boolean {
 }
 
 function extractFromPath(pathname: string): string | null {
-  // ✅ /s/<id> (sigil/post)
+  // /s/<id>
   {
     const m = pathname.match(/\/s\/([^/?#]+)/);
     if (m?.[1]) return m[1];
   }
-
-  // Legacy p-tilde path (allow /p~TOKEN and /p~/TOKEN), including percent-encoded tilde
+  // /p~TOKEN or /p~/TOKEN
   {
     const m = pathname.match(/\/p(?:\u007e|%7[Ee])\/?([^/?#]+)/);
     if (m?.[1]) return m[1];
   }
-  // /stream/p/TOKEN or /feed/p/TOKEN
+  // /stream/p/TOKEN or /feed/p/TOKEN (legacy INPUT only)
   {
     const m = pathname.match(/\/(?:stream|feed)\/p\/([^/?#]+)/);
     if (m?.[1]) return m[1];
@@ -249,21 +260,30 @@ function extractFromPath(pathname: string): string | null {
   return null;
 }
 
-/** Extract token candidates from a raw URL (also tries nested add= urls once). */
+function paramGetAny(p: URLSearchParams, key: string): string | null {
+  return p.get(key) ?? p.get(key.toUpperCase());
+}
+
+/**
+ * Token extraction candidates:
+ * - Looks for t/p/token/capsule in hash or query
+ * - ALSO migrates legacy v=<LONG_TOKEN> → t= (but ignores v=2 / v=1 / short numeric versioning)
+ * - Also checks path patterns (/stream/p, /p~, /p/)
+ * - Also checks nested add= urls once (depth < 1)
+ */
 function extractTokenCandidates(rawUrl: string, depth = 0): string[] {
   const out: string[] = [];
   const push = (v: string | null | undefined) => {
     if (!v) return;
     const tok = normalizeToken(v);
     if (!tok) return;
-    if (!isLikelyToken(tok)) return;
+    if (!looksLikeToken(tok)) return;
     if (!out.includes(tok)) out.push(tok);
   };
 
   const raw = stripEdgePunct(rawUrl);
 
-  // bare token support
-  if (isLikelyToken(raw)) push(raw);
+  if (looksLikeToken(raw)) push(raw);
 
   const u = tryParseUrl(raw);
   if (!u) return out;
@@ -272,28 +292,36 @@ function extractTokenCandidates(rawUrl: string, depth = 0): string[] {
   const hash = new URLSearchParams(hashStr);
   const search = u.searchParams;
 
-  const keys = ["t", "p", "token", "capsule"];
+  const keys = ["t", "p", "token", "capsule"] as const;
   for (const k of keys) {
-    push(hash.get(k));
-    push(search.get(k));
+    push(paramGetAny(hash, k));
+    push(paramGetAny(search, k));
+  }
+
+  // v=<token> migration (only if it looks like a token and is NOT a version marker)
+  const vHash = paramGetAny(hash, "v");
+  const vSearch = paramGetAny(search, "v");
+  for (const vv of [vHash, vSearch]) {
+    if (!vv) continue;
+    const candidate = normalizeToken(vv);
+    // ignore numeric/small versions (v=2 etc)
+    if (/^\d{1,4}$/.test(candidate)) continue;
+    if (candidate === MEM_V) continue;
+    if (looksLikeToken(candidate)) push(candidate);
   }
 
   push(extractFromPath(u.pathname));
 
-  // nested add= urls (common in reply/share wrappers)
   if (depth < 1) {
     const adds = [...search.getAll("add"), ...hash.getAll("add")];
     for (const a of adds) {
-      const maybeUrl = stripEdgePunct(a);
-      if (!maybeUrl) continue;
-
-      let decoded = maybeUrl;
+      let decoded = stripEdgePunct(a);
+      if (!decoded) continue;
       if (/%[0-9A-Fa-f]{2}/.test(decoded)) {
         try {
           decoded = decodeURIComponent(decoded);
         } catch (e: unknown) {
           void e;
-          /* ignore */
         }
       }
       for (const tok of extractTokenCandidates(decoded, depth + 1)) push(tok);
@@ -303,78 +331,110 @@ function extractTokenCandidates(rawUrl: string, depth = 0): string[] {
   return out;
 }
 
-/** Normalize any non-/s URL into a hash-based /stream#t=... form (no server rewrite needed). */
+/**
+ * If URL params contain legacy v=<LONG_TOKEN> (not version),
+ * migrate it into t= and remove v=.
+ */
+function migrateLegacyVParamToT(p: URLSearchParams): void {
+  if (p.get("t") || p.get("p") || p.get("token") || p.get("capsule")) return;
+
+  const vv = paramGetAny(p, "v");
+  if (!vv) return;
+
+  const candidate = normalizeToken(vv);
+  if (!looksLikeToken(candidate)) return;
+
+  p.set("t", candidate);
+  p.delete("v");
+  p.delete("V");
+}
+
+/**
+ * CANON: token open URL is always hash-based:
+ *   /stream#t=<token>
+ */
 function makeStreamOpenUrlFromToken(tokenRaw: string): string {
   const base = streamBaseHref();
   const t = normalizeToken(tokenRaw);
   return `${base}#t=${encodeURIComponent(t)}`;
 }
 
-/** Build canonical /stream/p/<token> href (server route). */
-function makeStreamPUrlFromToken(tokenRaw: string): string {
-  const root = streamBaseHref().replace(/\/stream\/?$/g, "");
-  const t = normalizeToken(tokenRaw);
-  return `${root}/stream/p/${encodeURIComponent(t)}`;
-}
-
-/** Best-effort moment URL: prefer existing /stream/p, else derive from token candidates. */
-function makeStreamPMomentUrl(rawUrl: string): string | null {
+/**
+ * Best-effort “moment” URL (URL-only; does NOT inspect nested add=):
+ * - If a token exists in the input (including legacy /stream/p, or legacy v= token), return /stream#t=...
+ * - Otherwise null.
+ */
+function makeStreamMomentUrl(rawUrl: string): string | null {
   const raw = stripEdgePunct(rawUrl);
-  const u = tryParseUrl(raw);
-  if (u && /^\/stream\/p\/[^/]+/.test(u.pathname)) return u.toString();
-
-  const tok = extractTokenCandidates(raw)[0];
-  return tok ? makeStreamPUrlFromToken(tok) : null;
+  const tok = extractTokenCandidates(raw, 1)[0];
+  return tok ? makeStreamOpenUrlFromToken(tok) : null;
 }
 
+/**
+ * Normalize any non-/s URL into a browser-safe canonical:
+ * - Memory streams with root/add → /stream#... (hash-only)
+ * - Tokenized links → /stream#t=...
+ * - /s payload stays as-is
+ */
 function normalizeResolvedUrlForBrowser(rawUrl: string): string {
   const raw = stripEdgePunct(rawUrl);
 
-  // already a memory stream (root/add in hash or search)
   const u = tryParseUrl(raw);
   if (u) {
     const hashStr = u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : "";
     const hp = new URLSearchParams(hashStr);
     const sp = u.searchParams;
-    const hasRoot = Boolean(hp.get("root") || sp.get("root"));
+
+    // If it is a memory stream (root present), normalize to /stream#... (hash-only)
+    const hasRoot = Boolean(paramGetAny(hp, "root") || paramGetAny(sp, "root"));
     if (hasRoot) {
-      // normalize to /stream#... (hash routing)
       const base = streamBaseHref();
-      const outUrl = new URL(base, originForParse());
-      // keep params in hash only
+      const outUrl = new URL(base || STREAM_PATH, originForParse());
       const p = new URLSearchParams();
       for (const [k, v] of hp.entries()) p.append(k, v);
       for (const [k, v] of sp.entries()) p.append(k, v);
+
+      // 🔥 migrate legacy v=<LONG_TOKEN> → t= inside hash/query normalization
+      migrateLegacyVParamToT(p);
+
       outUrl.hash = p.toString() ? `#${p.toString()}` : "";
+      outUrl.search = "";
       return outUrl.toString();
     }
   }
 
   if (isSPayloadUrl(raw)) return raw;
 
-  const tok = extractTokenCandidates(raw)[0];
+  const tok = extractTokenCandidates(raw, 1)[0] ?? extractTokenCandidates(raw)[0];
   return tok ? makeStreamOpenUrlFromToken(tok) : raw;
 }
 
-/** Build canonical url candidates to satisfy whatever decodeSigilUrl already supports. */
+/** Candidates for decodeSigilUrl compatibility (INPUT support; output remains t= canon). */
 function buildDecodeUrlCandidates(token: string): string[] {
   const base = streamBaseHref().replace(/\/stream\/?$/g, "");
   const t = normalizeToken(token);
 
   return [
     t,
-    `${base}/stream/p/${t}`,
     `${base}/stream#t=${t}`,
+    `${base}/stream?t=${t}`,
+    `${base}/stream/t=${t}`,
     `${base}/p#t=${t}`,
     `${base}/p?t=${t}`,
+    // legacy input (do not output)
+    `${base}/stream/p/${t}`,
     `${base}/p#p=${t}`,
     `${base}/p?p=${t}`,
     `${base}/p#token=${t}`,
     `${base}/p?token=${t}`,
+    // legacy v= token input
+    `${base}/stream#v=${t}`,
+    `${base}/stream?v=${t}`,
+    `${base}/stream#V=${t}`,
+    `${base}/stream?V=${t}`,
   ];
 }
 
-/** Smart decode: try raw url, then extracted tokens across multiple canonical forms. */
 function decodeSigilUrlSmart(rawUrl: string): SmartDecode {
   const tried = new Set<string>();
 
@@ -408,7 +468,55 @@ function decodeSigilUrlSmart(rawUrl: string): SmartDecode {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Deterministic JSON canonicalization + base64url encoding (NO CACHE)
+   Capsule reader (loose, tolerant) — SINGLE implementation (no overload decl)
+   ───────────────────────────────────────────────────────────── */
+
+function readCapsuleLoose(v: unknown): Capsule | null {
+  if (!isRecord(v)) return null;
+
+  const hasDefined = (rec: Record<string, unknown>, k: string): boolean =>
+    Object.prototype.hasOwnProperty.call(rec, k) && typeof rec[k] !== "undefined";
+
+  const hasContent = (rec: Record<string, unknown>): boolean =>
+    hasDefined(rec, "post") ||
+    hasDefined(rec, "message") ||
+    hasDefined(rec, "share") ||
+    hasDefined(rec, "reaction");
+
+  const mergeMissingContent = (base: Record<string, unknown>, src: Record<string, unknown>): void => {
+    for (const k of ["post", "message", "share", "reaction"] as const) {
+      if (hasDefined(src, k) && typeof base[k] === "undefined") base[k] = src[k];
+    }
+  };
+
+  const root = v as Record<string, unknown>;
+  const data = isRecord(root.data) ? (root.data as Record<string, unknown>) : null;
+
+  const rootHasContent = hasContent(root);
+  const dataHasContent = Boolean(data) && hasContent(data as Record<string, unknown>);
+
+  const capsuleFromRoot = isRecord(root.capsule) ? (root.capsule as Record<string, unknown>) : null;
+  const capsuleFromData = data && isRecord(data.capsule) ? (data.capsule as Record<string, unknown>) : null;
+
+  const capsuleObj = capsuleFromRoot ?? capsuleFromData;
+
+  if (capsuleObj && (rootHasContent || dataHasContent)) {
+    const merged: Record<string, unknown> = { ...capsuleObj };
+    if (dataHasContent && data) mergeMissingContent(merged, data);
+    if (rootHasContent) mergeMissingContent(merged, root);
+    return merged as unknown as Capsule;
+  }
+
+  if (capsuleObj) return capsuleObj as unknown as Capsule;
+
+  if (rootHasContent) return root as unknown as Capsule;
+  if (dataHasContent && data) return data as unknown as Capsule;
+
+  return root as unknown as Capsule;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Deterministic JSON canonicalization + base64url (payload refs)
    ───────────────────────────────────────────────────────────── */
 
 function deepSortForJson(v: unknown): unknown {
@@ -464,7 +572,6 @@ function fromBase64UrlToUtf8(b64url: string): string {
   return dec.decode(bytes);
 }
 
-/** Deterministic payload ref used in #root= and #add= params. */
 function encodePayloadRef(payload: unknown): string {
   const canon = JSON.stringify(deepSortForJson(payload));
   const b64url = toBase64UrlFromUtf8(canon);
@@ -487,8 +594,7 @@ function decodePayloadRef(refRaw: string): unknown | null {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Deterministic payload fingerprint (FNV-1a 64-bit) for loop-safe keys
-   + Merkle root (FNV-merkle) for segment sealing
+   Fingerprints (FNV-1a 64) + Merkle root (FNV)
    ───────────────────────────────────────────────────────────── */
 
 function fnv1a64Hex(s: string): string {
@@ -504,7 +610,6 @@ function fnv1a64Hex(s: string): string {
 function merkleRootFNV64Hex(leaves: readonly string[]): string {
   if (!leaves.length) return fnv1a64Hex("merkle:empty");
   let level = leaves.map((x) => fnv1a64Hex(`leaf:${x}`));
-
   while (level.length > 1) {
     const next: string[] = [];
     for (let i = 0; i < level.length; i += 2) {
@@ -545,16 +650,16 @@ function payloadKey(payload: unknown): string {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Segment header (Merkle-sealed, URL-only)
+   Segment header (Merkle-sealed)
    ───────────────────────────────────────────────────────────── */
 
 type SegMeta = {
-  v: string; // MEM_V
-  id: string; // segment id
-  m: string; // merkle root (hex)
-  n: number; // leaf count (root + adds)
-  a: number; // add count
-  r: string; // root key (short)
+  v: string;
+  id: string;
+  m: string;
+  n: number;
+  a: number;
+  r: string;
 };
 
 function encodeSegMeta(meta: SegMeta): string {
@@ -588,7 +693,7 @@ function decodeSegMeta(segRaw: string): SegMeta | null {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   KKS-1.0: D/M/Y from μpulses (exact, deterministic)
+   KKS-1.0: D/M/Y from μpulses (exact)
    ───────────────────────────────────────────────────────────── */
 
 const modE = (a: bigint, m: bigint): bigint => {
@@ -612,15 +717,15 @@ const toSafeNumber = (x: bigint): number => {
 };
 
 function kaiDMYFromPulseKKS(pulse: number): { day: number; month: number; year: number } {
-  const ms = epochMsFromPulse(pulse); // bigint
-  const pμ = microPulsesSinceGenesis(ms); // bigint μpulses
+  const ms = epochMsFromPulse(pulse);
+  const pμ = microPulsesSinceGenesis(ms);
 
   const dayIdx = floorDivE(pμ, N_DAY_MICRO);
   const monthIdx = floorDivE(dayIdx, BigInt(DAYS_PER_MONTH));
   const yearIdx = floorDivE(dayIdx, BigInt(DAYS_PER_YEAR));
 
-  const dayOfMonth = toSafeNumber(modE(dayIdx, BigInt(DAYS_PER_MONTH))) + 1; // 1..42
-  const month = toSafeNumber(modE(monthIdx, BigInt(MONTHS_PER_YEAR))) + 1; // 1..8
+  const dayOfMonth = toSafeNumber(modE(dayIdx, BigInt(DAYS_PER_MONTH))) + 1;
+  const month = toSafeNumber(modE(monthIdx, BigInt(MONTHS_PER_YEAR))) + 1;
   const year = toSafeNumber(yearIdx);
 
   return { day: dayOfMonth, month, year };
@@ -718,12 +823,11 @@ function kindFromDecodedData(data: unknown, fallback: string): string {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Previous-chain parsing from Memory Stream params (payload-first)
+   Previous-chain parsing from Memory Stream params
    ───────────────────────────────────────────────────────────── */
 
 const THREAD_MAX_DEPTH = 256;
 
-/** parse #add=... and ?add=... (prefer hash, include search) */
 function extractAddChain(rawUrl: string): string[] {
   const u = tryParseUrl(stripEdgePunct(rawUrl));
   if (!u) return [];
@@ -744,17 +848,14 @@ function extractAddChain(rawUrl: string): string[] {
         v = decodeURIComponent(v);
       } catch (e: unknown) {
         void e;
-        /* ignore */
       }
     }
 
-    // payload add (j:...)
     if (v.startsWith(PAYLOAD_PREFIX) && v.length > PAYLOAD_PREFIX.length + 8) {
       out.push(v);
       continue;
     }
 
-    // backward compat: bare payload blob (try decode)
     const maybePayload = decodePayloadRef(v);
     if (maybePayload && readCapsuleLoose(maybePayload)) {
       const blob = stripEdgePunct(v.startsWith(PAYLOAD_PREFIX) ? v.slice(PAYLOAD_PREFIX.length) : v);
@@ -762,27 +863,23 @@ function extractAddChain(rawUrl: string): string[] {
       continue;
     }
 
-    // otherwise treat as token/url ref and normalize to stream open
-    const tok = extractTokenCandidates(v)[0];
+    const tok = extractTokenCandidates(v, 1)[0] ?? extractTokenCandidates(v)[0];
     if (tok) {
       out.push(makeStreamOpenUrlFromToken(tok));
       continue;
     }
 
-    // allow /s/... payload urls
     if (isSPayloadUrl(v)) {
       out.push(v);
       continue;
     }
 
-    // last resort keep as-is (still loop-safe via keying)
     out.push(normalizeResolvedUrlForBrowser(v));
   }
 
   return out.slice(-THREAD_MAX_DEPTH);
 }
 
-/** parse #root=... or ?root=... ; returns payload ref string if present */
 function extractRootRef(rawUrl: string): string | null {
   const u = tryParseUrl(stripEdgePunct(rawUrl));
   if (!u) return null;
@@ -791,7 +888,7 @@ function extractRootRef(rawUrl: string): string | null {
   const hp = new URLSearchParams(hashStr);
   const sp = u.searchParams;
 
-  let r = hp.get("root") ?? sp.get("root");
+  let r = paramGetAny(hp, "root") ?? paramGetAny(sp, "root");
   if (!r) return null;
 
   r = stripEdgePunct(r);
@@ -801,20 +898,17 @@ function extractRootRef(rawUrl: string): string | null {
       r = decodeURIComponent(r);
     } catch (e: unknown) {
       void e;
-      /* ignore */
     }
   }
 
   if (r.startsWith(PAYLOAD_PREFIX)) return r;
 
-  // bare blob compat
   const p = decodePayloadRef(r);
   if (p && readCapsuleLoose(p)) return `${PAYLOAD_PREFIX}${stripEdgePunct(r)}`;
 
   return null;
 }
 
-/** parse #seg=... (optional, informational only) */
 function extractSegMeta(rawUrl: string): SegMeta | null {
   const u = tryParseUrl(stripEdgePunct(rawUrl));
   if (!u) return null;
@@ -823,7 +917,7 @@ function extractSegMeta(rawUrl: string): SegMeta | null {
   const hp = new URLSearchParams(hashStr);
   const sp = u.searchParams;
 
-  const s = hp.get("seg") ?? sp.get("seg");
+  const s = paramGetAny(hp, "seg") ?? paramGetAny(sp, "seg");
   if (!s) return null;
 
   let v = stripEdgePunct(s);
@@ -832,14 +926,13 @@ function extractSegMeta(rawUrl: string): SegMeta | null {
       v = decodeURIComponent(v);
     } catch (e: unknown) {
       void e;
-      /* ignore */
     }
   }
   return decodeSegMeta(v);
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Payload-derived prev resolver (when addChain is missing)
+   Prev-ref resolver (payload walk)
    ───────────────────────────────────────────────────────────── */
 
 function normalizeInternalRefString(raw: string): string | null {
@@ -847,7 +940,6 @@ function normalizeInternalRefString(raw: string): string | null {
   if (!s) return null;
 
   if (s.startsWith(PAYLOAD_PREFIX)) return s;
-
   if (isSPayloadUrl(s)) return s;
 
   {
@@ -856,11 +948,11 @@ function normalizeInternalRefString(raw: string): string | null {
       const hashStr = u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : "";
       const hp = new URLSearchParams(hashStr);
       const sp = u.searchParams;
-      if (hp.get("root") || sp.get("root")) return normalizeResolvedUrlForBrowser(s);
+      if (paramGetAny(hp, "root") || paramGetAny(sp, "root")) return normalizeResolvedUrlForBrowser(s);
     }
   }
 
-  const tok = extractTokenCandidates(s)[0];
+  const tok = extractTokenCandidates(s, 1)[0] ?? extractTokenCandidates(s)[0];
   if (tok) return makeStreamOpenUrlFromToken(tok);
 
   return null;
@@ -951,8 +1043,7 @@ function fibFloor(n: number): number {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Deterministic Memory Stream URL builder (hash-only)
-   + Segmented “Pack” builder (primary + archive segments)
+   Memory Stream URL builder (hash-only) + segmented Pack
    ───────────────────────────────────────────────────────────── */
 
 type BuiltSegment = {
@@ -964,7 +1055,7 @@ type BuiltSegment = {
 
 function buildMemoryStreamUrl(rootRef: string, adds: readonly string[]): BuiltSegment {
   const base = streamBaseHref();
-  const u = new URL(base, originForParse());
+  const u = new URL(base || STREAM_PATH, originForParse());
 
   const leaves = [rootRef, ...adds];
   const merkle = merkleRootFNV64Hex(leaves);
@@ -1032,7 +1123,6 @@ function buildSegmentedPack(
   if (keepFrom <= 0) return { primary, archives: [] };
 
   const dropped = adds.slice(0, keepFrom);
-
   const boundaryRoot = kept[0];
   if (!boundaryRoot) return { primary, archives: [] };
 
@@ -1055,41 +1145,33 @@ function dedupPreserveOrder(list: readonly string[]): string[] {
 
 function countPayloadRefs(list: readonly string[]): number {
   let n = 0;
-  for (const it of list) {
-    if (stripEdgePunct(it).startsWith(PAYLOAD_PREFIX)) n++;
-  }
+  for (const it of list) if (stripEdgePunct(it).startsWith(PAYLOAD_PREFIX)) n++;
   return n;
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Thread keys + loop safety (payload-first, stable across refs)
+   Thread keys + loop safety
    ───────────────────────────────────────────────────────────── */
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  Boolean(v) && typeof v === "object" && !Array.isArray(v);
 
 function threadSeenKey(rawRef: string, payloadMaybe?: unknown): string {
   const ref = stripEdgePunct(rawRef);
 
-  // If we have payload, ALWAYS key by payload (stable across j:/url/token forms).
   if (payloadMaybe) return `k:${payloadKey(payloadMaybe)}`;
 
-  // If ref is a payload ref, decode and key the payload.
   if (ref.startsWith(PAYLOAD_PREFIX)) {
     const p = decodePayloadRef(ref);
     if (p) return `k:${payloadKey(p)}`;
     return `k:${fnv1a64Hex(ref)}`;
   }
 
-  const tok = extractTokenCandidates(ref)[0];
+  const tok = extractTokenCandidates(ref, 1)[0] ?? extractTokenCandidates(ref)[0];
   if (tok) return `t:${normalizeToken(tok)}`;
 
   return `u:${normalizeResolvedUrlForBrowser(ref)}`;
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Chain graph (IN-MEM ONLY): holds payloads for Remember bundling
-   + External-store version signal (useSyncExternalStore)
+   In-memory chain graph (for Remember pack building)
    ───────────────────────────────────────────────────────────── */
 
 const CHAIN_MAX_NODES = 4096;
@@ -1097,9 +1179,9 @@ const CHAIN_MAX_NODES = 4096;
 type ChainNode = {
   key: string;
   prevKey: string | null;
-  payloadRef: string | null; // j:<b64> if available
-  fallbackRef: string; // token/url ref if payloadRef absent
-  tick: number; // monotonic insert tick (no Chronos)
+  payloadRef: string | null;
+  fallbackRef: string;
+  tick: number;
 };
 
 const CHAIN: Map<string, ChainNode> = new Map();
@@ -1125,15 +1207,12 @@ function notifyChainBatched(): void {
 
 function subscribeChain(cb: () => void): () => void {
   CHAIN_LISTENERS.add(cb);
-  return () => {
-    CHAIN_LISTENERS.delete(cb);
-  };
+  return () => CHAIN_LISTENERS.delete(cb);
 }
 
 function getChainSnapshot(): number {
   return CHAIN_VERSION;
 }
-
 function getChainServerSnapshot(): number {
   return 0;
 }
@@ -1149,7 +1228,6 @@ function upsertChainNode(node: Omit<ChainNode, "tick">): void {
     return;
   }
 
-  // Maintain LRU-ish order: delete+set refreshes insertion order.
   if (CHAIN.has(node.key)) CHAIN.delete(node.key);
   CHAIN.set(node.key, { ...node, tick: ++CHAIN_TICK });
   notifyChainBatched();
@@ -1223,7 +1301,7 @@ function hasManualMarkerDeep(v: unknown, depth = 0): boolean {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   v3 payload support: caption/body/attachments treated as memory content
+   v3 payload support (caption/body/attachments)
    ───────────────────────────────────────────────────────────── */
 
 type V3BodyKind = "text" | "md" | "code" | "html";
@@ -1259,22 +1337,10 @@ function extractV3TextAndKind(payload: unknown): { text?: string; kind?: V3BodyK
     const kind =
       k === "text" || k === "md" || k === "code" || k === "html" ? (k as V3BodyKind) : undefined;
 
-    if (kind === "text") {
-      const t = readStringLoose(body, "text");
-      return { text: t ?? caption, kind };
-    }
-    if (kind === "md") {
-      const t = readStringLoose(body, "md");
-      return { text: t ?? caption, kind };
-    }
-    if (kind === "code") {
-      const t = readStringLoose(body, "code");
-      return { text: t ?? caption, kind };
-    }
-    if (kind === "html") {
-      const t = readStringLoose(body, "html");
-      return { text: t ?? caption, kind };
-    }
+    if (kind === "text") return { text: readStringLoose(body, "text") ?? caption, kind };
+    if (kind === "md") return { text: readStringLoose(body, "md") ?? caption, kind };
+    if (kind === "code") return { text: readStringLoose(body, "code") ?? caption, kind };
+    if (kind === "html") return { text: readStringLoose(body, "html") ?? caption, kind };
   }
 
   return { text: caption, kind: undefined };
@@ -1290,20 +1356,13 @@ function extractV3MediaLinks(payload: unknown): Array<{ url: string }> {
   const out: Array<{ url: string }> = [];
   for (const it of items) {
     if (!isRecord(it)) continue;
-
-    // url attachment: { kind:"url", url:"..." }
     const url = readStringLoose(it, "url");
     if (url) {
       out.push({ url });
       continue;
     }
-
-    // some variants: href
     const href = readStringLoose(it, "href");
-    if (href) {
-      out.push({ url: href });
-      continue;
-    }
+    if (href) out.push({ url: href });
   }
   return out;
 }
@@ -1396,19 +1455,22 @@ function copyTextGestureSafe(
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Explorer + Feed registry (no backend) — dedup + upgrade (richer add= wins)
+   Explorer + Feed registry bridge (localStorage + BroadcastChannel)
    ───────────────────────────────────────────────────────────── */
 
 const EXPLORER_LS_KEY = "sigil:urls";
 const FEED_LS_KEY = "sigil:feed";
 const EXPLORER_BC_NAME = "kai-sigil-registry";
-const EXPLORER_GLOBAL_LS_KEY = "kai:sigils:v1"; // SigilExplorer persisted registry
+const EXPLORER_GLOBAL_LS_KEY = "kai:sigils:v1";
 const FEED_BC_NAME = "kai-feed-registry";
 
 let REG_VERSION = 0;
 let REG_NOTIFY_PENDING = false;
 const REG_LISTENERS: Set<() => void> = new Set();
+
 let REG_BRIDGE_INIT = false;
+let REG_BC_EXPLORER: BroadcastChannel | null = null;
+let REG_BC_FEED: BroadcastChannel | null = null;
 
 function notifyRegistryBatched(): void {
   if (REG_NOTIFY_PENDING) return;
@@ -1426,15 +1488,12 @@ function notifyRegistryBatched(): void {
 
 function subscribeRegistry(cb: () => void): () => void {
   REG_LISTENERS.add(cb);
-  return () => {
-    REG_LISTENERS.delete(cb);
-  };
+  return () => REG_LISTENERS.delete(cb);
 }
 
 function getRegistrySnapshot(): number {
   return REG_VERSION;
 }
-
 function getRegistryServerSnapshot(): number {
   return 0;
 }
@@ -1443,30 +1502,27 @@ function urlsFromUnknown(v: unknown): string[] {
   const out: string[] = [];
 
   if (Array.isArray(v)) {
-    for (const it of v) {
-      if (typeof it === "string" && it.trim()) out.push(it.trim());
-    }
+    for (const it of v) if (typeof it === "string" && it.trim()) out.push(it.trim());
     return out;
   }
 
   if (isRecord(v)) {
-    // common: { urls: [...] }
     const maybeUrls = (v as { urls?: unknown }).urls;
     if (Array.isArray(maybeUrls)) {
-      for (const it of maybeUrls) {
-        if (typeof it === "string" && it.trim()) out.push(it.trim());
-      }
+      for (const it of maybeUrls) if (typeof it === "string" && it.trim()) out.push(it.trim());
       return out;
     }
 
-    // common: { "<url>": payload, ... }  (Map-like persistence)
     const keys = Object.keys(v);
     const urlishKeys = keys.filter(
-      (k) => k.startsWith("http") || k.startsWith("/") || k.includes("/stream") || k.includes("/s/"),
+      (k) =>
+        k.startsWith("http") ||
+        k.startsWith("/") ||
+        k.includes("/stream") ||
+        k.includes("/s/"),
     );
     if (urlishKeys.length) return urlishKeys;
 
-    // fallback: values with `.url`
     for (const vv of Object.values(v)) {
       if (isRecord(vv) && typeof vv.url === "string" && vv.url.trim()) out.push(vv.url.trim());
     }
@@ -1500,17 +1556,12 @@ function canonicalizeForStorage(raw: string): string {
 }
 
 function readExplorerGlobalUrls(): string[] {
-  // Merge all relevant stores:
-  // - feed list (sigil:feed)
-  // - local “explorer fallback” list (sigil:urls)
-  // - SigilExplorer real registry (kai:sigils:v1)
   const merged = dedupPreserveOrder([
     ...readUrlList(FEED_LS_KEY),
     ...readUrlList(EXPLORER_LS_KEY),
     ...readUrlList(EXPLORER_GLOBAL_LS_KEY),
   ]);
 
-  // Canonicalize for storage (stable)
   const out: string[] = [];
   for (const u of merged) {
     const c = canonicalizeForStorage(u);
@@ -1523,17 +1574,13 @@ function normalizeSeedHrefFromRef(refRaw: string): string {
   const ref = stripEdgePunct(refRaw);
   if (!ref) return "";
 
-  // payload ref → make it a viewable Memory Stream URL
+  // payload ref → viewable memory stream url
   if (ref.startsWith(PAYLOAD_PREFIX)) {
     return buildMemoryStreamUrl(ref, []).url;
   }
 
-  // prefer moment /stream/p if possible
-  return (
-    makeStreamPMomentUrl(ref) ??
-    makeStreamPMomentUrl(normalizeResolvedUrlForBrowser(ref)) ??
-    normalizeResolvedUrlForBrowser(ref)
-  );
+  // prefer token moment (t= canon), else normalize
+  return makeStreamMomentUrl(ref) ?? normalizeResolvedUrlForBrowser(ref);
 }
 
 /**
@@ -1548,8 +1595,7 @@ function originKeyFromUrlLike(u: string): string {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Feed-root derivation (HARDENED): collapse feed to THREAD ROOT
-   - Works even if a reply URL lacks addChain by following prev refs (best-effort)
+   Feed-root derivation: collapse feed to THREAD ROOT only
    ───────────────────────────────────────────────────────────── */
 
 function loadPayloadFromRef(ref: string): unknown | null {
@@ -1568,14 +1614,11 @@ function threadRootRefFromUrlLike(rawUrl: string, startPayload?: unknown): strin
   const u = stripEdgePunct(rawUrl);
   if (!u) return rawUrl;
 
-  // If URL already has witness chain, treat earliest add as root anchor (existing format).
   const chain = dedupPreserveOrder(extractAddChain(u));
   if (chain.length > 0) return chain[0]!;
 
-  // Else: walk prev refs from payload (reply URLs without addChain).
   let curRef = u;
   let payload: unknown | null = typeof startPayload !== "undefined" ? startPayload : null;
-
   if (!payload) payload = loadPayloadFromRef(curRef);
 
   const seen = new Set<string>();
@@ -1596,19 +1639,29 @@ function threadRootRefFromUrlLike(rawUrl: string, startPayload?: unknown): strin
 
 function threadRootKeyFromUrlLike(rawUrl: string, startPayload?: unknown): string {
   const rootRef = threadRootRefFromUrlLike(rawUrl, startPayload);
-  const p = rootRef.startsWith(PAYLOAD_PREFIX) ? decodePayloadRef(rootRef) : loadPayloadFromRef(rootRef);
+  const p = rootRef.startsWith(PAYLOAD_PREFIX)
+    ? decodePayloadRef(rootRef)
+    : loadPayloadFromRef(rootRef);
   return threadSeenKey(rootRef, p ?? undefined);
 }
 
 /* ─────────────────────────────────────────────────────────────
-   /s URL derivation (feed primary URL requirement)
+   /s URL derivation (feed primary url requirement)
    ───────────────────────────────────────────────────────────── */
 
 function makeSigilSUrlFromId(idRaw: string): string {
   const id = stripEdgePunct(idRaw);
+
+  if (/^[0-9a-fA-F]{64}$/.test(id)) {
+    try {
+      return canonicalPostLinkFromHash(id.toLowerCase());
+    } catch (e: unknown) {
+      void e;
+    }
+  }
+
   const base = sigilBaseHref();
-  const safe = encodeURIComponent(id);
-  return `${base}/${safe}`;
+  return `${base}/${encodeURIComponent(id)}`;
 }
 
 function readStringField(obj: unknown, keys: readonly string[]): string | null {
@@ -1623,10 +1676,8 @@ function readStringField(obj: unknown, keys: readonly string[]): string | null {
 function computeSigilSUrl(rawInputUrl: string, capsule: Capsule | null): string | null {
   const raw = stripEdgePunct(rawInputUrl);
 
-  // If the feed already provided a /s url, keep it.
   if (isSPayloadUrl(raw)) return raw;
 
-  // Try common capsule fields (best-effort, no schema assumptions).
   const fromCapsule =
     readStringField(capsule, [
       "sigilUrl",
@@ -1641,23 +1692,20 @@ function computeSigilSUrl(rawInputUrl: string, capsule: Capsule | null): string 
 
   if (fromCapsule && isSPayloadUrl(fromCapsule)) return normalizeResolvedUrlForBrowser(fromCapsule);
 
-  // Prefer capsule.sigilId (canonical /s/<sigilId> mapping).
+  const hashLike =
+    readStringField(capsule, ["id", "contentId", "cid", "hash", "contentHash"]) ?? null;
+
+  if (hashLike && /^[0-9a-fA-F]{64}$/.test(hashLike)) return makeSigilSUrlFromId(hashLike);
+
   const sigilId = isRecord(capsule) ? (capsule as Record<string, unknown>).sigilId : undefined;
   if (typeof sigilId === "string" && sigilId.trim()) return makeSigilSUrlFromId(sigilId);
 
-  // Fallback: use token if present (common 1:1 mapping in many builds).
-  const tok = extractTokenCandidates(raw)[0];
-  if (tok) return makeSigilSUrlFromId(tok);
+  const tok = extractTokenCandidates(raw, 1)[0] ?? extractTokenCandidates(raw)[0];
+  if (tok && /^[0-9a-fA-F]{64}$/.test(tok)) return makeSigilSUrlFromId(tok);
 
   return null;
 }
 
-/**
- * Best-effort FEED thread-root href:
- * - derive root ref (walk prev if needed)
- * - if root is decodable, prefer /s/<id> for Breath-origin display when available
- * - else normalize to a viewable stream href
- */
 function threadRootHrefFromUrlLike(rawUrl: string, startPayload?: unknown): string {
   const rootRef = threadRootRefFromUrlLike(rawUrl, startPayload);
   const rootPayload = loadPayloadFromRef(rootRef);
@@ -1670,7 +1718,7 @@ function threadRootHrefFromUrlLike(rawUrl: string, startPayload?: unknown): stri
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Registry helpers
+   Registry helpers (dedupe + upgrade)
    ───────────────────────────────────────────────────────────── */
 
 function countAddsInUrl(raw: string): number {
@@ -1683,14 +1731,13 @@ function countAddsInUrl(raw: string): number {
 }
 
 function registryScore(raw: string): number {
-  // prioritize richer witness chain; tie-break by length
   const adds = countAddsInUrl(raw);
   const len = raw.length;
   return adds * 100_000 + len;
 }
 
 function keyForRegistryUrl(raw: string): string {
-  const tok = extractTokenCandidates(raw)[0];
+  const tok = extractTokenCandidates(raw, 1)[0] ?? extractTokenCandidates(raw)[0];
   if (tok) return `t:${normalizeToken(tok)}`;
 
   const rootRef = extractRootRef(raw);
@@ -1718,12 +1765,9 @@ function upsertUrlList(
 
     if (raw) {
       const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        for (const v of parsed) if (typeof v === "string") existing.push(v);
-      }
+      if (Array.isArray(parsed)) for (const v of parsed) if (typeof v === "string") existing.push(v);
     }
 
-    // Dedup existing by key, preserve order, keeping best (highest score) for each key.
     const bestByKey = new Map<string, { url: string; score: number; index: number }>();
     const order: string[] = [];
     for (const v of existing) {
@@ -1780,129 +1824,176 @@ function upsertUrlList(
 function notifyExplorer(url: string): void {
   if (typeof window === "undefined") return;
 
-  // (1) In-page hook (Explorer mounted)
   try {
-    const w = window as unknown as {
-      __SIGIL__?: { registerSigilUrl?: (u: string) => void };
-    };
+    const w = window as unknown as { __SIGIL__?: { registerSigilUrl?: (u: string) => void } };
     w.__SIGIL__?.registerSigilUrl?.(url);
-  } catch {
-    // silent
+  } catch (e: unknown) {
+    void e;
   }
 
-  // (2) DOM event fallback
   try {
     window.dispatchEvent(new CustomEvent("sigil:url-registered", { detail: { url } }));
-  } catch {
-    // silent
+  } catch (e: unknown) {
+    void e;
   }
 
-  // (3) Cross-tab BroadcastChannel
   try {
     if ("BroadcastChannel" in window) {
       const bc = new BroadcastChannel(EXPLORER_BC_NAME);
       bc.postMessage({ type: "sigil:add", url });
       bc.close();
     }
-  } catch {
-    // silent
+  } catch (e: unknown) {
+    void e;
   }
 }
 
 function notifyFeed(url: string): void {
   if (typeof window === "undefined") return;
 
-  // (1) In-page hook (Feed mounted)
   try {
-    const w = window as unknown as {
-      __FEED__?: { registerFeedUrl?: (u: string) => void };
-    };
-    w.__FEED__?.registerFeedUrl?.(url);
-  } catch {
-    // silent
+    window.dispatchEvent(new CustomEvent("sigil:feed-registered", { detail: { url } }));
+  } catch (e: unknown) {
+    void e;
   }
 
-  // (2) DOM event fallback
-  try {
-    window.dispatchEvent(new CustomEvent("feed:url-registered", { detail: { url } }));
-  } catch {
-    // silent
-  }
-
-  // (3) Cross-tab BroadcastChannel
   try {
     if ("BroadcastChannel" in window) {
       const bc = new BroadcastChannel(FEED_BC_NAME);
       bc.postMessage({ type: "feed:add", url });
       bc.close();
     }
-  } catch {
-    // silent
+  } catch (e: unknown) {
+    void e;
+  }
+}
+
+function scoreFeedRootUrl(u: string): number {
+  let s = 0;
+  const low = u.toLowerCase();
+
+  if (isSPayloadUrl(u)) s += 5_000_000;
+  if (/[?&#]t=/.test(low) || low.includes("/stream/t")) s += 2_000_000;
+  if (low.includes("/stream/p/")) s -= 500_000;
+  if (/[?&#]v=/.test(low)) s -= 250_000;
+
+  s += registryScore(u);
+  return s;
+}
+
+function pruneFeedDuplicatesForThread(rootKey: string, keepUrlHint: string): void {
+  if (typeof window === "undefined") return;
+  if (typeof window.localStorage === "undefined") return;
+
+  const list = readUrlList(FEED_LS_KEY);
+  if (!list.length) return;
+
+  const kept: string[] = [];
+  let bestUrl: string | null = null;
+  let bestScore = -Infinity;
+
+  for (const raw of list) {
+    const u = canonicalizeForStorage(raw);
+    if (!u) continue;
+
+    const k = threadRootKeyFromUrlLike(u);
+    if (k !== rootKey) {
+      kept.push(u);
+      continue;
+    }
+
+    const sc = scoreFeedRootUrl(u);
+    if (sc > bestScore) {
+      bestScore = sc;
+      bestUrl = u;
+    }
+  }
+
+  if (keepUrlHint) {
+    const u = canonicalizeForStorage(keepUrlHint);
+    if (u) {
+      const sc = scoreFeedRootUrl(u);
+      if (sc > bestScore) {
+        bestScore = sc;
+        bestUrl = u;
+      }
+    }
+  }
+
+  if (bestUrl) kept.push(bestUrl);
+
+  const next = dedupPreserveOrder(kept);
+  try {
+    const prevRaw = window.localStorage.getItem(FEED_LS_KEY) ?? "[]";
+    const prev = JSON.stringify(urlsFromUnknown(JSON.parse(prevRaw)));
+    const nextJson = JSON.stringify(next);
+    if (prev !== nextJson) {
+      window.localStorage.setItem(FEED_LS_KEY, nextJson);
+    }
+  } catch (e: unknown) {
+    void e;
   }
 }
 
 function ensureRegistryBridge(): void {
-  if (REG_BRIDGE_INIT) return;
   if (typeof window === "undefined") return;
+  if (REG_BRIDGE_INIT) return;
+
   REG_BRIDGE_INIT = true;
 
-  // storage changes (same tab writes won’t fire “storage”, but other tabs will)
-  window.addEventListener("storage", (e: StorageEvent) => {
-    if (!e.key) return;
-    if (e.key === FEED_LS_KEY || e.key === EXPLORER_LS_KEY || e.key === EXPLORER_GLOBAL_LS_KEY) {
+  const onStorage = (e: StorageEvent): void => {
+    const k = e.key ?? "";
+    if (
+      k === EXPLORER_LS_KEY ||
+      k === FEED_LS_KEY ||
+      k === EXPLORER_GLOBAL_LS_KEY
+    ) {
       notifyRegistryBatched();
     }
-  });
+  };
 
-  // DOM events (same tab)
-  window.addEventListener("sigil:url-registered", () => notifyRegistryBatched());
-  window.addEventListener("feed:url-registered", () => notifyRegistryBatched());
+  try {
+    window.addEventListener("storage", onStorage);
+  } catch (e: unknown) {
+    void e;
+  }
 
-  // BroadcastChannels (cross-tab)
+  // Persistent listeners (no echo; they only merge locally)
   try {
     if ("BroadcastChannel" in window) {
-      const bc1 = new BroadcastChannel(EXPLORER_BC_NAME);
-      bc1.onmessage = () => notifyRegistryBatched();
+      REG_BC_EXPLORER = new BroadcastChannel(EXPLORER_BC_NAME);
+      REG_BC_EXPLORER.onmessage = (ev: MessageEvent): void => {
+        const msg = ev.data as unknown;
+        const url =
+          isRecord(msg) && typeof (msg as { url?: unknown }).url === "string"
+            ? ((msg as { url: string }).url as string)
+            : null;
+        if (!url) return;
 
-      const bc2 = new BroadcastChannel(FEED_BC_NAME);
-      bc2.onmessage = () => notifyRegistryBatched();
+        // Merge into explorer list (local only)
+        upsertUrlList(EXPLORER_LS_KEY, url);
+        notifyRegistryBatched();
+      };
+
+      REG_BC_FEED = new BroadcastChannel(FEED_BC_NAME);
+      REG_BC_FEED.onmessage = (ev: MessageEvent): void => {
+        const msg = ev.data as unknown;
+        const url =
+          isRecord(msg) && typeof (msg as { url?: unknown }).url === "string"
+            ? ((msg as { url: string }).url as string)
+            : null;
+        if (!url) return;
+
+        // Merge into feed list (local only)
+        upsertUrlList(FEED_LS_KEY, url);
+        notifyRegistryBatched();
+      };
     }
-  } catch {
-    // silent
-  }
-}
-
-/**
- * HARD PRUNE: FEED must only contain the THREAD ROOT (one entry per thread).
- * Uses threadRootKeyFromUrlLike (not originKeyFromUrlLike) so reply URLs get removed.
- */
-function pruneFeedDuplicatesForThread(rootKey: string, keepHref: string): void {
-  if (typeof window === "undefined") return;
-  if (typeof window.localStorage === "undefined") return;
-
-  const existing = readUrlList(FEED_LS_KEY);
-  const keep = canonicalizeForStorage(keepHref);
-  if (!keep) return;
-
-  const next: string[] = [];
-  for (const u of existing) {
-    const c = canonicalizeForStorage(u);
-    if (!c) continue;
-
-    const ok = threadRootKeyFromUrlLike(c);
-    if (ok === rootKey) continue; // drop anything in this same thread
-    next.push(c);
+  } catch (e: unknown) {
+    void e;
   }
 
-  next.unshift(keep);
-  const deduped = dedupPreserveOrder(next);
-
-  try {
-    window.localStorage.setItem(FEED_LS_KEY, JSON.stringify(deduped));
-    notifyRegistryBatched();
-  } catch {
-    // ignore quota
-  }
+  notifyRegistryBatched();
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -1922,81 +2013,76 @@ type InputKind =
   | { kind: "embedded"; rootRef: string; payload: unknown; openUrl: string }
   | { kind: "sigilUrl"; openUrl: string };
 
-function readCapsuleLoose(v: unknown): Capsule | null {
-  if (!isRecord(v)) return null;
-
-  const hasDefined = (rec: Record<string, unknown>, k: string): boolean =>
-    Object.prototype.hasOwnProperty.call(rec, k) && typeof rec[k] !== "undefined";
-
-  const hasContent = (rec: Record<string, unknown>): boolean =>
-    hasDefined(rec, "post") || hasDefined(rec, "message") || hasDefined(rec, "share") || hasDefined(rec, "reaction");
-
-  const mergeMissingContent = (base: Record<string, unknown>, src: Record<string, unknown>): void => {
-    for (const k of ["post", "message", "share", "reaction"] as const) {
-      if (hasDefined(src, k) && typeof base[k] === "undefined") base[k] = src[k];
-    }
-  };
-
-  const root = v;
-  const data = isRecord((root as Record<string, unknown>).data)
-    ? ((root as Record<string, unknown>).data as Record<string, unknown>)
-    : null;
-
-  const rootHasContent = hasContent(root as Record<string, unknown>);
-  const dataHasContent = Boolean(data) && hasContent(data!);
-
-  const capsuleFromRoot = isRecord((root as Record<string, unknown>).capsule)
-    ? ((root as Record<string, unknown>).capsule as Record<string, unknown>)
-    : null;
-
-  const capsuleFromData = data && isRecord(data.capsule) ? (data.capsule as Record<string, unknown>) : null;
-
-  const capsuleObj = capsuleFromRoot ?? capsuleFromData;
-
-  // ✅ If we have a capsule object AND content exists outside it, merge content IN.
-  if (capsuleObj && (rootHasContent || dataHasContent)) {
-    const merged: Record<string, unknown> = { ...capsuleObj };
-    if (dataHasContent && data) mergeMissingContent(merged, data);
-    if (rootHasContent) mergeMissingContent(merged, root as Record<string, unknown>);
-    return merged as unknown as Capsule;
-  }
-
-  // ✅ Plain capsule path
-  if (capsuleObj) return capsuleObj as unknown as Capsule;
-
-  // ✅ Some payloads are already "capsule-shaped" at root or data
-  if (rootHasContent) return root as unknown as Capsule;
-  if (dataHasContent && data) return data as unknown as Capsule;
-
-  // ✅ Last fallback: treat root as capsule if it has typical capsule fields
-  return root as unknown as Capsule;
-}
-
 function readPulseLoose(v: unknown): number {
   if (isRecord(v) && typeof v.pulse === "number" && Number.isFinite(v.pulse)) return v.pulse;
   if (
     isRecord(v) &&
-    isRecord((v as Record<string, unknown>).data) &&
-    typeof ((v as Record<string, unknown>).data as Record<string, unknown>).pulse === "number" &&
-    Number.isFinite(((v as Record<string, unknown>).data as Record<string, unknown>).pulse as number)
-  )
-    return ((v as Record<string, unknown>).data as Record<string, unknown>).pulse as number;
+    isRecord(v.data) &&
+    typeof (v.data as Record<string, unknown>).pulse === "number" &&
+    Number.isFinite((v.data as Record<string, unknown>).pulse as number)
+  ) {
+    return (v.data as Record<string, unknown>).pulse as number;
+  }
   return 0;
 }
 
 function readAppIdLoose(v: unknown): string | undefined {
-  const a = isRecord(v) ? (v as Record<string, unknown>).appId : undefined;
+  const a = isRecord(v) ? v.appId : undefined;
   if (typeof a === "string" && a.trim()) return a;
-  const d = isRecord(v) && isRecord((v as Record<string, unknown>).data) ? ((v as Record<string, unknown>).data as Record<string, unknown>).appId : undefined;
+  const d = isRecord(v) && isRecord(v.data) ? (v.data as Record<string, unknown>).appId : undefined;
   if (typeof d === "string" && d.trim()) return d;
   return undefined;
 }
 
 function readUserIdLoose(v: unknown): unknown {
-  const u = isRecord(v) ? (v as Record<string, unknown>).userId : undefined;
+  const u = isRecord(v) ? v.userId : undefined;
   if (typeof u !== "undefined") return u;
-  const d = isRecord(v) && isRecord((v as Record<string, unknown>).data) ? ((v as Record<string, unknown>).data as Record<string, unknown>).userId : undefined;
+  const d = isRecord(v) && isRecord(v.data) ? (v.data as Record<string, unknown>).userId : undefined;
   return d;
+}
+
+function extractTokenFromPayloadLoose(v: unknown, depth = 0): string | null {
+  if (!v || depth > 4) return null;
+
+  if (typeof v === "string") {
+    const t = normalizeToken(v);
+    return looksLikeToken(t) ? t : null;
+  }
+
+  if (!isRecord(v)) return null;
+
+  // direct token-ish keys
+  const direct =
+    readStringField(v, ["t", "token", "streamToken", "capsuleToken", "momentToken"]) ??
+    null;
+  if (direct) {
+    const t = normalizeToken(direct);
+    if (looksLikeToken(t)) return t;
+  }
+
+  // legacy v=<token> stored in data (not version)
+  const legacyV = readStringField(v, ["v", "V"]) ?? null;
+  if (legacyV) {
+    const t = normalizeToken(legacyV);
+    if (looksLikeToken(t)) return t;
+  }
+
+  // ids that may function as tokens
+  const idLike =
+    readStringField(v, ["id", "contentId", "cid", "hash", "contentHash"]) ?? null;
+  if (idLike) {
+    const t = normalizeToken(idLike);
+    if (looksLikeToken(t)) return t;
+  }
+
+  // recurse common wrappers
+  for (const k of ["data", "capsule", "payload", "post", "message", "share", "reaction"] as const) {
+    const inner = (v as Record<string, unknown>)[k];
+    const t = extractTokenFromPayloadLoose(inner, depth + 1);
+    if (t) return t;
+  }
+
+  return null;
 }
 
 function parseInputKind(rawUrl: string): InputKind {
@@ -2047,13 +2133,7 @@ const FeedCardThread: React.FC<ThreadProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [packed, setPacked] = useState(false);
-
-  // ✅ Collapsible state: ALL cards start collapsed (long blocks only).
-  // Short content still shows fully because `collapsed = shouldCollapse && !bodyExpanded`.
   const [bodyExpanded, setBodyExpanded] = useState<boolean>(false);
-
-  useEffect(() => {
-  }, [url]);
 
   const chainVersion = useSyncExternalStore(subscribeChain, getChainSnapshot, getChainServerSnapshot);
 
@@ -2130,7 +2210,6 @@ const FeedCardThread: React.FC<ThreadProps> = ({
   const nodeResolved = nodeOk ? (node as ResolvedNodeOk) : null;
   const nodeStorePayload: unknown | null = nodeOk ? nodeResolved!.storePayload : null;
 
-  // ✅ Compute /s URL early so later memos can safely use it
   const capsuleForSUrl: Capsule | null = nodeOk ? nodeResolved!.capsule : null;
   const sigilSUrl = useMemo(() => computeSigilSUrl(url, capsuleForSUrl), [url, capsuleForSUrl]);
 
@@ -2221,8 +2300,6 @@ const FeedCardThread: React.FC<ThreadProps> = ({
     ensureRegistryBridge();
   }, []);
 
-  // ✅ FIX: use ONE consistent “thread identity key” everywhere (origin/self/candidates)
-  // (kept as-is: this is for Thread panel semantics, not feed-root pruning)
   const selfThreadKey = useMemo(() => {
     const base = normalizeSeedHrefFromRef(sigilSUrl ?? node.openUrl ?? url);
     return originKeyFromUrlLike(base);
@@ -2231,14 +2308,10 @@ const FeedCardThread: React.FC<ThreadProps> = ({
   const threadView = useMemo((): { origin: ThreadItem | null; replies: ThreadItem[] } => {
     if (!nodeOk) return { origin: null, replies: [] };
 
-    // Thread origin reference: prefer URL witness chain, else fall back to current
     const originRef = addChain.length > 0 ? addChain[0]! : sigilSUrl ?? url;
     const originHref = normalizeSeedHrefFromRef(originRef);
     const originKey = originKeyFromUrlLike(originHref);
 
-    // Pool comes from:
-    // - current URL + its addChain (cold-open support)
-    // - Explorer global URLs (SigilExplorer registry + local fallback)
     const pool = dedupPreserveOrder([
       normalizeSeedHrefFromRef(url),
       normalizeSeedHrefFromRef(node.openUrl),
@@ -2246,40 +2319,43 @@ const FeedCardThread: React.FC<ThreadProps> = ({
       ...readExplorerGlobalUrls(),
     ]).filter(Boolean);
 
-    // Pick best URL per content key
     const bestByKey = new Map<string, { url: string; score: number; pulse: number }>();
 
     const scoreThreadUrl = (u: string, isOrigin: boolean): number => {
       let s = 0;
       const low = u.toLowerCase();
 
-      // origin prefers /s
       if (isOrigin) {
         if (isSPayloadUrl(u)) s += 260;
         else s += 40;
       } else {
-        // replies prefer stream URLs
-        if (low.includes("/stream/t") || /[?&#]t=/.test(low)) s += 220;
-        if (low.includes("/stream/p/")) s += 190;
-        if (low.includes("/stream") && /[?&#]p=/.test(low)) s += 170;
-        if (isSPayloadUrl(u)) s -= 40; // avoid /s variants as replies
+        // Replies: prefer token canon t= (hash or query)
+        if (/[?&#]t=/.test(low) || low.includes("/stream/t")) s += 240;
+
+        // Legacy /stream/p input: supported, but lower score so we migrate away
+        if (low.includes("/stream/p/")) s -= 25;
+
+        // Legacy v= token input: supported, but lower score so we migrate away
+        if (/[?&#]v=/.test(low)) s -= 20;
+
+        if (isSPayloadUrl(u)) s -= 40;
       }
 
       s += Math.max(0, 20 - Math.floor(u.length / 40));
-      s += Math.min(200_000, registryScore(u)); // witness-depth
+      s += Math.min(200_000, registryScore(u));
       return s;
     };
 
     for (const u of pool) {
-      const canon = canonicalizeForStorage(u);
-      if (!canon) continue;
+      const canon0 = canonicalizeForStorage(u);
+      if (!canon0) continue;
+
+      // 🔥 ensure v=<token> becomes /stream#t=<token> BEFORE keying/scoring
+      const canon = normalizeResolvedUrlForBrowser(canon0);
 
       const candKey = originKeyFromUrlLike(canon);
       if (!candKey) continue;
 
-      // belongs-to-thread check:
-      // - candidate is origin itself, OR
-      // - candidate's addChain contains originKey
       const candAdds = dedupPreserveOrder(extractAddChain(canon));
       let belongs = candKey === originKey;
 
@@ -2295,7 +2371,6 @@ const FeedCardThread: React.FC<ThreadProps> = ({
 
       if (!belongs) continue;
 
-      // extract pulse for ordering (best-effort)
       const dec = decodeSigilUrlSmart(canon);
       const p = dec.decoded.ok ? readPulseLoose(dec.decoded.data) : 0;
 
@@ -2304,11 +2379,14 @@ const FeedCardThread: React.FC<ThreadProps> = ({
 
       const prior = bestByKey.get(candKey);
       if (!prior || sc > prior.score) {
-        bestByKey.set(candKey, { url: canon, score: sc, pulse: p });
+        // normalize candidate to t= canon if token exists (and strip legacy v= token)
+        const normalized = normalizeResolvedUrlForBrowser(makeStreamMomentUrl(canon) ?? canon);
+        bestByKey.set(candKey, { url: normalized, score: sc, pulse: p });
       }
     }
 
-    const originPicked = bestByKey.get(originKey)?.url ?? originHref;
+    const originPickedRaw = bestByKey.get(originKey)?.url ?? originHref;
+    const originPicked = normalizeResolvedUrlForBrowser(originPickedRaw);
     const originPulse = (() => {
       const d = decodeSigilUrlSmart(originPicked);
       return d.decoded.ok ? readPulseLoose(d.decoded.data) : 0;
@@ -2319,19 +2397,18 @@ const FeedCardThread: React.FC<ThreadProps> = ({
     const replies: ThreadItem[] = [];
     for (const [k, v] of bestByKey.entries()) {
       if (k === originKey) continue;
-      if (k === selfThreadKey) continue; // ✅ current post never appears in the bottom thread
-      if (isSPayloadUrl(v.url)) continue; // ✅ replies should be stream nodes, not /s variants
-      replies.push({ key: k, url: v.url, pulse: v.pulse });
+      if (k === selfThreadKey) continue;
+      if (isSPayloadUrl(v.url)) continue;
+      replies.push({ key: k, url: normalizeResolvedUrlForBrowser(v.url), pulse: v.pulse });
     }
 
-    // newest first
     replies.sort((a, b) => (b.pulse ?? 0) - (a.pulse ?? 0));
 
     return { origin, replies };
   }, [nodeOk, addChain, sigilSUrl, url, node.openUrl, selfThreadKey, registryVersion]);
 
   /* ─────────────────────────────────────────────────────────────
-     Remember/Pack: compute "now" (gesture-safe) + UI reflects CHAIN via chainVersion
+     Remember/Pack: compute now (gesture-safe) + UI tracks CHAIN
      ───────────────────────────────────────────────────────────── */
 
   type RememberPack = { primary: BuiltSegment; archives: BuiltSegment[] };
@@ -2355,7 +2432,6 @@ const FeedCardThread: React.FC<ThreadProps> = ({
     const fromChain = dedupPreserveOrder(buildPrevAddsFromChain(selfKey, THREAD_MAX_DEPTH));
     const explicit = dedupPreserveOrder(embeddedAddsForThisNode);
 
-    // Choose chain that preserves the most payload embeddings; tie-break to longer; final tie: explicit.
     const explicitScore = countPayloadRefs(explicit);
     const chainScore = countPayloadRefs(fromChain);
 
@@ -2381,7 +2457,6 @@ const FeedCardThread: React.FC<ThreadProps> = ({
         continue;
       }
 
-      // 1) If CHAIN already has payloadRef for this node (keyed by payload), prefer it.
       const decoded = decodeSigilUrlSmart(ref);
       const payload = decoded.decoded.ok ? (decoded.decoded.data as unknown) : null;
 
@@ -2393,17 +2468,15 @@ const FeedCardThread: React.FC<ThreadProps> = ({
           continue;
         }
 
-        // 2) If decodable, embed payload directly (strongest no-cache guarantee).
         try {
           adds.push(encodePayloadRef(payload));
           continue;
         } catch (e: unknown) {
           void e;
-          // fall through
         }
       }
 
-      // 3) Last resort: keep as normalized open ref.
+      // last resort: normalize → token canon t= if possible
       adds.push(normalizeResolvedUrlForBrowser(ref));
     }
 
@@ -2415,37 +2488,58 @@ const FeedCardThread: React.FC<ThreadProps> = ({
   const rememberUrl = rememberPack.primary.url;
   const hasArchives = rememberPack.archives.length > 0;
 
-  // Compute momentStreamUrl BEFORE early return (hooks must stay unconditional)
-  const momentStreamUrl = useMemo(
-    () => makeStreamPMomentUrl(url) ?? makeStreamPMomentUrl(node.openUrl),
-    [url, node.openUrl],
-  );
+  // ✅ token-canon moment stream for this node (NO /stream/p; NO v= token)
+  // Now also checks the payload for an embedded token so Origin-in-replies can normalize to t=
+  const momentStreamUrl = useMemo(() => {
+    const tok =
+      extractTokenCandidates(url, 1)[0] ??
+      extractTokenCandidates(node.openUrl, 1)[0] ??
+      (nodeOk && nodeStorePayload ? extractTokenFromPayloadLoose(nodeStorePayload) : null);
 
-  // v3 derived post (caption/body/attachments)
+    return tok ? makeStreamOpenUrlFromToken(tok) : null;
+  }, [url, node.openUrl, nodeOk, nodeStorePayload]);
+
   const v3Derived = useMemo(
     () => deriveV3PostLike(capsuleForSUrl, nodeOk ? nodeResolved!.dataRaw : null),
     [capsuleForSUrl, nodeOk, nodeResolved],
   );
 
-  // Reply detection: any node with a prevUrl is a reply and MUST be Proof of Memory™
   const isReplyNode = Boolean(prevUrl);
 
-  // For auto-register: treat as memory if reply OR has content OR manual marker.
-  const autoMemoryFlag = useMemo(() => {
+  const legacyContentPresent = useMemo(() => {
     if (!nodeOk || !capsuleForSUrl) return false;
-
     const cap = capsuleForSUrl;
-    const legacyContent = Boolean((cap as Capsule).post || (cap as Capsule).message || (cap as Capsule).share || (cap as Capsule).reaction);
-    const v3Content = Boolean(v3Derived.post);
-    const manual =
-      isManualMarkerText(kindFromDecodedData(nodeResolved!.dataRaw, "")) ||
-      isManualMarkerText((cap as Capsule).source) ||
-      hasManualMarkerDeep(cap);
+    return Boolean(
+      (cap as Capsule).post ||
+        (cap as Capsule).message ||
+        (cap as Capsule).share ||
+        (cap as Capsule).reaction,
+    );
+  }, [nodeOk, capsuleForSUrl]);
 
-    return manual || legacyContent || v3Content || isReplyNode;
-  }, [nodeOk, capsuleForSUrl, v3Derived.post, nodeResolved, isReplyNode]);
+  const manualMarkerPresent = useMemo(() => {
+    if (!nodeOk || !capsuleForSUrl) return false;
+    const cap = capsuleForSUrl;
+    const kindText = kindFromDecodedData(nodeResolved!.dataRaw, "");
+    const src =
+      (isNonEmpty((cap as Capsule).source) ? (cap as Capsule).source : undefined) ??
+      legacySourceFromData(nodeResolved!.dataRaw);
+    return isManualMarkerText(kindText) || isManualMarkerText(src) || hasManualMarkerDeep(cap);
+  }, [nodeOk, capsuleForSUrl, nodeResolved]);
 
-  // Auto-register on visit (depth=0 only) + seed explorer + push thread-root into feed (no duplicates)
+  const contentPresent = useMemo(
+    () => legacyContentPresent || Boolean(v3Derived.post),
+    [legacyContentPresent, v3Derived.post],
+  );
+
+  const memoryMode = useMemo(() => manualMarkerPresent || contentPresent || isReplyNode, [
+    manualMarkerPresent,
+    contentPresent,
+    isReplyNode,
+  ]);
+
+  const autoMemoryFlag = memoryMode;
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (depth !== 0) return;
@@ -2453,23 +2547,22 @@ const FeedCardThread: React.FC<ThreadProps> = ({
     ensureRegistryBridge();
 
     const visitHref =
-      makeStreamPMomentUrl(window.location.href) ??
+      makeStreamMomentUrl(window.location.href) ??
       momentStreamUrl ??
-      makeStreamPMomentUrl(node.openUrl) ??
+      makeStreamMomentUrl(node.openUrl) ??
       rememberUrl ??
       normalizeResolvedUrlForBrowser(url);
 
-    // ✅ Seed Explorer global state with:
-    // - the visited URL
-    // - every addChain ref (so a cold-open URL still hydrates the full thread locally)
-    const seedRefs = dedupPreserveOrder([visitHref, ...addChain.map((r) => normalizeSeedHrefFromRef(r)).filter(Boolean)]);
+    const seedRefs = dedupPreserveOrder([
+      visitHref,
+      ...addChain.map((r) => normalizeSeedHrefFromRef(r)).filter(Boolean),
+    ]);
 
     for (const s of seedRefs) {
       const ex = upsertUrlList(EXPLORER_LS_KEY, s);
       if (ex.changed) notifyExplorer(ex.value);
     }
 
-    // ✅ Feed must show THREAD ROOT ONLY (never replies as top-level items)
     if (autoMemoryFlag) {
       const startPayload = nodeOk ? (nodeResolved!.dataRaw ?? nodeStorePayload) : undefined;
       const threadRootHref = threadRootHrefFromUrlLike(visitHref, startPayload);
@@ -2477,17 +2570,35 @@ const FeedCardThread: React.FC<ThreadProps> = ({
       const fd = upsertUrlList(FEED_LS_KEY, threadRootHref);
       if (fd.changed) notifyFeed(fd.value);
 
-      // ✅ hard prune: remove ANY feed URLs that resolve to this same thread root
       const rootKey = threadRootKeyFromUrlLike(visitHref, startPayload);
       pruneFeedDuplicatesForThread(rootKey, threadRootHref);
     }
 
     notifyRegistryBatched();
-  }, [depth, url, node.openUrl, momentStreamUrl, rememberUrl, autoMemoryFlag, addChain, nodeOk, nodeResolved, nodeStorePayload]);
+  }, [
+    depth,
+    url,
+    node.openUrl,
+    momentStreamUrl,
+    rememberUrl,
+    autoMemoryFlag,
+    addChain,
+    nodeOk,
+    nodeResolved,
+    nodeStorePayload,
+  ]);
 
-  const computeRememberCopyUrl = useCallback((): string => {
-    return makeStreamPMomentUrl(url) ?? makeStreamPMomentUrl(node.openUrl) ?? computeRememberPackNow().primary.url;
-  }, [url, node.openUrl, computeRememberPackNow]);
+  // ✅ Memory href preference:
+  // - Prefer token-canon /stream#t=... (works for long tokens)
+  // - Else fall back to self-contained Memory Stream (#v=2&root=...&add=...)
+  const memoryHref = useMemo(() => momentStreamUrl ?? rememberUrl, [momentStreamUrl, rememberUrl]);
+
+  const openHref = useMemo(() => {
+    if (!nodeOk) return node.openUrl;
+    return memoryMode ? memoryHref : sigilSUrl ?? memoryHref;
+  }, [nodeOk, node.openUrl, memoryMode, memoryHref, sigilSUrl]);
+
+  const rememberCopyHref = useMemo(() => openHref, [openHref]);
 
   const computePackCopyText = useCallback((): string => {
     const pack = computeRememberPackNow();
@@ -2495,7 +2606,7 @@ const FeedCardThread: React.FC<ThreadProps> = ({
   }, [computeRememberPackNow]);
 
   const onCopy = useCallback(() => {
-    const text = computeRememberCopyUrl();
+    const text = rememberCopyHref;
     copyTextGestureSafe(
       text,
       () => {
@@ -2507,7 +2618,7 @@ const FeedCardThread: React.FC<ThreadProps> = ({
         setCopied(false);
       },
     );
-  }, [computeRememberCopyUrl]);
+  }, [rememberCopyHref]);
 
   const onCopyPack = useCallback(() => {
     const text = computePackCopyText();
@@ -2540,11 +2651,10 @@ const FeedCardThread: React.FC<ThreadProps> = ({
             {node.error}
           </div>
 
-          {/* ✅ Open + Remember even on invalid */}
           <footer className="fc-actions" role="group" aria-label="Actions">
             <a
               className="fc-btn"
-              href={node.openUrl}
+              href={openHref}
               target="_blank"
               rel="noreferrer"
               onClick={(e) => e.stopPropagation()}
@@ -2559,7 +2669,7 @@ const FeedCardThread: React.FC<ThreadProps> = ({
               onClick={onCopy}
               aria-pressed={copied}
               data-state={copied ? "remembered" : "idle"}
-              title="Copies canonical /stream/p moment URL when possible; otherwise falls back to the primary Memory Stream URL."
+              title="Copies the same href as Open for this block."
             >
               {copied ? "Remembered" : "Remember"}
             </button>
@@ -2571,17 +2681,17 @@ const FeedCardThread: React.FC<ThreadProps> = ({
 
   const capsule: Capsule = nodeResolved!.capsule;
 
-  // Legacy content
   const postLegacy: PostPayload | undefined = capsule.post;
   const message: MessagePayload | undefined = capsule.message;
   const share: SharePayload | undefined = capsule.share;
   const reaction: ReactionPayload | undefined = capsule.reaction;
 
-  // v3 fallback content
   const post: PostPayload | undefined = postLegacy ?? v3Derived.post;
 
   const pulse =
-    typeof nodeResolved!.pulse === "number" && Number.isFinite(nodeResolved!.pulse) ? nodeResolved!.pulse : 0;
+    typeof nodeResolved!.pulse === "number" && Number.isFinite(nodeResolved!.pulse)
+      ? nodeResolved!.pulse
+      : 0;
 
   const m = momentFromPulse(pulse);
   const beatZ = Math.max(0, Math.floor(m.beat));
@@ -2592,14 +2702,14 @@ const FeedCardThread: React.FC<ThreadProps> = ({
 
   const { day, month, year } = kaiDMYFromPulseKKS(pulse);
 
-  // Kind inference: if v3 post exists, it’s a post (not sigil)
   const inferredKind = post ? "post" : message ? "message" : share ? "share" : reaction ? "reaction" : "sigil";
-
   const kind: string = kindFromDecodedData(nodeResolved!.dataRaw, inferredKind);
   const kindText = String(kind);
 
   const appBadge =
-    typeof nodeResolved!.appId === "string" && nodeResolved!.appId ? `app ${short(nodeResolved!.appId, 10, 4)}` : undefined;
+    typeof nodeResolved!.appId === "string" && nodeResolved!.appId
+      ? `app ${short(nodeResolved!.appId, 10, 4)}`
+      : undefined;
 
   const userBadge =
     typeof nodeResolved!.userId !== "undefined" && nodeResolved!.userId !== null
@@ -2613,17 +2723,8 @@ const FeedCardThread: React.FC<ThreadProps> = ({
 
   const authorBadge = isNonEmpty(capsule.author) ? capsule.author : undefined;
 
-  const sourceBadge = (isNonEmpty(capsule.source) ? capsule.source : undefined) ?? legacySourceFromData(nodeResolved!.dataRaw);
-
-  const manualMarkerPresent =
-    isManualMarkerText(kindText) || isManualMarkerText(sourceBadge) || hasManualMarkerDeep(capsule);
-
-  // Content present (legacy or v3)
-  const contentPresent = Boolean(post || message || share || reaction);
-
-  // ✅ FINAL MEMORY MODE:
-  // - manual marker OR any content OR reply node (has previous context)
-  const memoryMode = manualMarkerPresent || contentPresent || isReplyNode;
+  const sourceBadge =
+    (isNonEmpty(capsule.source) ? capsule.source : undefined) ?? legacySourceFromData(nodeResolved!.dataRaw);
 
   const kindChipLabel = memoryMode ? upper(PROOF_OF_MEMORY) : upper(PROOF_OF_BREATH);
   const ariaKindLabel = memoryMode ? PROOF_OF_MEMORY : PROOF_OF_BREATH;
@@ -2658,22 +2759,14 @@ const FeedCardThread: React.FC<ThreadProps> = ({
 
   const dataKindAttr = memoryMode ? "memory" : kindText;
 
-  // Memory open/copy should be /stream/p/<token> (moment URL), NOT v2 stream
-  const memoryHref = momentStreamUrl ?? rememberUrl; // prefer /stream/p moment, fallback if missing
-  const openHref = memoryMode ? memoryHref : sigilSUrl ?? memoryHref;
-
   const openLabel = memoryMode ? "↗ Proof of Memory™" : "↗ Proof of Breath™";
   const openTitle = memoryMode ? `Open ${PROOF_OF_MEMORY}` : `Open ${PROOF_OF_BREATH}`;
 
-  // ✅ Actions: ALWAYS show on every block (origin, prev-chain, replies, previews)
-  const showActions = true;
-
-  // Styling/semantics keep: primary vs preview
   const isPrimaryCard = depth === 0 && threadMode !== "self";
 
-  // ✅ Collapsible decision (per-card; applies to whichever long block exists)
   const primaryBodyText = (postText ?? messageText ?? shareNote ?? "") || "";
-  const bodyKind: CollapseKind = v3Derived.bodyKind === "code" || v3Derived.bodyKind === "html" ? "code" : "text";
+  const bodyKind: CollapseKind =
+    v3Derived.bodyKind === "code" || v3Derived.bodyKind === "html" ? "code" : "text";
 
   const collapse = primaryBodyText ? collapseSpecFor(primaryBodyText, bodyKind) : null;
   const shouldCollapse = Boolean(collapse?.shouldCollapse);
@@ -2686,12 +2779,12 @@ const FeedCardThread: React.FC<ThreadProps> = ({
     setBodyExpanded((v) => !v);
   };
 
-  // ✅ Embedded cards: click card surface to open (no action row duplication)
-  const onPreviewOpen = (e: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>): void => {
+  const onPreviewOpen = (
+    e: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>,
+  ): void => {
     if (isPrimaryCard) return;
     if (isInteractiveEl((e as React.MouseEvent).target ?? null)) return;
 
-    // keyboard
     if ("key" in e) {
       const k = e.key;
       if (k !== "Enter" && k !== " ") return;
@@ -2700,8 +2793,8 @@ const FeedCardThread: React.FC<ThreadProps> = ({
 
     try {
       window.open(openHref, "_blank", "noopener,noreferrer");
-    } catch {
-      // ignore
+    } catch (err: unknown) {
+      void err;
     }
   };
 
@@ -2746,7 +2839,6 @@ const FeedCardThread: React.FC<ThreadProps> = ({
             <div className="fc-sigilStage">
               <div className="fc-sigilGlass" aria-hidden="true" />
               <div className="fc-sigil" aria-label={memoryMode ? PROOF_OF_MEMORY : PROOF_OF_BREATH}>
-                {/* ✅ ALWAYS show the sigil visual for THIS node’s pulse */}
                 <KaiSigil pulse={pulse} beat={beatZ} stepPct={stepPct} chakraDay={chakraDay} />
               </div>
 
@@ -2767,7 +2859,11 @@ const FeedCardThread: React.FC<ThreadProps> = ({
               <div className="fc-metaRow">
                 <span
                   className="fc-chip fc-chip--kind"
-                  title={memoryMode ? `${PROOF_OF_MEMORY} • type: ${kindText}` : `${PROOF_OF_BREATH} • type: ${kindText}`}
+                  title={
+                    memoryMode
+                      ? `${PROOF_OF_MEMORY} • type: ${kindText}`
+                      : `${PROOF_OF_BREATH} • type: ${kindText}`
+                  }
                 >
                   {kindChipLabel}
                 </span>
@@ -2775,7 +2871,6 @@ const FeedCardThread: React.FC<ThreadProps> = ({
                 {appBadge && <span className="fc-chip">{appBadge}</span>}
                 {userBadge && <span className="fc-chip">{userBadge}</span>}
 
-                {/* ✅ SIGIL-GLYPH chip ONLY on pure breath sigil cards */}
                 {!memoryMode && sigilId ? (
                   <span className="fc-chip fc-chip--sigil" title={`Sigil-Glyph: ${sigilId}`}>
                     SIGIL-GLYPH {short(sigilId, 6, 4)}
@@ -3006,7 +3101,6 @@ const FeedCardThread: React.FC<ThreadProps> = ({
 
             {!post && !message && !share && !reaction && (
               <section className="fc-bodywrap" aria-label="Sigil body">
-                {/* (Kept minimal; chip+actions already declare Proof-of-*) */}
                 {memoryMode && hasArchives ? (
                   <div className="fc-muted" style={{ marginTop: 8 }}>
                     Archive segments: {rememberPack.archives.length} (use <b>Pack</b> to copy them)
@@ -3019,7 +3113,6 @@ const FeedCardThread: React.FC<ThreadProps> = ({
               <section className="fc-bodywrap" aria-label="Thread">
                 <h3 className="fc-title">Thread</h3>
 
-                {/* ✅ Origin: show ONLY if you're not already viewing the origin */}
                 {threadView.origin && threadView.origin.key !== selfThreadKey ? (
                   <div style={{ marginTop: 10 }}>
                     <div className="fc-muted" style={{ marginBottom: 10 }}>
@@ -3045,55 +3138,52 @@ const FeedCardThread: React.FC<ThreadProps> = ({
               </section>
             ) : null}
 
-            {/* ✅ Actions: ALWAYS (every block has Open + Remember; Pack when needed) */}
-            {showActions ? (
-              <footer className="fc-actions" role="group" aria-label="Actions">
-                <a
-                  className="fc-btn"
-                  href={openHref}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={openTitle}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {openLabel}
-                </a>
+            <footer className="fc-actions" role="group" aria-label="Actions">
+              <a
+                className="fc-btn"
+                href={openHref}
+                target="_blank"
+                rel="noreferrer"
+                title={openTitle}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {openLabel}
+              </a>
 
+              <button
+                className="fc-btn"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCopy();
+                }}
+                aria-pressed={copied}
+                data-state={copied ? "remembered" : "idle"}
+                title="Copies the same href as Open for this block. If overflow exists, use Pack."
+              >
+                {copied ? "Remembered" : "Remember"}
+              </button>
+
+              {hasArchives ? (
                 <button
                   className="fc-btn"
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onCopy();
+                    onCopyPack();
                   }}
-                  aria-pressed={copied}
-                  data-state={copied ? "remembered" : "idle"}
-                  title="Copies canonical /stream/p moment URL when possible; otherwise copies the primary self-contained Memory Stream URL. If overflow exists, use Pack."
+                  aria-pressed={packed}
+                  data-state={packed ? "packed" : "idle"}
+                  title="Copies the full segment pack (primary + archive segments) as newline-separated URLs."
                 >
-                  {copied ? "Remembered" : "Remember"}
+                  {packed ? "Packed" : `Pack ${1 + rememberPack.archives.length}`}
                 </button>
+              ) : null}
 
-                {hasArchives ? (
-                  <button
-                    className="fc-btn"
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onCopyPack();
-                    }}
-                    aria-pressed={packed}
-                    data-state={packed ? "packed" : "idle"}
-                    title="Copies the full segment pack (primary + archive segments) as newline-separated URLs."
-                  >
-                    {packed ? "Packed" : `Pack ${1 + rememberPack.archives.length}`}
-                  </button>
-                ) : null}
-
-                <span className="fc-live" aria-live="polite">
-                  {copied ? "Inhaled to Memory" : packed ? "Packed to Memory" : ""}
-                </span>
-              </footer>
-            ) : null}
+              <span className="fc-live" aria-live="polite">
+                {copied ? "Inhaled to Memory" : packed ? "Packed to Memory" : ""}
+              </span>
+            </footer>
           </section>
         </div>
       </article>
@@ -3106,7 +3196,14 @@ export const FeedCard: React.FC<Props> = ({ url, threadMode = "thread" }) => {
   const addChain = useMemo(() => dedupPreserveOrder(extractAddChain(url)), [url]);
 
   if (rootRef) {
-    return <FeedCardThread url={rootRef} threadMode={threadMode} addChain={addChain} addIndex={addChain.length - 1} />;
+    return (
+      <FeedCardThread
+        url={rootRef}
+        threadMode={threadMode}
+        addChain={addChain}
+        addIndex={addChain.length - 1}
+      />
+    );
   }
 
   return <FeedCardThread url={url} threadMode={threadMode} />;

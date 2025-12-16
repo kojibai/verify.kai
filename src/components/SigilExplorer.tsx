@@ -14,8 +14,9 @@
 // ✅ Parents are ALWAYS /s (post URLs). /s nodes ALWAYS display.
 // ✅ /stream/* nodes are ALWAYS children of their /s parent for the SAME moment.
 // ✅ Multiple /s derivatives for the SAME moment are shown as children under the moment’s /s parent.
-// ✅ Stream URL preference: /stream/* with t= (or /stream/t) > /stream/p/* > /stream?p=… > /s fallback.
+// ✅ Stream URL preference: /stream/* with t= (or /stream/t) > /stream/p never ever p~ > /stream?p=… > /s fallback.
 // ✅ Any localhost sigil/post URLs are auto-mapped to https://phi.network (stable canonical).
+// ✅ /p~ links are NEVER displayed/selected in Explorer UI (browser view always uses /stream/*).
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -30,8 +31,6 @@ import "./SigilExplorer.css";
    Live base (API + canonical sync target)
 ────────────────────────────────────────────────────────────────────── */
 const LIVE_BASE_URL = "https://align.kaiklok.com";
-
-
 
 /* ─────────────────────────────────────────────────────────────────────
  *  Types
@@ -260,15 +259,31 @@ function parseHashFromUrl(url: string): string | undefined {
   }
 }
 
-/** Attempt to parse stream token from /stream/p/<token> or ?p=<token> (view identity help). */
+/** True if url is the SMS-safe /p~<token> route (never browser-viewable). */
+function isPTildeUrl(url: string): boolean {
+  try {
+    const u = new URL(url, viewBaseOrigin());
+    return u.pathname.toLowerCase().startsWith("/p~");
+  } catch {
+    return url.toLowerCase().includes("/p~");
+  }
+}
+
+/** Attempt to parse stream token from /stream/p/<token> or ?p=<token> or /p~<token> (identity help). */
 function parseStreamToken(url: string): string | undefined {
   try {
     const u = new URL(url, viewBaseOrigin());
     const path = u.pathname;
 
+    // /stream/p/<token>
     const m = path.match(/\/stream\/p\/([^/]+)/u);
     if (m?.[1]) return decodeURIComponent(m[1]);
 
+    // /p~<token>  (SMS-safe short route)
+    const pm = path.match(/^\/p~([^/]+)/u);
+    if (pm?.[1]) return decodeURIComponent(pm[1]);
+
+    // query p=
     const p = u.searchParams.get("p");
     if (p) return p;
 
@@ -279,8 +294,20 @@ function parseStreamToken(url: string): string | undefined {
 
     return undefined;
   } catch {
+    // best-effort fallback
+    const low = url.toLowerCase();
+    const pm = low.match(/\/p~([^/?#]+)/u);
+    if (pm?.[1]) return safeDecodeURIComponent(pm[1]);
     return undefined;
   }
+}
+
+/** If a URL is /p~, convert ONLY for browser view (never stored-mutation, never shown as /p~). */
+function browserViewUrl(u: string): string {
+  const abs = canonicalizeUrl(u);
+  if (!isPTildeUrl(abs)) return abs;
+  const tok = parseStreamToken(abs);
+  return tok ? canonicalizeUrl(streamUrlFromToken(tok)) : abs;
 }
 
 /** Human shortener for long strings. */
@@ -447,6 +474,9 @@ function classifyUrlKind(u: string): UrlKind {
 
     if (path.includes("/s/")) return "postS";
 
+    // SMS-safe short route acts like stream token identity, but must NEVER be chosen for browser view
+    if (path.startsWith("/p~")) return "streamP";
+
     const isStream = path.includes("/stream");
     if (!isStream) return "other";
 
@@ -475,6 +505,7 @@ function classifyUrlKind(u: string): UrlKind {
   } catch {
     const low = u.toLowerCase();
     if (low.includes("/s/")) return "postS";
+    if (low.includes("/p~")) return "streamP";
     if (low.includes("/stream/p/")) return "streamP";
     if (low.includes("/stream/t") || /[?&#]t=/.test(low)) return "streamT";
     if (low.includes("/stream") && /[?&#]p=/.test(low)) return "streamQ";
@@ -547,11 +578,27 @@ function contentIdFor(url: string, p: SigilSharePayloadLoose): string {
 
   return `k:${phiKey}|${pulse}|${beat}|${step}|${h}|${kind}`;
 }
+const isPackedViewerUrl = (raw: string): boolean => {
+  const u = raw.toLowerCase();
+  if (!u.includes("/stream")) return false;
+
+  // These are the giant “inline packed” viewers:
+  // /stream#v=2&root=... (&seg=...&add=...)
+  const hasPackedSignals =
+    u.includes("root=") || u.includes("&seg=") || u.includes("&add=");
+  const isHashViewer = u.includes("/stream#") || u.includes("#v=");
+
+  return hasPackedSignals && isHashViewer;
+};
 
 function scoreUrlForView(u: string, prefer: ContentKind): number {
+  // HARD RULE: /p~ must NEVER be selected for browser view
+  if (isPTildeUrl(u)) return -1e9;
+
   const url = u.toLowerCase();
   const kind = classifyUrlKind(u);
   let s = 0;
+if (isPackedViewerUrl(url)) s -= 10_000; // never primary, ever
 
   // ── Kind-specific preference (this is the “always post when post, always stream when stream” rule)
   if (prefer === "post") {
@@ -591,10 +638,20 @@ function scoreUrlForView(u: string, prefer: ContentKind): number {
 }
 
 function pickPrimaryUrl(urls: string[], prefer: ContentKind): string {
-  let best = urls[0] ?? "";
+  // HARD RULE: /p~ must NEVER be selected for browser view
+  const nonPTilde = urls.filter((u) => !isPTildeUrl(u));
+  const candidates = nonPTilde.length > 0 ? nonPTilde : urls;
+
+  // If we ONLY have /p~ variants, synthesize a browser-safe /stream/p/<token> URL for view.
+  if (nonPTilde.length === 0 && urls.length > 0) {
+    const tok = parseStreamToken(urls[0] ?? "");
+    if (tok) return canonicalizeUrl(streamUrlFromToken(tok));
+  }
+
+  let best = candidates[0] ?? "";
   let bestScore = -1e9;
 
-  for (const u of urls) {
+  for (const u of candidates) {
     const sc = scoreUrlForView(u, prefer);
     if (sc > bestScore || (sc === bestScore && u.length < best.length)) {
       best = u;
@@ -627,7 +684,14 @@ function extractWitnessChainFromUrl(url: string): string[] {
         continue;
       }
 
-      const abs = canonicalizeUrl(decoded);
+      let abs = canonicalizeUrl(decoded);
+
+      // Never propagate /p~ into witness topology (browser view must use /stream/*)
+      if (isPTildeUrl(abs)) {
+        const tok = parseStreamToken(abs);
+        if (tok) abs = canonicalizeUrl(streamUrlFromToken(tok));
+      }
+
       if (!out.includes(abs)) out.push(abs);
     }
 
@@ -1265,7 +1329,10 @@ function buildContentIndex(reg: Registry): Map<string, ContentEntry> {
     const pm = prev.momentKey;
     const nm = mkey;
     if (pm.startsWith("u:") && !nm.startsWith("u:")) prev.momentKey = nm;
-    if (pm.startsWith("h:") && (nm.startsWith("k:") || nm.startsWith("sig:") || nm.startsWith("tok:")))
+    if (
+      pm.startsWith("h:") &&
+      (nm.startsWith("k:") || nm.startsWith("sig:") || nm.startsWith("tok:"))
+    )
       prev.momentKey = nm;
   }
 
@@ -1322,12 +1389,20 @@ function buildContentIndex(reg: Registry): Map<string, ContentEntry> {
       // best post parent: always /s, but pick the most “viewable” among /s variants
       parent = postParents
         .slice()
-        .sort((a, b) => scoreUrlForView(b.primaryUrl, "post") - scoreUrlForView(a.primaryUrl, "post"))[0];
+        .sort(
+          (a, b) =>
+            scoreUrlForView(b.primaryUrl, "post") -
+            scoreUrlForView(a.primaryUrl, "post"),
+        )[0];
     } else {
       // fallback (rare): no /s present, promote best stream to moment parent
       parent = candidates
         .slice()
-        .sort((a, b) => scoreUrlForView(b.primaryUrl, b.kind) - scoreUrlForView(a.primaryUrl, a.kind))[0];
+        .sort(
+          (a, b) =>
+            scoreUrlForView(b.primaryUrl, b.kind) -
+            scoreUrlForView(a.primaryUrl, a.kind),
+        )[0];
     }
 
     const parentId = parent?.id ?? ids[0]!;
@@ -1351,7 +1426,9 @@ function buildContentIndex(reg: Registry): Map<string, ContentEntry> {
 
     const originUrlRaw = readStringField(e.payload as unknown, "originUrl");
     const originUrl =
-      originUrlRaw ? canonicalizeUrl(originUrlRaw) : (getOriginUrl(e.primaryUrl) ?? e.primaryUrl);
+      originUrlRaw
+        ? canonicalizeUrl(originUrlRaw)
+        : (getOriginUrl(e.primaryUrl) ?? e.primaryUrl);
 
     const originAnyId = urlToContentId.get(originUrl);
     const originMomentParent =
@@ -1498,7 +1575,8 @@ function buildDetailEntries(node: SigilNode): DetailEntry[] {
   const usedKeys = new Set<string>();
 
   const phiSelf = getPhiFromPayload(node.payload);
-  if (phiSelf !== undefined) entries.push({ label: "This glyph Φ", value: `${formatPhi(phiSelf)} Φ` });
+  if (phiSelf !== undefined)
+    entries.push({ label: "This glyph Φ", value: `${formatPhi(phiSelf)} Φ` });
 
   const addFromKey = (key: string, label: string) => {
     const v = record[key];
@@ -1515,13 +1593,13 @@ function buildDetailEntries(node: SigilNode): DetailEntry[] {
 
   const parentRaw = record.parentUrl;
   if (typeof parentRaw === "string" && parentRaw.length > 0) {
-    entries.push({ label: "Parent URL", value: canonicalizeUrl(parentRaw) });
+    entries.push({ label: "Parent URL", value: browserViewUrl(parentRaw) });
     usedKeys.add("parentUrl");
   }
 
   const originRaw = record.originUrl;
   if (typeof originRaw === "string" && originRaw.length > 0) {
-    entries.push({ label: "Origin URL", value: canonicalizeUrl(originRaw) });
+    entries.push({ label: "Origin URL", value: browserViewUrl(originRaw) });
     usedKeys.add("originUrl");
   }
 
@@ -1566,13 +1644,17 @@ function buildDetailEntries(node: SigilNode): DetailEntry[] {
 
   entries.push({ label: "Primary URL", value: node.url });
 
+  const visibleVariants = node.urls.filter((u) => !isPTildeUrl(u));
+
   if (node.urls.length > 1) {
     entries.push({
       label: "URL variants",
       value:
-        node.urls.length <= 3
-          ? node.urls.join(" | ")
-          : `${node.urls.length} urls (kept in data; rendered once)`,
+        visibleVariants.length === 0
+          ? `${node.urls.length} urls (kept in data; hidden from browser view)`
+          : visibleVariants.length <= 3
+            ? visibleVariants.join(" | ")
+            : `${node.urls.length} urls (kept in data; rendered once)`,
     });
   }
 
@@ -1672,7 +1754,13 @@ function SigilTreeNode({ node }: { node: SigilNode }) {
             <span className={`tw ${open ? "open" : ""}`} />
           </button>
 
-          <a className="node-link" href={node.url} target="_blank" rel="noopener noreferrer" title={node.url}>
+          <a
+            className="node-link"
+            href={node.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={node.url}
+          >
             <span>{short(sig ?? hash ?? "glyph", 12)}</span>
           </a>
         </div>
@@ -1968,7 +2056,7 @@ const SigilExplorer: React.FC = () => {
           source: "local",
           enqueueToApi: true,
         });
-        setLastAdded(canonicalizeUrl(here));
+        setLastAdded(browserViewUrl(here));
       }
     }
 
@@ -1985,7 +2073,7 @@ const SigilExplorer: React.FC = () => {
           enqueueToApi: true,
         })
       ) {
-        setLastAdded(canonicalizeUrl(u));
+        setLastAdded(browserViewUrl(u));
         refresh();
       }
     };
@@ -2004,7 +2092,7 @@ const SigilExplorer: React.FC = () => {
             enqueueToApi: true,
           })
         ) {
-          setLastAdded(canonicalizeUrl(u));
+          setLastAdded(browserViewUrl(u));
           refresh();
         }
       }
@@ -2025,7 +2113,7 @@ const SigilExplorer: React.FC = () => {
             enqueueToApi: true,
           })
         ) {
-          setLastAdded(canonicalizeUrl(u));
+          setLastAdded(browserViewUrl(u));
           refresh();
         }
       }
@@ -2047,7 +2135,7 @@ const SigilExplorer: React.FC = () => {
               enqueueToApi: true,
             })
           ) {
-            setLastAdded(canonicalizeUrl(data.url));
+            setLastAdded(browserViewUrl(data.url));
             refresh();
           }
         }
@@ -2219,7 +2307,7 @@ const SigilExplorer: React.FC = () => {
       enqueueToApi: true,
     });
     if (changed) {
-      setLastAdded(canonicalizeUrl(url));
+      setLastAdded(browserViewUrl(url));
       refresh();
     }
   };
