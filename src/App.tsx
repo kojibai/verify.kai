@@ -1247,6 +1247,30 @@ function AppChrome(): React.JSX.Element {
     const st: KlockNavState = { openDetails: true };
     navigate("/klock", { state: st });
   }, [navigate]);
+const DNS_IP = "137.66.18.241";
+
+async function copyDnsIp(btn?: HTMLButtonElement | null) {
+  try {
+    await navigator.clipboard.writeText(DNS_IP);
+  } catch {
+    // fallback for older browsers / permissions
+    const ta = document.createElement("textarea");
+    ta.value = DNS_IP;
+    ta.setAttribute("readonly", "true");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    ta.style.top = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+  }
+
+  if (btn) {
+    btn.classList.add("is-copied");
+    window.setTimeout(() => btn.classList.remove("is-copied"), 900);
+  }
+}
 
   return (
     <div
@@ -1378,12 +1402,19 @@ function AppChrome(): React.JSX.Element {
                 </div>
 
 <footer className="panel-foot" aria-label="Footer">
-<div className="panel-foot__left">
-  <span className="mono">ΦNet</span> • Sovereign Gate •
-  <button type="button" className="dns-copy mono">
-    .kai DNS: <span className="mono">137.66.18.241</span>
-  </button>
-</div>
+  <div className="panel-foot__left">
+    <span className="mono">ΦNet</span> • Sovereign Gate •{" "}
+    <button
+      type="button"
+      className="dns-copy mono"
+      onClick={(e) => void copyDnsIp(e.currentTarget)}
+      aria-label={`Remember .kai DNS IP ${DNS_IP}`}
+      title="Remember DNS IP"
+    >
+      .kai DNS: <span className="mono">{DNS_IP}</span>
+    </button>
+  </div>
+
   <div className="panel-foot__right">
     <span className="mono">V</span>{" "}
     <a
@@ -1391,13 +1422,14 @@ function AppChrome(): React.JSX.Element {
       href="https://github.com/phinetwork/phi.network"
       target="_blank"
       rel="noreferrer"
-      aria-label="Version 28.4 (opens GitHub)"
+      aria-label="Version 28.5 (opens GitHub)"
       title="Open GitHub"
     >
-      28.4
+      28.5
     </a>
   </div>
 </footer>
+
 
               </section>
             </div>

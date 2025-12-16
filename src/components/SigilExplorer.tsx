@@ -226,10 +226,6 @@ function viewBaseOrigin(): string {
   return normalizeViewOrigin(window.location.origin);
 }
 
-function hostRootOrigin(): string {
-  if (!hasWindow) return VIEW_BASE_FALLBACK;
-  return window.location.origin;
-}
 
 /** Make an absolute, normalized URL (stable key). Also rewrites localhost → https://phi.network. */
 function canonicalizeUrl(url: string): string {
@@ -324,19 +320,21 @@ function browserViewUrl(u: string): string {
  */
 function explorerOpenUrl(raw: string): string {
   if (!hasWindow) return browserViewUrl(raw);
+
   const safe = browserViewUrl(raw);
+  const origin = window.location.origin; // preserves http vs https exactly as loaded
 
   try {
-    const u = new URL(safe, hostRootOrigin());
-    const out = new URL(hostRootOrigin());
-    out.pathname = u.pathname;
-    out.search = u.search;
-    out.hash = u.hash;
-    return out.toString();
+    const u = new URL(safe, origin);
+    return `${origin}${u.pathname}${u.search}${u.hash}`;
   } catch {
-    return safe;
+    // Fallback: strip any protocol+host, keep path+search+hash
+    const m = safe.match(/^(?:https?:\/\/[^/]+)?(\/.*)$/i);
+    const rel = (m?.[1] ?? safe).startsWith("/") ? (m?.[1] ?? safe) : `/${m?.[1] ?? safe}`;
+    return `${origin}${rel}`;
   }
 }
+
 
 /** Human shortener for long strings. */
 function short(s?: string, n = 10): string {
