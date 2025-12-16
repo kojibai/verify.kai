@@ -249,7 +249,7 @@ a:hover {
 .skip-link {
   position: absolute;
   left: 1rem;
-  top: calc(0.75rem + var(--safe-top));
+  top: 0.75rem;
   transform: translateY(-160%);
   background: rgba(10, 20, 48, 0.92);
   border: 1px solid rgba(170, 241, 255, 0.35);
@@ -494,11 +494,6 @@ a:hover {
    ─────────────────────────────────────────────────────────────── */
 
 .app-topbar {
-   height: calc(var(--topbar-h) + var(--safe-top));
-  padding-top: calc(0.85rem + var(--safe-top));
-  /* also protect notch in landscape */
-  padding-left: calc(clamp(1rem, 2.5vw, 1.75rem) + var(--safe-left));
-  padding-right: calc(clamp(1rem, 2.5vw, 1.75rem) + var(--safe-right));
   position: relative;
   z-index: 5;
   height: var(--topbar-h);
