@@ -8,8 +8,7 @@ import { DEFAULT_ISSUANCE_POLICY, quotePhiForUsd } from "../utils/phi-issuance";
 
 /* ---- modular pieces ---- */
 import { NOTE_TITLE } from "./exhale-note/titles";
-import { kaiPulseNowBridge, msUntilNextPulseBoundary } from "./exhale-note/time";
-import { PULSE_MS } from "./exhale-note/constants";
+import { momentFromUTC, epochMsFromPulse, PULSE_MS as KAI_PULSE_MS } from "../utils/kai_pulse";
 import { renderPreview } from "./exhale-note/dom";
 import { buildBanknoteSVG } from "./exhale-note/banknoteSvg";
 import buildProofPagesHTML from "./exhale-note/proofPages";
@@ -39,11 +38,15 @@ import "./ExhaleNote.css";
  * Never type these as NodeJS.Timeout in React/Vite apps.
  */
 type TimerId = number;
-type IntervalId = number;
 
 function materializeStampedSeal(input: MaybeUnsignedSeal): ValueSeal {
   if (typeof (input as ValueSeal).stamp === "string") return input as ValueSeal;
   return { ...(input as Omit<ValueSeal, "stamp">), stamp: "LOCKED-NO-STAMP" };
+}
+
+function fPulse(n: number): string {
+  const v = Number.isFinite(n) ? Math.trunc(n) : 0;
+  return v.toLocaleString("en-US");
 }
 
 /** Create a safe-ish filename for exports */
@@ -54,7 +57,9 @@ function makeFileTitle(kaiSig: string, pulse: string, stamp: string): string {
       .replace(/[^\w\-–—\u0394\u03A6\u03C6]+/g, "-")
       .replace(/-+/g, "-")
       .slice(0, 180);
-  return `SIGIL-KK-${safe(serialCore)}-${safe(pulse)}—VAL-${safe(stamp)}`;
+
+  // ✅ “KAI + pulse” first (matches how you want it named)
+  return `KAI-${safe(pulse)}-SIGIL-${safe(serialCore)}—VAL-${safe(stamp)}`;
 }
 
 function formatPhiParts(val: number): { int: string; frac: string } {
@@ -70,6 +75,39 @@ function afterTwoFrames(): Promise<void> {
       requestAnimationFrame(() => resolve());
     });
   });
+}
+
+/**
+ * Verify URL normalizer:
+ * - Prefers explicit form.verifyUrl if present; otherwise uses fallbackAbs
+ * - Returns ABSOLUTE URL when possible (QR scanners behave best)
+ * - Preserves /stream#t=... payloads exactly (hash included)
+ */
+function resolveVerifyUrl(raw: string | undefined, fallbackAbs: string): string {
+  const rawTrim = String(raw ?? "").trim();
+  const fbTrim = String(fallbackAbs ?? "").trim();
+
+  const candidate = rawTrim && rawTrim !== "/" ? rawTrim : fbTrim || "/";
+
+  // SSR best effort
+  if (typeof window === "undefined") return candidate;
+
+  // If already absolute http(s), keep it
+  if (/^https?:\/\//i.test(candidate)) return candidate;
+
+  // If some other absolute scheme (e.g., kai:, phi:, etc.), keep it as-is
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(candidate)) return candidate;
+
+  try {
+    const base = String(window.location.href || "").trim();
+    if (base && /^https?:\/\//i.test(base)) {
+      return new URL(candidate, base).toString();
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return candidate;
 }
 
 /** Inject preview CSS once so the SVG scales on mobile (kept defensive even if ExhaleNote.css exists). */
@@ -118,7 +156,9 @@ function ensurePrintStylesInjected(): void {
 /** rAF throttle for heavy preview work */
 function useRafThrottle(cb: () => void, fps = 8) {
   const cbRef = useRef(cb);
-
+  useEffect(() => {
+    cbRef.current = cb;
+  }, [cb]);
 
   const lastRef = useRef(0);
   const rafRef = useRef<number | null>(null);
@@ -213,7 +253,6 @@ function sha256HexJs(input: string): string {
   m.set(enc);
   m[l] = 0x80;
 
-  // Write 64-bit big-endian bit length (safe for our message sizes)
   const bitLen = l * 8;
   for (let i = 0; i < 8; i++) m[total - 1 - i] = (bitLen >>> (i * 8)) & 0xff;
 
@@ -329,6 +368,20 @@ async function computeValuationStamp(u: IntrinsicUnsigned): Promise<string> {
   return sha256HexCanon(`val-stamp:${safeJsonStringify(minimal)}`);
 }
 
+/** Exact-ish ms until next pulse boundary using the φ-exact bridge (via epochMsFromPulse). */
+function msUntilNextPulseBoundaryLocal(pulseNowInt: number): number {
+  try {
+    const nextPulseMs = epochMsFromPulse(pulseNowInt + 1);
+    const nowMs = BigInt(Date.now());
+    const delta = nextPulseMs - nowMs;
+    if (delta <= 0n) return 0;
+    // delta is always ~0..6000ms here, safe to Number()
+    return Number(delta);
+  } catch {
+    return Math.max(0, Math.floor(KAI_PULSE_MS));
+  }
+}
+
 /* -----------------------
    Component
    ----------------------- */
@@ -351,83 +404,109 @@ const ExhaleNote: React.FC<NoteProps> = ({
     ensurePrintStylesInjected();
   }, []);
 
-  /* Live Kai pulse + timers */
-  const [pulse, setPulse] = useState<number>(() => (getNowPulse ? getNowPulse() : kaiPulseNowBridge()));
-  const intervalRef = useRef<IntervalId | null>(null);
+  /* Live Kai pulse (integer) + boundary timer */
+  const readNowPulseInt = useCallback((): number => {
+    const local = momentFromUTC(BigInt(Date.now())).pulse;
+    const ext = getNowPulse?.();
+    const extOk =
+      typeof ext === "number" &&
+      Number.isFinite(ext) &&
+      Math.abs(Math.trunc(ext) - Math.trunc(local)) <= 2;
+
+    return Math.trunc(extOk ? (ext as number) : local);
+  }, [getNowPulse]);
+
+  const [pulseInt, setPulseInt] = useState<number>(() => readNowPulseInt());
   const timeoutRef = useRef<TimerId | null>(null);
-  const lastFloorRef = useRef<number>(Math.floor(pulse));
+  const lastPulseRef = useRef<number>(pulseInt);
 
   const armTimers = useCallback(() => {
-    if (intervalRef.current !== null) {
-      window.clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
     if (timeoutRef.current !== null) {
       window.clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
 
-    const nowP = () => (getNowPulse ? getNowPulse() : kaiPulseNowBridge());
-    const p0 = nowP();
-    setPulse(p0);
-    lastFloorRef.current = Math.floor(p0);
+    const scheduleNext = () => {
+      const p0 = readNowPulseInt();
+      lastPulseRef.current = p0;
+      setPulseInt((prev) => (prev === p0 ? prev : p0));
 
-    const waitRaw = msUntilNextPulseBoundary(p0);
-    const wait = Math.max(0, Number.isFinite(waitRaw) ? waitRaw : 0);
-
-    timeoutRef.current = window.setTimeout(() => {
-      const tick = () => {
-        const p = nowP();
-        const f = Math.floor(p);
-        if (f !== lastFloorRef.current) {
-          lastFloorRef.current = f;
-          setPulse(p);
+      const wait = msUntilNextPulseBoundaryLocal(p0);
+      timeoutRef.current = window.setTimeout(() => {
+        const p1 = readNowPulseInt();
+        if (p1 !== lastPulseRef.current) {
+          lastPulseRef.current = p1;
+          setPulseInt(p1);
         }
-      };
-      const intervalMs = Math.max(PULSE_MS, 50);
-      intervalRef.current = window.setInterval(tick, intervalMs);
-    }, wait);
-  }, [getNowPulse]);
+        scheduleNext();
+      }, Math.max(0, wait));
+    };
+
+    scheduleNext();
+  }, [readNowPulseInt]);
 
   useEffect(() => {
     armTimers();
     return () => {
-      if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
       if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
     };
   }, [armTimers]);
 
+  useEffect(() => {
+    const onVis = () => {
+      if (typeof document !== "undefined" && !document.hidden) armTimers();
+    };
+    document.addEventListener("visibilitychange", onVis, { passive: true });
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [armTimers]);
+
+  /**
+   * Default verify URL must include the payload:
+   * pathname + search + hash (e.g. /stream#t=...)
+   */
   const defaultVerifyUrl = useMemo(() => {
     if (typeof window === "undefined") return "/";
-    const o = window.location.origin;
-    return o && o !== "null" ? `${o}/` : "/";
+    const href = String(window.location.href || "").trim();
+    if (href && /^https?:\/\//i.test(href)) return href;
+
+    const origin = window.location.origin;
+    const path = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (origin && origin !== "null") return `${origin}${path || "/"}`;
+    return path || "/";
   }, []);
 
   /* Builder state */
-  const [form, setForm] = useState<BanknoteInputs>({
-    purpose: "",
-    to: "",
-    from: "",
-    location: "",
-    witnesses: "",
-    reference: "",
-    remark: "In Yahuah We Trust — Secured by Φ, not man-made law",
-    valuePhi: "",
-    premiumPhi: "",
-    computedPulse: "",
-    nowPulse: "",
-    kaiSignature: "",
-    userPhiKey: "",
-    sigmaCanon: "",
-    shaHex: "",
-    phiDerived: "",
-    valuationAlg: "",
-    valuationStamp: "",
-    provenance: [],
-    zk: undefined,
-    sigilSvg: "",
-    verifyUrl: defaultVerifyUrl,
-    ...(initial ?? {}),
+  const [form, setForm] = useState<BanknoteInputs>(() => {
+    const base: BanknoteInputs = {
+      purpose: "",
+      to: "",
+      from: "",
+      location: "",
+      witnesses: "",
+      reference: "",
+      remark: "In Yahuah We Trust — Secured by Φ, not man-made law",
+      valuePhi: "",
+      premiumPhi: "",
+      computedPulse: "",
+      nowPulse: "",
+      kaiSignature: "",
+      userPhiKey: "",
+      sigmaCanon: "",
+      shaHex: "",
+      phiDerived: "",
+      valuationAlg: "",
+      valuationStamp: "",
+      provenance: [],
+      zk: undefined,
+      sigilSvg: "",
+      verifyUrl: defaultVerifyUrl,
+      ...(initial ?? {}),
+    };
+
+    return {
+      ...base,
+      verifyUrl: resolveVerifyUrl(base.verifyUrl, defaultVerifyUrl),
+    };
   });
 
   /* Lock state */
@@ -441,7 +520,7 @@ const ExhaleNote: React.FC<NoteProps> = ({
       setForm((prev) => ({ ...prev, [k]: v }));
 
   /* Live valuation (derived) */
-  const nowFloor = Math.floor(pulse);
+  const nowFloor = pulseInt;
 
   const liveUnsigned = useMemo<IntrinsicUnsigned>(() => {
     const { unsigned } = computeIntrinsicUnsigned(meta, nowFloor) as { unsigned: IntrinsicUnsigned };
@@ -483,6 +562,8 @@ const ExhaleNote: React.FC<NoteProps> = ({
     const lockedPulseStr = usingLocked ? String(locked!.lockedPulse) : "";
     const valuationStampStr = usingLocked ? form.valuationStamp || locked!.seal.stamp : "";
 
+    const verifyUrl = resolveVerifyUrl(form.verifyUrl, defaultVerifyUrl);
+
     return buildBanknoteSVG({
       purpose: form.purpose,
       to: form.to,
@@ -504,10 +585,10 @@ const ExhaleNote: React.FC<NoteProps> = ({
       valuationStamp: valuationStampStr,
 
       sigilSvg: form.sigilSvg || "",
-      verifyUrl: form.verifyUrl || "/",
+      verifyUrl,
       provenance: form.provenance ?? [],
     });
-  }, [form, liveValuePhi, livePremium, nowFloor, liveAlgString, locked]);
+  }, [form, liveValuePhi, livePremium, nowFloor, liveAlgString, locked, defaultVerifyUrl]);
 
   const renderPreviewThrottled = useRafThrottle(() => {
     const host = previewHostRef.current;
@@ -556,11 +637,7 @@ const ExhaleNote: React.FC<NoteProps> = ({
         quote,
       };
 
-      // Freeze LIVE timers (note is now pulse-locked)
-      if (intervalRef.current !== null) {
-        window.clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      // Freeze LIVE timer (note is now pulse-locked)
       if (timeoutRef.current !== null) {
         window.clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
@@ -577,6 +654,7 @@ const ExhaleNote: React.FC<NoteProps> = ({
         premiumPhi: lockedUnsigned.premium !== undefined ? fTiny(lockedUnsigned.premium) : prev.premiumPhi,
         valuationAlg: prev.valuationAlg || `${lockedUnsigned.algorithm} • ${lockedUnsigned.policyChecksum}`,
         valuePhi: fTiny(sealed.valuePhi),
+        verifyUrl: resolveVerifyUrl(prev.verifyUrl, defaultVerifyUrl),
       }));
 
       onRender?.(payload);
@@ -587,7 +665,7 @@ const ExhaleNote: React.FC<NoteProps> = ({
     } finally {
       setIsRendering(false);
     }
-  }, [nowFloor, meta, usdSample, policy, onRender, isRendering]);
+  }, [nowFloor, meta, usdSample, policy, onRender, isRendering, defaultVerifyUrl]);
 
   /* Bridge hydration + updates */
   const lastBridgeJsonRef = useRef<string>("");
@@ -599,7 +677,17 @@ const ExhaleNote: React.FC<NoteProps> = ({
       try {
         const payload = await fetchFromVerifierBridge();
         if (!active || !payload) return;
-        setForm((prev) => ({ ...prev, ...payload }));
+
+        const merged = {
+          ...payload,
+          verifyUrl: payload.verifyUrl ? resolveVerifyUrl(payload.verifyUrl, defaultVerifyUrl) : undefined,
+        };
+
+        setForm((prev) => ({
+          ...prev,
+          ...merged,
+          verifyUrl: resolveVerifyUrl(merged.verifyUrl ?? prev.verifyUrl, defaultVerifyUrl),
+        }));
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error("bridge hydration failed", e);
@@ -611,8 +699,14 @@ const ExhaleNote: React.FC<NoteProps> = ({
         const detail = (evt as CustomEvent<BanknoteInputs>).detail;
         if (!detail) return;
 
+        const normalizeIncoming = (obj: Partial<BanknoteInputs>) => {
+          if (typeof obj.verifyUrl === "string") {
+            obj.verifyUrl = resolveVerifyUrl(obj.verifyUrl, defaultVerifyUrl);
+          }
+          return obj;
+        };
+
         if (lockedRef.current) {
-          // After lock: ONLY allow identity/provenance fields to update.
           const allow: Array<keyof BanknoteInputs> = [
             "kaiSignature",
             "userPhiKey",
@@ -625,9 +719,11 @@ const ExhaleNote: React.FC<NoteProps> = ({
             "verifyUrl",
           ];
 
-          const safe = Object.fromEntries(
-            Object.entries(detail).filter(([k]) => allow.includes(k as keyof BanknoteInputs))
-          ) as Partial<BanknoteInputs>;
+          const safe = normalizeIncoming(
+            Object.fromEntries(Object.entries(detail).filter(([k]) => allow.includes(k as keyof BanknoteInputs))) as Partial<
+              BanknoteInputs
+            >
+          );
 
           const json = JSON.stringify(safe);
           if (json === lastBridgeJsonRef.current) return;
@@ -637,11 +733,13 @@ const ExhaleNote: React.FC<NoteProps> = ({
           return;
         }
 
-        const json = JSON.stringify(detail);
+        const normalized = normalizeIncoming({ ...detail });
+
+        const json = JSON.stringify(normalized);
         if (json === lastBridgeJsonRef.current) return;
         lastBridgeJsonRef.current = json;
 
-        setForm((prev) => ({ ...prev, ...detail }));
+        setForm((prev) => ({ ...prev, ...normalized }));
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error("bridge event failed", err);
@@ -653,7 +751,7 @@ const ExhaleNote: React.FC<NoteProps> = ({
       active = false;
       window.removeEventListener("kk:note-data", onEvt);
     };
-  }, []);
+  }, [defaultVerifyUrl]);
 
   /* Print + PNG (require lock) */
   const onPrint = useCallback(async () => {
@@ -663,6 +761,8 @@ const ExhaleNote: React.FC<NoteProps> = ({
       window.alert("Please Render to lock the valuation before printing.");
       return;
     }
+
+    const verifyUrl = resolveVerifyUrl(form.verifyUrl, defaultVerifyUrl);
 
     const banknote = buildBanknoteSVG({
       ...form,
@@ -675,7 +775,7 @@ const ExhaleNote: React.FC<NoteProps> = ({
       valuationAlg: form.valuationAlg || liveAlgString,
       valuationStamp: form.valuationStamp || locked.seal.stamp,
       sigilSvg: form.sigilSvg || "",
-      verifyUrl: form.verifyUrl || "/",
+      verifyUrl,
       provenance: form.provenance ?? [],
     });
 
@@ -693,23 +793,18 @@ const ExhaleNote: React.FC<NoteProps> = ({
       zk: form.zk,
       provenance: form.provenance ?? [],
       sigilSvg: form.sigilSvg || "",
-      verifyUrl: form.verifyUrl || "/",
+      verifyUrl,
     });
 
-    // Render print root and make it visible only for the print pass
     renderIntoPrintRoot(root, banknote, String(locked.lockedPulse), proofPages);
     root.setAttribute("aria-hidden", "false");
     await afterTwoFrames();
 
-    const title = makeFileTitle(
-      form.kaiSignature || "",
-      String(locked.lockedPulse),
-      form.valuationStamp || locked.seal.stamp || ""
-    );
-  await printWithTempTitle(title);
-root.setAttribute("aria-hidden", "true");
+    const title = `☤KAI ${fPulse(locked.lockedPulse)} — ${NOTE_TITLE}`;
+    await printWithTempTitle(title);
 
-  }, [form, locked, livePremium, liveAlgString]);
+    root.setAttribute("aria-hidden", "true");
+  }, [form, locked, livePremium, liveAlgString, defaultVerifyUrl]);
 
   const onSavePng = useCallback(async () => {
     try {
@@ -717,6 +812,8 @@ root.setAttribute("aria-hidden", "true");
         window.alert("Please Render to lock the valuation before saving PNG.");
         return;
       }
+
+      const verifyUrl = resolveVerifyUrl(form.verifyUrl, defaultVerifyUrl);
 
       const banknote = buildBanknoteSVG({
         ...form,
@@ -729,23 +826,25 @@ root.setAttribute("aria-hidden", "true");
         valuationAlg: form.valuationAlg || liveAlgString,
         valuationStamp: form.valuationStamp || locked.seal.stamp,
         sigilSvg: form.sigilSvg || "",
-        verifyUrl: form.verifyUrl || "/",
+        verifyUrl,
         provenance: form.provenance ?? [],
       });
 
       const png = await svgStringToPngBlob(banknote, 2400);
+
       const title = makeFileTitle(
         form.kaiSignature || "",
         String(locked.lockedPulse),
         form.valuationStamp || locked.seal.stamp || ""
       );
+
       triggerDownload(`${title}.png`, png, "image/png");
     } catch (err) {
       window.alert("Save PNG failed: " + (err instanceof Error ? err.message : String(err)));
       // eslint-disable-next-line no-console
       console.error(err);
     }
-  }, [form, locked, livePremium, liveAlgString]);
+  }, [form, locked, livePremium, liveAlgString, defaultVerifyUrl]);
 
   /* Derived display values */
   const displayPulse = locked ? locked.lockedPulse : nowFloor;
@@ -756,13 +855,15 @@ root.setAttribute("aria-hidden", "true");
   const displayPremium = locked ? (form.premiumPhi ? Number(form.premiumPhi) : 0) : livePremium;
   const phiParts = formatPhiParts(displayPhi);
 
+  const noteTitle = useMemo(() => `☤KAI ${fPulse(displayPulse)}`, [displayPulse]);
+
   /* UI */
   return (
     <div data-kk-scope={uid} className={`kk-note ${className ?? ""}`}>
       {/* Header */}
       <div className="kk-bar">
         <div className="kk-brand">
-          <strong>KAIROS KURRENSY — Sovereign Harmonik Kingdom</strong>
+          <strong>☤KAI — Kairos Kurrensy · Sovereign Harmonik Kingdom</strong>
         </div>
         <div className="kk-legal-pill">Issued under Yahuah’s Law of Eternal Light (Φ • Kai-Turah)</div>
       </div>
@@ -771,7 +872,7 @@ root.setAttribute("aria-hidden", "true");
       <section className={`kk-hero ${locked ? "is-locked" : "is-live"}`}>
         <div className="kk-status">
           <span className={`kk-chip ${locked ? "chip-locked" : "chip-live"}`}>{locked ? "LOCKED" : "LIVE"}</span>
-          <span className="kk-chip kk-chip-pulse">pulse {displayPulse}</span>
+          <span className="kk-chip kk-chip-pulse">☤KAI {fPulse(displayPulse)}</span>
           <span className="kk-chip">value: {fPhi(displayPhi)}</span>
           <span className="kk-chip">$ / φ: {fTiny(displayUsdPerPhi)}</span>
           <span className="kk-chip">φ / $: {fTiny(displayPhiPerUsd)}</span>
@@ -803,7 +904,7 @@ root.setAttribute("aria-hidden", "true");
               <div className="kk-locked-banner" role="status" aria-live="polite">
                 <div className="kk-locked-title">Valuation Locked</div>
                 <div className="kk-locked-sub">
-                  Pulse {locked.lockedPulse} • Hash: {form.valuationStamp || locked.seal.stamp || "—"}
+                  ☤KAI {fPulse(locked.lockedPulse)} • Hash: {form.valuationStamp || locked.seal.stamp || "—"}
                 </div>
               </div>
             )}
@@ -823,7 +924,7 @@ root.setAttribute("aria-hidden", "true");
       {/* Immutable title */}
       <div className="kk-row">
         <label>Title</label>
-        <input value={NOTE_TITLE} disabled className="kk-out" />
+        <input value={`${noteTitle} — ${NOTE_TITLE}`} disabled className="kk-out" />
       </div>
 
       {/* Printed metadata */}
@@ -851,15 +952,30 @@ root.setAttribute("aria-hidden", "true");
         <div className="kk-stack">
           <div className="kk-row">
             <label>Location</label>
-            <input value={form.location} onChange={(e) => u("location")(e.target.value)} placeholder="(optional)" disabled={!!locked} />
+            <input
+              value={form.location}
+              onChange={(e) => u("location")(e.target.value)}
+              placeholder="(optional)"
+              disabled={!!locked}
+            />
           </div>
           <div className="kk-row">
             <label>Witnesses</label>
-            <input value={form.witnesses} onChange={(e) => u("witnesses")(e.target.value)} placeholder="(optional)" disabled={!!locked} />
+            <input
+              value={form.witnesses}
+              onChange={(e) => u("witnesses")(e.target.value)}
+              placeholder="(optional)"
+              disabled={!!locked}
+            />
           </div>
           <div className="kk-row">
             <label>Reference</label>
-            <input value={form.reference} onChange={(e) => u("reference")(e.target.value)} placeholder="(optional)" disabled={!!locked} />
+            <input
+              value={form.reference}
+              onChange={(e) => u("reference")(e.target.value)}
+              placeholder="(optional)"
+              disabled={!!locked}
+            />
           </div>
         </div>
       </div>
@@ -943,7 +1059,12 @@ root.setAttribute("aria-hidden", "true");
 
         <div className="kk-row">
           <label>Sigil SVG (raw)</label>
-          <textarea value={form.sigilSvg} onChange={(e) => u("sigilSvg")(e.target.value)} className="kk-out" disabled={!!locked} />
+          <textarea
+            value={form.sigilSvg}
+            onChange={(e) => u("sigilSvg")(e.target.value)}
+            className="kk-out"
+            disabled={!!locked}
+          />
         </div>
       </details>
 

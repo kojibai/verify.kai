@@ -252,6 +252,44 @@ export function microPulsesSinceGenesis(utc: string | Date | bigint): bigint {
   const deltaMs = msEpoch - BigInt(GENESIS_TS);
   return mulDivRoundHalfEven(deltaMs, INV_Tx1000_NUM, INV_Tx1000_DEN);
 }
+/** Bridge used by UI timers: current pulse as a fractional number (μpulse precise). */
+export function kaiPulseNowBridge(): number {
+  const pμ = microPulsesSinceGenesis(BigInt(Date.now()));
+
+  // Safe near “now”; clamp if someone runs this millions of years out.
+  const LIM = 9_007_199_254_740_991n; // Number.MAX_SAFE_INTEGER as bigint
+  const v = pμ > LIM ? LIM : pμ < -LIM ? -LIM : pμ;
+
+  return Number(v) / 1_000_000;
+}
+
+/** Milliseconds until the next integer pulse boundary (>= 0).
+ * Arg retained for back-compat; boundary is computed from local φ-bridge time.
+ */
+export function msUntilNextPulseBoundary(pulseNow?: number): number {
+  const pμNow =
+    typeof pulseNow === "number" && Number.isFinite(pulseNow)
+      ? (() => {
+          // pulseNow is (μpulses / 1e6) from kaiPulseNowBridge() → recover μpulses safely.
+          const approx = Math.round(pulseNow * 1_000_000);
+          if (!Number.isFinite(approx)) return microPulsesSinceGenesis(BigInt(Date.now()));
+          // Clamp to safe BigInt range if someone hands insane values.
+          const LIM = Number.MAX_SAFE_INTEGER;
+          const clamped = Math.max(-LIM, Math.min(LIM, approx));
+          return BigInt(clamped);
+        })()
+      : microPulsesSinceGenesis(BigInt(Date.now()));
+
+  const next = (floorDivE(pμNow, 1_000_000n) + 1n) * 1_000_000n; // next whole pulse
+  const deltaμ = next - pμNow;                                   // 0..1_000_000
+
+  // μpulses → ms using φ-exact rational
+  const deltaMs = mulDivRoundHalfEven(deltaμ, T_MS_NUM, T_MS_DEN * 1_000_000n);
+
+  const out = toSafeNumber(deltaMs);
+  return out < 0 ? 0 : out;
+}
+
 
 /** Convert an integer pulse index → Unix ms offset using φ-exact bridge. */
 export function epochMsFromPulse(pulse: number | bigint): bigint {

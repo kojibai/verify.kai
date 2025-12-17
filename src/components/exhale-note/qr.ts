@@ -310,20 +310,26 @@ export class QRCodeModel {
     for (let c = 8; c < this.moduleCount - 8; c++)
       if (this.modules[6][c] === null) this.modules[6][c] = c % 2 === 0;
   }
-  private setupPositionAdjustPattern(): void {
-    const pos = QRUtil.getPatternPosition(this.typeNumber);
-    for (let i = 0; i < pos.length; i++)
-      for (let j = 0; j < pos.length; j++) {
-        const row = pos[i], col = pos[j];
-        if (this.modules[row][col] !== null) continue;
-        for (let r = -2; r <= 2; r++)
-          for (let c = -2; c <= 2; c++) {
-            const rr = row + r, cc = col + c;
-            if (rr < 0 || rr >= this.moduleCount || cc < 0 || cc >= this.moduleCount) continue;
-            this.modules[rr][cc] = Math.max(Math.abs(r), Math.abs(c)) !== 1 ? true : r === 0 || c === 0;
-          }
-      }
-  }
+ private setupPositionAdjustPattern(): void {
+  const pos = QRUtil.getPatternPosition(this.typeNumber);
+  for (let i = 0; i < pos.length; i++)
+    for (let j = 0; j < pos.length; j++) {
+      const row = pos[i], col = pos[j];
+      if (this.modules[row][col] !== null) continue;
+
+      for (let r = -2; r <= 2; r++)
+        for (let c = -2; c <= 2; c++) {
+          const rr = row + r, cc = col + c;
+          if (rr < 0 || rr >= this.moduleCount || cc < 0 || cc >= this.moduleCount) continue;
+
+          // ✅ Correct alignment pattern:
+          // outer border (|r|==2 or |c|==2) dark, center (0,0) dark, middle ring light
+          const dark = (Math.abs(r) === 2) || (Math.abs(c) === 2) || (r === 0 && c === 0);
+          this.modules[rr][cc] = dark;
+        }
+    }
+}
+
   private setupTypeNumber(test: boolean): void {
     const bits = QRUtil.getBCHTypeNumber(this.typeNumber);
     for (let i = 0; i < 18; i++) {
