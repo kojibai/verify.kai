@@ -2955,6 +2955,63 @@ html[data-perf="low"] .kk-pop__panel {
     height: 100%;
   }
 }
+/* ──────────────────────────────────────────────────────────────────────────────
+   v28.7.x — FINISH: Nav Writ Slot parity + no double borders + desktop anchor
+   - Keeps your mobile caps/behavior exactly
+   - Restores “Writ at bottom” feel on desktop WITHOUT reintroducing mobile dead air
+   - Prevents double border/background now that .nav-foot lives inside .nav-writ-slot
+────────────────────────────────────────────────────────────────────────────── */
+
+/* Writ wrapper should own the rim + tint; inner .nav-foot becomes “content only” */
+.nav-writ-slot{
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+
+.nav-writ-slot .nav-foot{
+  margin-top:0;                 /* kill legacy push-to-bottom behavior */
+  border-top:0;                 /* wrapper already provides the top rim */
+  background:transparent;       /* wrapper already provides the tint */
+}
+
+/* Desktop/tablet: keep Atrium full height, but pin Writ to the bottom cleanly */
+@media (min-width: 981px){
+  .nav-writ-slot{
+    margin-top:auto;            /* “Sovereign Writ” docks at bottom again */
+  }
+
+  /* Optional: let the nav list be the flexible middle (no hidden overflow) */
+  .nav-list{
+    flex: 1 1 auto;
+    min-height: 0;
+
+    overflow: auto;             /* only scroll if it truly needs it */
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+
+    scrollbar-width: thin;
+    scrollbar-color: rgba(170, 241, 255, 0.18) transparent;
+  }
+  .nav-list::-webkit-scrollbar{ width:10px; }
+  .nav-list::-webkit-scrollbar-track{ background:transparent; }
+  .nav-list::-webkit-scrollbar-thumb{
+    background: rgba(170, 241, 255, 0.18);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+  }
+  .nav-list::-webkit-scrollbar-thumb:hover{
+    background: rgba(170, 241, 255, 0.28);
+  }
+}
+
+/* Mobile: ensure the wrapper NEVER “pushes” (your cap logic stays in control) */
+@media (max-width: 980px){
+  .nav-writ-slot{
+    margin-top: 0;              /* hard stop: no auto spacing injection */
+  }
+}
 
 /* ─────────────────────────────────────────────────────────────
    SHORT SCREENS: tighten caps so Verifier stays usable

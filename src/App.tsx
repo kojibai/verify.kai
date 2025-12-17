@@ -1,16 +1,15 @@
+// src/App.tsx
 /* ──────────────────────────────────────────────────────────────────────────────
    App.tsx · ΦNet Sovereign Gate Shell (KaiOS-style PWA)
-   v28.7.2 · Layout Fix: extra space goes to Verifier panel, NOT Sovereign Writ
-   ──────────────────────────────────────────────────────────────────────────────
+   v28.7.7 · Layout Fix: extra space goes to Verifier panel, NOT Sovereign Writ
 
    ✅ CHANGE (requested):
    - When viewport grows, Sovereign Writ should NOT get extra vertical spacing.
    - Extra space should go to the Verifier panel.
-   - Fix implemented structurally (no CSS changes yet):
-     • SovereignDeclarations is no longer a direct flex child of .app-nav.
-       This neutralizes `.nav-foot { margin-top: auto; }` behavior without touching CSS.
-     • Optional roomy layout flag + align-self start for nav (helps tall/desktop).
-
+   - Structural fix (no CSS required):
+     • SovereignDeclarations is wrapped so its internal `.nav-foot { margin-top:auto }`
+       no longer “eats” height in the nav column.
+     • Optional roomy layout flag + align-self:start for nav.
 ────────────────────────────────────────────────────────────────────────────── */
 
 import React, {
@@ -128,6 +127,16 @@ function modPos(n: number, d: number): number {
   return r < 0 ? r + d : r;
 }
 
+function isInteractiveTarget(t: EventTarget | null): boolean {
+  const el = t instanceof Element ? t : null;
+  if (!el) return false;
+  const tag = el.tagName.toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select" || tag === "button") return true;
+  if (tag === "a") return true;
+  const ht = el as HTMLElement;
+  return Boolean(ht.isContentEditable) || Boolean(el.closest("[contenteditable='true']"));
+}
+
 /* ──────────────────────────────────────────────────────────────────────────────
    Perf hint: sets <html data-perf="low"> only on genuinely low-power conditions
 ────────────────────────────────────────────────────────────────────────────── */
@@ -151,7 +160,9 @@ function modPos(n: number, d: number): number {
   else delete root.dataset.perf;
 })();
 
-// ===== KKS v1.0 display math (exact step) =====
+/* ──────────────────────────────────────────────────────────────────────────────
+   KKS v1.0 display math (exact step)
+────────────────────────────────────────────────────────────────────────────── */
 const BEATS_PER_DAY = 36;
 const STEPS_PER_BEAT = 44;
 const STEPS_PER_DAY = BEATS_PER_DAY * STEPS_PER_BEAT;
@@ -223,26 +234,24 @@ function formatDMYLabel(v: BeatStepDMY): string {
   return `D${v.day}/M${v.month}/Y${v.year}`;
 }
 
-function isInteractiveTarget(t: EventTarget | null): boolean {
-  const el = t instanceof Element ? t : null;
-  if (!el) return false;
-  const tag = el.tagName.toLowerCase();
-  if (tag === "input" || tag === "textarea" || tag === "select" || tag === "button") return true;
-  if (tag === "a") return true;
-  const ht = el as HTMLElement;
-  return Boolean(ht.isContentEditable) || Boolean(el.closest("[contenteditable='true']"));
-}
-
+/* ──────────────────────────────────────────────────────────────────────────────
+   Zoom lock (bridging behavior, no layout impact)
+────────────────────────────────────────────────────────────────────────────── */
 function useDisableZoom(): void {
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") return;
 
     let lastTouchEnd = 0;
 
+    const nowTs = (e: TouchEvent): number => {
+      const ts = (e as unknown as { timeStamp?: number }).timeStamp;
+      return typeof ts === "number" && Number.isFinite(ts) ? ts : performance.now();
+    };
+
     const onTouchEnd = (e: TouchEvent): void => {
       if (isInteractiveTarget(e.target)) return;
 
-      const now = Date.now();
+      const now = nowTs(e);
       if (now - lastTouchEnd <= 300) e.preventDefault();
       lastTouchEnd = now;
     };
@@ -287,31 +296,11 @@ function useDisableZoom(): void {
     window.addEventListener("keydown", onKeydown);
 
     return () => {
-      document.removeEventListener(
-        "touchend",
-        onTouchEnd,
-        { capture: true } as unknown as EventListenerOptions,
-      );
-      document.removeEventListener(
-        "touchmove",
-        onTouchMove,
-        { capture: true } as unknown as EventListenerOptions,
-      );
-      document.removeEventListener(
-        "gesturestart",
-        onGesture,
-        { capture: true } as unknown as EventListenerOptions,
-      );
-      document.removeEventListener(
-        "gesturechange",
-        onGesture,
-        { capture: true } as unknown as EventListenerOptions,
-      );
-      document.removeEventListener(
-        "gestureend",
-        onGesture,
-        { capture: true } as unknown as EventListenerOptions,
-      );
+      document.removeEventListener("touchend", onTouchEnd, true);
+      document.removeEventListener("touchmove", onTouchMove, true);
+      document.removeEventListener("gesturestart", onGesture, true);
+      document.removeEventListener("gesturechange", onGesture, true);
+      document.removeEventListener("gestureend", onGesture, true);
 
       window.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKeydown);
@@ -334,7 +323,6 @@ type VVStore = {
   subs: Set<(s: VVSize) => void>;
   listening: boolean;
   rafId: number | null;
-  onAny?: (() => void) | null;
   cleanup?: (() => void) | null;
 };
 
@@ -343,7 +331,6 @@ const vvStore: VVStore = {
   subs: new Set(),
   listening: false,
   rafId: null,
-  onAny: null,
   cleanup: null,
 };
 
@@ -374,8 +361,6 @@ function startVVListeners(): void {
     vvStore.rafId = window.requestAnimationFrame(publish);
   };
 
-  vvStore.onAny = schedule;
-
   const vv = window.visualViewport;
 
   window.addEventListener("resize", schedule, { passive: true });
@@ -394,7 +379,6 @@ function startVVListeners(): void {
       vv.removeEventListener("resize", schedule);
       vv.removeEventListener("scroll", schedule);
     }
-    vvStore.onAny = null;
     vvStore.cleanup = null;
     vvStore.listening = false;
   };
@@ -402,22 +386,19 @@ function startVVListeners(): void {
 
 function stopVVListenersIfIdle(): void {
   if (vvStore.subs.size > 0) return;
-  if (vvStore.cleanup) vvStore.cleanup();
+  vvStore.cleanup?.();
 }
 
 function useVisualViewportSize(): VVSize {
-  const [size, setSize] = useState<VVSize>(() => {
-    if (typeof window === "undefined") return { width: 0, height: 0 };
-    return readVVNow();
-  });
+  const [size, setSize] = useState<VVSize>(() => readVVNow());
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+
     startVVListeners();
 
     const sub = (s: VVSize): void => setSize(s);
     vvStore.subs.add(sub);
-
     sub(vvStore.size);
 
     return () => {
@@ -525,7 +506,6 @@ function getPortalHost(): HTMLElement {
 /* ──────────────────────────────────────────────────────────────────────────────
    Popovers
 ────────────────────────────────────────────────────────────────────────────── */
-
 function ExplorerPopover({
   open,
   onClose,
@@ -577,7 +557,7 @@ function ExplorerPopover({
       ["--sx-ring"]:
         "0 0 0 2px rgba(55, 255, 228, 0.25), 0 0 0 6px rgba(55, 255, 228, 0.12)",
     };
-  }, [open, isClient, vvSize.height, vvSize.width]);
+  }, [open, isClient, vvSize]);
 
   const onBackdropPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>): void => {
@@ -639,11 +619,7 @@ function ExplorerPopover({
   );
 }
 
-function KlockPopover({
-  open,
-  onClose,
-  children,
-}: KlockPopoverProps): React.JSX.Element | null {
+function KlockPopover({ open, onClose, children }: KlockPopoverProps): React.JSX.Element | null {
   const isClient = typeof document !== "undefined";
   const vvSize = useVisualViewportSize();
 
@@ -691,7 +667,7 @@ function KlockPopover({
         "0 0 0 2px rgba(255, 225, 150, 0.22), 0 0 0 6px rgba(255, 210, 120, 0.10)",
       ["--klock-scale"]: "5",
     };
-  }, [open, isClient, vvSize.height, vvSize.width]);
+  }, [open, isClient, vvSize]);
 
   const onBackdropPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>): void => {
@@ -760,7 +736,6 @@ function KlockPopover({
 /* ──────────────────────────────────────────────────────────────────────────────
    Routes
 ────────────────────────────────────────────────────────────────────────────── */
-
 function KaiVohRoute(): React.JSX.Element {
   const navigate = useNavigate();
   const [open, setOpen] = useState<boolean>(true);
@@ -854,7 +829,6 @@ function KlockRoute(): React.JSX.Element {
 /* ──────────────────────────────────────────────────────────────────────────────
    Live header button (isolated ticker = no full-app rerenders)
 ────────────────────────────────────────────────────────────────────────────── */
-
 type LiveKaiButtonProps = {
   onOpenKlock: () => void;
   breathS: number;
@@ -891,8 +865,7 @@ function LiveKaiButton({
   const neonTextStyle = useMemo<CSSProperties>(
     () => ({
       color: "var(--accent-color)",
-      textShadow:
-        "0 0 14px rgba(0, 255, 255, 0.22), 0 0 28px rgba(0, 255, 255, 0.12)",
+      textShadow: "0 0 14px rgba(0, 255, 255, 0.22), 0 0 28px rgba(0, 255, 255, 0.12)",
     }),
     [],
   );
@@ -900,8 +873,7 @@ function LiveKaiButton({
   const neonTextStyleHalf = useMemo<CSSProperties>(
     () => ({
       color: "var(--accent-color)",
-      textShadow:
-        "0 0 14px rgba(0, 255, 255, 0.22), 0 0 28px rgba(0, 255, 255, 0.12)",
+      textShadow: "0 0 14px rgba(0, 255, 255, 0.22), 0 0 28px rgba(0, 255, 255, 0.12)",
       fontSize: "0.5em",
       lineHeight: 1.05,
     }),
@@ -996,7 +968,6 @@ function LiveKaiButton({
 /* ──────────────────────────────────────────────────────────────────────────────
    AppChrome
 ────────────────────────────────────────────────────────────────────────────── */
-
 function AppChrome(): React.JSX.Element {
   const location = useLocation();
   const navigate = useNavigate();
@@ -1014,7 +985,7 @@ function AppChrome(): React.JSX.Element {
     const h = vvSize.height || 0;
     const w = vvSize.width || 0;
     return h >= 820 && w >= 980;
-  }, [vvSize.height, vvSize.width]);
+  }, [vvSize]);
 
   const shellStyle = useMemo<AppShellStyle>(
     () => ({
@@ -1126,7 +1097,7 @@ function AppChrome(): React.JSX.Element {
 
     return () => {
       window.removeEventListener("resize", onAnyResize);
-      if (ro) ro.disconnect();
+      ro?.disconnect();
       if (rafIdRef.current !== null) {
         window.cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
@@ -1189,7 +1160,7 @@ function AppChrome(): React.JSX.Element {
 
   const DNS_IP = "137.66.18.241";
 
-  async function copyDnsIp(btn?: HTMLButtonElement | null) {
+  const copyDnsIp = useCallback(async (btn?: HTMLButtonElement | null) => {
     try {
       await navigator.clipboard.writeText(DNS_IP);
     } catch {
@@ -1209,15 +1180,12 @@ function AppChrome(): React.JSX.Element {
       btn.classList.add("is-copied");
       window.setTimeout(() => btn.classList.remove("is-copied"), 900);
     }
-  }
+  }, []);
 
   // ✅ Nav: don’t stretch on roomy screens (lets panel “own” the extra space visually)
   const navInlineStyle = useMemo<CSSProperties | undefined>(() => {
     if (!roomy) return undefined;
-    return {
-      alignSelf: "start",
-      height: "auto",
-    };
+    return { alignSelf: "start", height: "auto" };
   }, [roomy]);
 
   return (
@@ -1244,9 +1212,7 @@ function AppChrome(): React.JSX.Element {
             </div>
             <div className="brand__text">
               <div className="brand__title">Sovereign Gate</div>
-              <div className="brand__subtitle">
-                Breath-Minted Value · Kairos Identity Registry
-              </div>
+              <div className="brand__subtitle">Breath-Minted Value · Kairos Identity Registry</div>
             </div>
           </div>
         </div>
@@ -1346,16 +1312,12 @@ function AppChrome(): React.JSX.Element {
 
                 <div
                   ref={panelBodyRef}
-                  className={`panel-body ${
-                    lockPanelByRoute ? "panel-body--locked" : ""
-                  } ${panelShouldScroll ? "panel-body--scroll" : ""}`}
+                  className={`panel-body ${lockPanelByRoute ? "panel-body--locked" : ""} ${
+                    panelShouldScroll ? "panel-body--scroll" : ""
+                  }`}
                   style={panelBodyInlineStyle}
                 >
-                  <div
-                    ref={panelCenterRef}
-                    className="panel-center"
-                    style={panelCenterInlineStyle}
-                  >
+                  <div ref={panelCenterRef} className="panel-center" style={panelCenterInlineStyle}>
                     <Outlet />
                   </div>
                 </div>
@@ -1381,10 +1343,10 @@ function AppChrome(): React.JSX.Element {
                       href="https://github.com/phinetwork/phi.network"
                       target="_blank"
                       rel="noreferrer"
-                      aria-label="Version 28.7.8 (opens GitHub)"
+                      aria-label="Version 28.7.9 (opens GitHub)"
                       title="Open GitHub"
                     >
-                      28.7.8
+                      28.7.9
                     </a>
                   </div>
                 </footer>
@@ -1403,8 +1365,7 @@ function NotFound(): React.JSX.Element {
       <div className="notfound__code">404</div>
       <div className="notfound__title">Route not found</div>
       <div className="notfound__hint">
-        Use the Sovereign Gate navigation to return to Verifier, Mint Sigil, KaiVoh,
-        or PhiStream.
+        Use the Sovereign Gate navigation to return to Verifier, Mint Sigil, KaiVoh, or PhiStream.
       </div>
       <div className="notfound__actions">
         <NavLink className="notfound__cta" to="/">

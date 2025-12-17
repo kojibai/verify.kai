@@ -184,7 +184,7 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
   // ----- Live series state -----
   const [livePts, setLivePts] = React.useState<KPricePoint[]>([]);
   const lastPulseRef = React.useRef<number | null>(null);
-  const lastPriceRef = React.useRef<number | null>(null); // <— NEW: track last price for consistent ticks
+  const lastPriceRef = React.useRef<number | null>(null); // track last price for consistent ticks
   const [meta, setMeta] = React.useState<SigilMeta | null>(null);
 
   // Auto-width using ResizeObserver (optional; client only)
@@ -283,7 +283,7 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, windowPoints, computeForPulse, meta, onTick, points]);
 
-  // Pulse-aligned scheduler — now emits onTick EVERY breath
+  // Pulse-aligned scheduler — emits onTick EVERY breath
   React.useEffect(() => {
     if (!live) return;
 
@@ -294,23 +294,18 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
       const pInt = Math.floor(pNow);
 
       if (lastPulseRef.current == null || pInt > lastPulseRef.current) {
-        // compute next point from last known price
         const prevPrice = lastPriceRef.current;
         const c = computeForPulse(pInt, prevPrice);
 
-        // append + trim window
         setLivePts((prev: KPricePoint[]) => {
           const next = [...prev, { p: pInt, price: c.price, vol: c.vol }];
           return next.length > windowPoints ? next.slice(next.length - windowPoints) : next;
         });
 
-        // update refs and notify
         lastPulseRef.current = pInt;
         lastPriceRef.current = c.price;
 
-        if (onTick) {
-          onTick({ p: pInt, price: c.price }); // <-- CRITICAL: keep the bar in lock step
-        }
+        if (onTick) onTick({ p: pInt, price: c.price });
       }
 
       schedule();
@@ -333,7 +328,7 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
     };
   }, [live, windowPoints, computeForPulse, tickAlignToPulse, tickMs, onTick]);
 
-  /** ---------- Memoized, readonly `pts` (no never[]) ---------- */
+  /** ---------- Memoized, readonly `pts` ---------- */
   const pts: ReadonlyArray<KPricePoint> = React.useMemo<ReadonlyArray<KPricePoint>>(
     () => (live ? (livePts as ReadonlyArray<KPricePoint>) : (points ?? EMPTY_POINTS)),
     [live, livePts, points]
@@ -413,9 +408,9 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
     return `${path} L${last.x.toFixed(2)} ${bottomY.toFixed(2)} L${first.x.toFixed(2)} ${bottomY.toFixed(2)} Z`;
   }, [path, screenPts, ih, padding.t]);
 
-
   // Crosshair
   const [hover, setHover] = React.useState<{ x: number; y: number; p: number; price: number } | null>(null);
+
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
     const x = clamp(e.clientX - rect.left, padding.l, padding.l + iw);
@@ -437,6 +432,7 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
         nearest = pt;
       }
     }
+
     const sxN = sx(nearest.p);
     const syN = sy(nearest.price);
     const h = { x: sxN, y: syN, p: nearest.p, price: nearest.price };
@@ -454,6 +450,43 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
   const prev = pts.length > 1 ? pts[pts.length - 2]! : undefined;
   const change = last && prev ? round2(last.price - prev.price) : 0;
   const changePct = last && prev && prev.price !== 0 ? (change / prev.price) * 100 : 0;
+
+  // ✅ Tooltip placement (FIX: flip left near right edge + clamp inside plot)
+  const tip = React.useMemo(() => {
+    if (!hover) return null;
+
+    // keep exactly your look/size
+    const tipW = 184;
+    const tipH = 36;
+    const gap = 10;
+    const pad = 6;
+
+    const plotLeft = padding.l;
+    const plotRight = padding.l + iw;
+    const plotTop = padding.t;
+    const plotBot = padding.t + ih;
+
+    // Prefer right, but flip to left if it would overflow the plot area
+    let x = hover.x + gap;
+    const wouldOverflowRight = x + tipW > plotRight;
+    if (wouldOverflowRight) x = hover.x - gap - tipW;
+
+    // Clamp horizontally so it never gets cut off
+    const minX = plotLeft + pad;
+    const maxX = Math.max(minX, plotRight - tipW - pad);
+    x = clamp(x, minX, maxX);
+
+    // Vertical: prefer slightly above centerline, else below; clamp
+    let y = hover.y - 22;
+    const wouldOverflowTop = y < plotTop + pad;
+    if (wouldOverflowTop) y = hover.y + gap;
+
+    const minY = plotTop + pad;
+    const maxY = Math.max(minY, plotBot - tipH - pad);
+    y = clamp(y, minY, maxY);
+
+    return { x, y, w: tipW, h: tipH, textX: x + 8, textY: y + 20 };
+  }, [hover, iw, ih, padding.l, padding.t]);
 
   return (
     <div ref={wrapRef} className={`kai-price-wrap ${className ?? ""}`} style={style}>
@@ -598,14 +631,7 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
               <g className="kpc-last-tag">
                 <circle cx={sx(last.p)} cy={sy(last.price)} r="4.5" className="kpc-dot" />
                 {/* badge */}
-                <rect
-                  x={padding.l + iw - 158}
-                  y={sy(last.price) - 12}
-                  width="150"
-                  height="24"
-                  rx="12"
-                  className="kpc-badge"
-                />
+                <rect x={padding.l + iw - 158} y={sy(last.price) - 12} width="150" height="24" rx="12" className="kpc-badge" />
                 <text x={padding.l + iw - 150} y={sy(last.price) + 5} className="kpc-badge-text">
                   {formatter(last.price)} {change >= 0 ? "▲" : "▼"} {Math.abs(changePct).toFixed(2)}%
                 </text>
@@ -613,12 +639,14 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
             )}
 
             {/* Crosshair */}
-            {hover && (
+            {hover && tip && (
               <g className="kpc-xhair">
                 <line x1={hover.x} x2={hover.x} y1={padding.t} y2={padding.t + ih} className="kpc-xhair-line" />
                 <line x1={padding.l} x2={padding.l + iw} y1={hover.y} y2={hover.y} className="kpc-xhair-line" />
-                <rect x={hover.x + 10} y={hover.y - 22} width="184" height="36" rx="8" ry="8" className="kpc-tip" />
-                <text x={hover.x + 18} y={hover.y - 2} className="kpc-tip-text">
+
+                {/* ✅ Tooltip (flips left + clamps so it never cuts off) */}
+                <rect x={tip.x} y={tip.y} width={tip.w} height={tip.h} rx="8" ry="8" className="kpc-tip" />
+                <text x={tip.textX} y={tip.textY} className="kpc-tip-text">
                   pulse {Math.floor(hover.p)} • {formatter(hover.price)}
                 </text>
               </g>
