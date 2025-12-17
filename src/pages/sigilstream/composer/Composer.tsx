@@ -30,6 +30,13 @@ import { filesToManifest } from "../attachments/files";
 import { normalizeWebLink, addLinkItem, removeLinkItem } from "./linkHelpers";
 
 import { SigilActionUrl } from "../identity/SigilActionUrl";
+import {
+  ingestUsernameClaimGlyph,
+  getUsernameClaimRegistry,
+  subscribeUsernameClaimRegistry,
+} from "../../../utils/usernameClaimRegistry";
+import { normalizeUsername, mintUsernameClaimGlyph } from "../../../utils/usernameClaim";
+import type { UsernameClaimRegistry } from "../../../utils/usernameClaimRegistry";
 
 /* NEW v3 payload engine */
 import {
@@ -479,6 +486,7 @@ export function Composer({
   /* Reply State */
   const [replyText, setReplyText] = useState("");
   const [replyAuthor, setReplyAuthor] = useState("");
+  const [claimGlyphRef, setClaimGlyphRef] = useState("");
   const [composerAtt, setComposerAtt] = useState<AttachmentManifest>({
     version: 1,
     totalBytes: 0,
@@ -497,6 +505,7 @@ export function Composer({
   const [replyBusy, setReplyBusy] = useState(false);
   const [replyUrl, setReplyUrl] = useState("");
   const [copiedReply, setCopiedReply] = useState(false);
+  const [usernameClaims, setUsernameClaims] = useState<UsernameClaimRegistry>(() => getUsernameClaimRegistry());
 
   // Parent payload (previous message) for "Replying to" context
   const [parentPayload, setParentPayload] = useState<FeedPostPayload | null>(null);
@@ -553,6 +562,35 @@ export function Composer({
     };
   }, [parentPayload]);
 
+  /* Keep username-claim registry in sync (cross-tab). */
+  useEffect(() => {
+    setUsernameClaims(getUsernameClaimRegistry());
+    const unsub = subscribeUsernameClaimRegistry((entry, source) => {
+      void source;
+      setUsernameClaims((prev: UsernameClaimRegistry) => ({ ...prev, [entry.normalized]: entry }));
+    });
+    return () => unsub();
+  }, []);
+
+  const normalizedUsername = useMemo(() => normalizeUsername(replyAuthor), [replyAuthor]);
+  const claimEntry = normalizedUsername ? usernameClaims[normalizedUsername] : undefined;
+
+  const claimGlyphHash = useMemo(() => {
+    const t = claimGlyphRef.trim();
+    if (!t) return "";
+    const token = looksLikeBareToken(t) ? t : extractPayloadTokenFromUrlString(t);
+    return token ?? t;
+  }, [claimGlyphRef]);
+
+  const usernameClaimLabel = useMemo(() => {
+    if (!normalizedUsername) return "";
+    if (!claimEntry) return "Username available";
+    if (claimEntry.claimHash === claimGlyphHash) return "Username claimed by you";
+    if (claimEntry.ownerHint && composerPhiKey && claimEntry.ownerHint === composerPhiKey)
+      return "Username claimed by you";
+    return "Username claimed by another";
+  }, [claimEntry, claimGlyphHash, normalizedUsername, composerPhiKey]);
+
   // ────────────────────────────────────────────────────────────────
   // ATTACHMENTS
   // ────────────────────────────────────────────────────────────────
@@ -575,7 +613,6 @@ export function Composer({
         ev.currentTarget.value = "";
         toasts.push("success", "Attached.");
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.error("[Composer] onPickFiles:", err);
         toasts.push("error", "Attach failed.");
       }
@@ -647,6 +684,7 @@ export function Composer({
 
       const replyTextTrimmed = replyText.trim();
       const replyAuthorTrimmed = replyAuthor.trim();
+      const normalizedAuthor = normalizeUsername(replyAuthorTrimmed);
 
       const linkAsAttachments: PayloadAttachmentItem[] = linkItems.map((it) =>
         makeUrlAttachment({ url: it.url, title: it.title }),
@@ -731,6 +769,64 @@ export function Composer({
 
       const share = adds.length ? withHashAdds(baseShare, adds.slice(-ADD_CHAIN_MAX)) : baseShare;
 
+      if (normalizedAuthor) {
+        if (claimEntry) {
+          if (!claimGlyphHash) {
+            toasts.push("warn", "Username is claimed. Provide your claim glyph token to seal.");
+            return;
+          }
+          if (claimGlyphHash !== claimEntry.claimHash) {
+            toasts.push("warn", "Claim glyph mismatch. Memory not sealed.");
+            return;
+          }
+        } else {
+          if (!safeMeta || !composerKaiSig) {
+            toasts.push("warn", "Inhale your sigil to mint a username claim.");
+            return;
+          }
+
+          const originGlyph = {
+            hash: composerKaiSig,
+            pulseCreated: (safeMeta as { pulse?: number })?.pulse ?? pulseNow,
+            pulseGenesis: (safeMeta as { pulse?: number })?.pulse ?? pulseNow,
+            value: 1,
+            sentTo: [],
+            receivedFrom: [],
+            metadata: {
+              kaiSignature: composerKaiSig,
+              creator: composerPhiKey ?? undefined,
+            },
+          };
+
+          const claimGlyph = mintUsernameClaimGlyph({
+            origin: originGlyph,
+            username: replyAuthorTrimmed,
+            pulse: pulseNow,
+            ownerHint: composerPhiKey ?? null,
+          });
+
+          const claimPayload = claimGlyph.metadata?.usernameClaim;
+          if (claimPayload) {
+            const ingest = ingestUsernameClaimGlyph({
+              hash: claimGlyph.hash,
+              url: share,
+              payload: claimPayload,
+              ownerHint: composerPhiKey ?? null,
+            });
+
+            if (!ingest.accepted) {
+              toasts.push("warn", ingest.reason || "Unable to register username claim.");
+              return;
+            }
+
+            setUsernameClaims(ingest.registry);
+          } else {
+            toasts.push("warn", "Could not mint username-claim glyph.");
+            return;
+          }
+        }
+      }
+
       await navigator.clipboard.writeText(share);
       toasts.push("success", "Link kopied. Kai-sealed.");
 
@@ -755,7 +851,6 @@ export function Composer({
         // silent
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error("[Composer] onGenerateReply:", err);
       toasts.push("error", "Could not seal reply.");
     } finally {
@@ -882,8 +977,27 @@ export function Composer({
           value={replyAuthor}
           onChange={(e) => setReplyAuthor(e.target.value)}
           placeholder="@you"
+          aria-describedby={usernameClaimLabel ? "username-claim-status" : undefined}
         />
+        {usernameClaimLabel ? (
+          <div id="username-claim-status" className="sf-sub" role="status" aria-live="polite">
+            {usernameClaimLabel}
+          </div>
+        ) : null}
       </div>
+
+      {normalizedUsername ? (
+        <div className="sf-reply-row">
+          <label className="sf-label">Claim glyph</label>
+          <input
+            className="sf-input"
+            type="text"
+            value={claimGlyphRef}
+            onChange={(e) => setClaimGlyphRef(e.target.value)}
+            placeholder="Paste claim glyph hash or Memory Stream link"
+          />
+        </div>
+      ) : null}
 
       <div className="sf-reply-row">
         <label className="sf-label">Memory</label>
