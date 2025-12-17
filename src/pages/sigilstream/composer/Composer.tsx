@@ -35,8 +35,9 @@ import {
   getUsernameClaimRegistry,
   subscribeUsernameClaimRegistry,
 } from "../../../utils/usernameClaimRegistry";
-import { normalizeUsername, mintUsernameClaimGlyph } from "../../../utils/usernameClaim";
+import { normalizeClaimGlyphRef, normalizeUsername, mintUsernameClaimGlyph } from "../../../utils/usernameClaim";
 import type { UsernameClaimRegistry } from "../../../utils/usernameClaimRegistry";
+import { USERNAME_CLAIM_KIND, type UsernameClaimGlyphEvidence } from "../../../types/usernameClaim";
 
 /* NEW v3 payload engine */
 import {
@@ -50,6 +51,7 @@ import {
   encodeFeedPayload,
   decodeFeedPayload,
   extractPayloadTokenFromLocation,
+  extractPayloadTokenFromUrlString,
 } from "../../../utils/feedPayload";
 
 type ComposerProps = {
@@ -306,59 +308,6 @@ function extractAddChainFromHref(href: string): string[] {
   }
 }
 
-function extractPayloadTokenFromUrlString(rawUrl: string): string | null {
-  const base = canonicalBase().origin;
-  const t = rawUrl.trim();
-  if (!t) return null;
-
-  // ✅ bare token support (for #add=TOKEN)
-  if (looksLikeBareToken(t)) return t;
-
-  let u: URL;
-  try {
-    u = new URL(t);
-  } catch {
-    try {
-      u = new URL(t, base);
-    } catch {
-      return null;
-    }
-  }
-
-  const path = u.pathname || "";
-
-  // /stream/p/<token> | /feed/p/<token>
-  {
-    const m = path.match(/\/(?:stream|feed)\/p\/([^/?#]+)/u);
-    if (m?.[1]) return m[1];
-  }
-
-  // /p/<token>
-  {
-    const m = path.match(/\/p\/([^/?#]+)/u);
-    if (m?.[1]) return m[1];
-  }
-
-  // /p~TOKEN or /p~/TOKEN (and %7E)
-  {
-    const m = path.match(/\/p(?:\u007e|%7[Ee])\/?([^/?#]+)/u);
-    if (m?.[1]) return m[1];
-  }
-
-  const hashStr = u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : "";
-  const hashParams = new URLSearchParams(hashStr);
-
-  const keys = ["t", "p", "token", "capsule"] as const;
-  for (const k of keys) {
-    const hv = hashParams.get(k);
-    if (hv) return hv;
-    const sv = u.searchParams.get(k);
-    if (sv) return sv;
-  }
-
-  return null;
-}
-
 /** Add add= entries into the URL *hash* (never query) so servers/proxies never see them. */
 function withHashAdds(baseUrl: string, adds: readonly string[]): string {
   const u = new URL(baseUrl, canonicalBase().origin);
@@ -575,12 +524,7 @@ export function Composer({
   const normalizedUsername = useMemo(() => normalizeUsername(replyAuthor), [replyAuthor]);
   const claimEntry = normalizedUsername ? usernameClaims[normalizedUsername] : undefined;
 
-  const claimGlyphHash = useMemo(() => {
-    const t = claimGlyphRef.trim();
-    if (!t) return "";
-    const token = looksLikeBareToken(t) ? t : extractPayloadTokenFromUrlString(t);
-    return token ?? t;
-  }, [claimGlyphRef]);
+  const claimGlyphHash = useMemo(() => normalizeClaimGlyphRef(claimGlyphRef), [claimGlyphRef]);
 
   const usernameClaimLabel = useMemo(() => {
     if (!normalizedUsername) return "";
@@ -725,6 +669,72 @@ export function Composer({
           ? ({ kind: "text", text: replyTextTrimmed } as const)
           : undefined;
 
+      const normalizedAuthor = normalizedUsername;
+      let usernameClaimEvidence: UsernameClaimGlyphEvidence | undefined;
+
+      if (normalizedAuthor) {
+        if (claimEntry) {
+          if (!claimGlyphHash) {
+            toasts.push("warn", "Username is claimed. Provide your claim glyph token to seal.");
+            return;
+          }
+          if (claimGlyphHash !== claimEntry.claimHash) {
+            toasts.push("warn", "Claim glyph mismatch. Memory not sealed.");
+            return;
+          }
+
+          usernameClaimEvidence = {
+            hash: claimEntry.claimHash,
+            url: claimEntry.claimUrl,
+            payload: {
+              kind: USERNAME_CLAIM_KIND,
+              username: claimEntry.username,
+              normalized: claimEntry.normalized,
+              originHash: claimEntry.originHash,
+              ownerHint: claimEntry.ownerHint ?? null,
+            },
+            ownerHint: claimEntry.ownerHint ?? null,
+          };
+        } else {
+          if (!safeMeta || !composerKaiSig) {
+            toasts.push("warn", "Inhale your sigil to mint a username claim.");
+            return;
+          }
+
+          const originGlyph = {
+            hash: composerKaiSig,
+            pulseCreated: (safeMeta as { pulse?: number })?.pulse ?? pulseNow,
+            pulseGenesis: (safeMeta as { pulse?: number })?.pulse ?? pulseNow,
+            value: 1,
+            sentTo: [],
+            receivedFrom: [],
+            metadata: {
+              kaiSignature: composerKaiSig,
+              creator: composerPhiKey ?? undefined,
+            },
+          };
+
+          const claimGlyph = mintUsernameClaimGlyph({
+            origin: originGlyph,
+            username: replyAuthorTrimmed,
+            pulse: pulseNow,
+            ownerHint: composerPhiKey ?? null,
+          });
+
+          const claimPayload = claimGlyph.metadata?.usernameClaim;
+          if (claimPayload) {
+            usernameClaimEvidence = {
+              hash: claimGlyph.hash,
+              payload: claimPayload,
+              ownerHint: claimPayload.ownerHint ?? null,
+            };
+          } else {
+            toasts.push("warn", "Could not mint username-claim glyph.");
+            return;
+          }
+        }
+      }
+
       // Thread context is carried ONLY in link hash add= witness chain.
       const basePayload: FeedPostPayload = makeBasePayload({
         url: actionUrl || canonicalBase().origin,
@@ -740,6 +750,7 @@ export function Composer({
         originUrl: undefined,
         ts: undefined,
         attachments,
+        usernameClaim: usernameClaimEvidence,
       });
 
       // Optional hint for downstream renderers: this is a memory/post (not a raw sigil)
@@ -769,62 +780,18 @@ export function Composer({
 
       const share = adds.length ? withHashAdds(baseShare, adds.slice(-ADD_CHAIN_MAX)) : baseShare;
 
-      if (normalizedAuthor) {
-        if (claimEntry) {
-          if (!claimGlyphHash) {
-            toasts.push("warn", "Username is claimed. Provide your claim glyph token to seal.");
-            return;
-          }
-          if (claimGlyphHash !== claimEntry.claimHash) {
-            toasts.push("warn", "Claim glyph mismatch. Memory not sealed.");
-            return;
-          }
-        } else {
-          if (!safeMeta || !composerKaiSig) {
-            toasts.push("warn", "Inhale your sigil to mint a username claim.");
-            return;
-          }
+      if (usernameClaimEvidence) {
+        const ingest = ingestUsernameClaimGlyph({
+          ...usernameClaimEvidence,
+          url: usernameClaimEvidence.url ?? share,
+        });
 
-          const originGlyph = {
-            hash: composerKaiSig,
-            pulseCreated: (safeMeta as { pulse?: number })?.pulse ?? pulseNow,
-            pulseGenesis: (safeMeta as { pulse?: number })?.pulse ?? pulseNow,
-            value: 1,
-            sentTo: [],
-            receivedFrom: [],
-            metadata: {
-              kaiSignature: composerKaiSig,
-              creator: composerPhiKey ?? undefined,
-            },
-          };
-
-          const claimGlyph = mintUsernameClaimGlyph({
-            origin: originGlyph,
-            username: replyAuthorTrimmed,
-            pulse: pulseNow,
-            ownerHint: composerPhiKey ?? null,
-          });
-
-          const claimPayload = claimGlyph.metadata?.usernameClaim;
-          if (claimPayload) {
-            const ingest = ingestUsernameClaimGlyph({
-              hash: claimGlyph.hash,
-              url: share,
-              payload: claimPayload,
-              ownerHint: composerPhiKey ?? null,
-            });
-
-            if (!ingest.accepted) {
-              toasts.push("warn", ingest.reason || "Unable to register username claim.");
-              return;
-            }
-
-            setUsernameClaims(ingest.registry);
-          } else {
-            toasts.push("warn", "Could not mint username-claim glyph.");
-            return;
-          }
+        if (!ingest.accepted) {
+          toasts.push("warn", ingest.reason || "Unable to register username claim.");
+          return;
         }
+
+        setUsernameClaims(ingest.registry);
       }
 
       await navigator.clipboard.writeText(share);

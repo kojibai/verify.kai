@@ -105,6 +105,9 @@ import {
   type FeedPostPayload,
   type PostBody,
 } from "../../utils/feedPayload";
+import { normalizeClaimGlyphRef, normalizeUsername } from "../../utils/usernameClaim";
+import { getUsernameClaimRegistry, ingestUsernameClaimGlyph } from "../../utils/usernameClaimRegistry";
+import { USERNAME_CLAIM_KIND } from "../../types/usernameClaim";
 
 /* Explorer bridge: register any stream/sigil URL */
 import { registerSigilUrl } from "../../utils/sigilRegistry";
@@ -1644,6 +1647,83 @@ function SigilStreamInner(): React.JSX.Element {
         setPayload(null);
         setPayloadError("Invalid or unreadable payload token.");
         return;
+      }
+
+      const claimEvidence = (decoded as FeedPostPayload & { usernameClaim?: unknown }).usernameClaim;
+      const normalizedFromClaim = claimEvidence
+        ? normalizeUsername(
+            (claimEvidence as { payload?: { normalized?: string; username?: string } }).payload?.normalized ||
+              (claimEvidence as { payload?: { normalized?: string; username?: string } }).payload?.username ||
+              "",
+          )
+        : "";
+      const normalizedFromAuthor = normalizeUsername(decoded.author ?? "");
+      const normalizedUsername = normalizedFromClaim || normalizedFromAuthor;
+
+      if (claimEvidence) {
+        const claimHash = normalizeClaimGlyphRef((claimEvidence as { hash?: string }).hash ?? "");
+        const claimUrl =
+          (claimEvidence as { url?: string }).url?.trim() || canonicalizeCurrentStreamUrl(token);
+
+        if (!claimHash || !claimUrl) {
+          setPayload(null);
+          setPayloadError("Username claim missing glyph reference.");
+          return;
+        }
+        if (!normalizedUsername) {
+          setPayload(null);
+          setPayloadError("Username claim missing normalized username.");
+          return;
+        }
+
+        const registry = getUsernameClaimRegistry();
+        const existing = registry[normalizedUsername];
+        if (existing && existing.claimHash !== claimHash) {
+          setPayload(null);
+          setPayloadError("Username claimed by another glyph.");
+          return;
+        }
+
+        const payload = (claimEvidence as { payload?: unknown }).payload as
+          | { normalized?: string; username?: string; originHash?: string; ownerHint?: string | null; kind?: string }
+          | undefined;
+
+        if (!payload || payload.kind !== USERNAME_CLAIM_KIND) {
+          setPayload(null);
+          setPayloadError("Invalid username-claim payload.");
+          return;
+        }
+
+        const normalizedPayloadUser =
+          normalizeUsername(payload.normalized || payload.username || "") || normalizedUsername;
+        if (normalizedPayloadUser !== normalizedUsername) {
+          setPayload(null);
+          setPayloadError("Username claim does not match author.");
+          return;
+        }
+
+        const ingest = ingestUsernameClaimGlyph({
+          hash: claimHash,
+          url: claimUrl,
+          payload: {
+            ...payload,
+            normalized: normalizedPayloadUser,
+          },
+          ownerHint: (claimEvidence as { ownerHint?: string | null }).ownerHint ?? payload.ownerHint ?? null,
+        });
+
+        if (!ingest.accepted) {
+          setPayload(null);
+          setPayloadError(`Username claim rejected: ${ingest.reason ?? "unknown"}.`);
+          return;
+        }
+      } else if (normalizedUsername) {
+        const registry = getUsernameClaimRegistry();
+        if (registry[normalizedUsername]) {
+          setPayload(null);
+          setPayloadError("Claim glyph is required for this username.");
+          return;
+        }
       }
 
       setPayload(decoded);

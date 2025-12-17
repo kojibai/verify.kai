@@ -7,6 +7,7 @@ import {
   USERNAME_CLAIM_KIND,
   type UsernameClaimPayload,
 } from "../types/usernameClaim";
+import { normalizePayloadToken } from "./feedPayload";
 
 /** Normalize user-provided usernames to a deterministic, lowercase form. */
 export function normalizeUsername(raw: string): string {
@@ -20,6 +21,43 @@ export function normalizeUsername(raw: string): string {
 
   // Remove trailing punctuation that often rides along in chat/markdown.
   return normalized.replace(/[.,;:!?]+$/g, "");
+}
+
+/** Canonicalize a claim glyph reference (hash or Memory Stream link) for comparison. */
+export function normalizeClaimGlyphRef(raw: string): string {
+  const t = (raw ?? "").trim();
+  if (!t) return "";
+
+  // Direct glyph hashes (hex) or base64url-ish tokens (for claim payloads)
+  if (/^[0-9a-f]{64}$/i.test(t)) return t.toLowerCase();
+  if (/^[A-Za-z0-9_-]{16,}$/u.test(t)) return normalizePayloadToken(t);
+
+  try {
+    const u = new URL(t);
+    const path = u.pathname || "";
+
+    // /stream/p/<token> | /feed/p/<token> | /p/<token> | /p~<token>
+    const matchPath =
+      path.match(/\/(?:stream|feed)\/p\/([^/?#]+)/u) ||
+      path.match(/\/p\/([^/?#]+)/u) ||
+      path.match(/\/p(?:\u007e|%7[Ee])\/?([^/?#]+)/u);
+    if (matchPath?.[1]) return normalizePayloadToken(matchPath[1]);
+
+    const hashStr = u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : "";
+    const hp = new URLSearchParams(hashStr);
+    const sp = u.searchParams;
+    const keys = ["t", "p", "token", "capsule"] as const;
+    for (const k of keys) {
+      const hv = hp.get(k);
+      if (hv) return normalizePayloadToken(hv);
+      const sv = sp.get(k);
+      if (sv) return normalizePayloadToken(sv);
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return "";
 }
 
 /** Build a canonical username-claim payload for embedding in a glyph. */

@@ -21,6 +21,11 @@ export const TOKEN_HARD_LIMIT = 3500 as const; // absolute cut-off for path usag
  * Type-only import to avoid runtime coupling/cycles.
  */
 import type { SealedEnvelopeV1 } from "./postSeal";
+import {
+  USERNAME_CLAIM_KIND,
+  type UsernameClaimGlyphEvidence,
+  type UsernameClaimPayload,
+} from "../types/usernameClaim";
 
 /* ───────── Core Types ───────── */
 
@@ -134,6 +139,9 @@ export type FeedPostPayload = {
 
   /** Optional sealed envelope (Private mode). */
   seal?: SealedEnvelopeV1;
+
+  /** Optional username-claim proof (hash + payload) for bound usernames. */
+  usernameClaim?: UsernameClaimGlyphEvidence;
 };
 
 /** Legacy payload (v1) decode-only. */
@@ -173,6 +181,27 @@ function isOptionalNumber(x: unknown): x is number | undefined {
 }
 function isValidSource(x: unknown): x is FeedSource | undefined {
   return x === undefined || x === "x" || x === "manual";
+}
+/* ───────── Username claim guards ───────── */
+function isUsernameClaimPayload(x: unknown): x is UsernameClaimPayload {
+  if (!isObject(x)) return false;
+  return (
+    x["kind"] === USERNAME_CLAIM_KIND &&
+    isString(x["username"]) &&
+    isString(x["normalized"]) &&
+    isString(x["originHash"]) &&
+    (x["ownerHint"] === undefined || x["ownerHint"] === null || isString(x["ownerHint"]))
+  );
+}
+
+function isUsernameClaimEvidence(x: unknown): x is UsernameClaimGlyphEvidence {
+  if (!isObject(x)) return false;
+  return (
+    isString(x["hash"]) &&
+    (x["url"] === undefined || isString(x["url"])) &&
+    isUsernameClaimPayload(x["payload"]) &&
+    (x["ownerHint"] === undefined || x["ownerHint"] === null || isString(x["ownerHint"]))
+  );
 }
 
 /* ───────── PostBody guards ───────── */
@@ -278,7 +307,8 @@ export function isFeedPostPayload(x: unknown): x is FeedPostPayload {
     isOptionalString(x["originUrl"]) &&
     isOptionalNumber(x["ts"]) &&
     (x["attachments"] === undefined || isAttachments(x["attachments"])) &&
-    isOptionalSealEnvelope(x["seal"])
+    isOptionalSealEnvelope(x["seal"]) &&
+    (x["usernameClaim"] === undefined || isUsernameClaimEvidence(x["usernameClaim"]))
   );
 }
 
@@ -735,6 +765,60 @@ export function extractPayloadToken(pathname: string): string | null {
   return null;
 }
 
+/** Extract payload token from an arbitrary string (URL or bare token). */
+export function extractPayloadTokenFromUrlString(rawUrl: string): string | null {
+  const base = typeof window !== "undefined" ? window.location?.origin ?? undefined : undefined;
+  const t = rawUrl.trim();
+  if (!t) return null;
+
+  // bare token support (for #add=TOKEN)
+  if (/^[A-Za-z0-9_-]{16,}$/u.test(t)) return normalizePayloadToken(t);
+
+  let u: URL;
+  try {
+    u = new URL(t);
+  } catch {
+    try {
+      u = new URL(t, base);
+    } catch {
+      return null;
+    }
+  }
+
+  const path = u.pathname || "";
+
+  // /stream/p/<token> | /feed/p/<token>
+  {
+    const m = path.match(/\/(?:stream|feed)\/p\/([^/?#]+)/u);
+    if (m?.[1]) return normalizePayloadToken(m[1]);
+  }
+
+  // /p/<token>
+  {
+    const m = path.match(/\/p\/([^/?#]+)/u);
+    if (m?.[1]) return normalizePayloadToken(m[1]);
+  }
+
+  // /p~TOKEN or /p~/TOKEN (and %7E)
+  {
+    const m = path.match(/\/p(?:\u007e|%7[Ee])\/?([^/?#]+)/u);
+    if (m?.[1]) return normalizePayloadToken(m[1]);
+  }
+
+  const hashStr = u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : "";
+  const hashParams = new URLSearchParams(hashStr);
+
+  const keys = ["t", "p", "token", "capsule"] as const;
+  for (const k of keys) {
+    const hv = hashParams.get(k);
+    if (hv) return normalizePayloadToken(hv);
+    const sv = u.searchParams.get(k);
+    if (sv) return normalizePayloadToken(sv);
+  }
+
+  return null;
+}
+
 /** Build a URL using hash as the default (safest): `${origin}/stream#t=<token>` */
 export function buildHashUrl(origin: string, payload: FeedPostPayload): string {
   const { token } = encodeTokenWithBudgets(payload);
@@ -867,6 +951,9 @@ export function makeBasePayload(args: {
 
   /** Optional sealed envelope (Private mode). */
   seal?: SealedEnvelopeV1;
+
+  /** Optional username-claim proof for bound usernames. */
+  usernameClaim?: UsernameClaimGlyphEvidence;
 }): FeedPostPayload {
   const parentUrl = args.parentUrl ?? args.parent;
 
@@ -893,6 +980,7 @@ export function makeBasePayload(args: {
     ts: args.ts,
     attachments: args.attachments,
     seal: args.seal,
+    usernameClaim: args.usernameClaim,
   };
   return p;
 }
