@@ -35,13 +35,16 @@ const kvOpen = `<div class="kv">`;
 const kvClose = `</div>`;
 
 function cardHead(title: string): string {
-  return `<div class="proof-card">
-    <h3>${esc(title)}</h3>`;
+  return `<div class="proof-card"><h3>${esc(title)}</h3>`;
 }
 const cardTail = `</div>`;
 
 function hint(text: string): string {
   return `<div class="hint">${esc(text)}</div>`;
+}
+
+function codeLine(label: string, value: string): string {
+  return `<strong>${esc(label)}</strong><div><code>${esc(value || "—")}</code></div>`;
 }
 
 /* --- main renderer --- */
@@ -67,28 +70,29 @@ export function buildProofPagesHTML(p: ProofPagesParams): string {
       ? `
         ${cardHead("Zero-Knowledge Proof")}
           ${kvOpen}
-            <strong>Scheme</strong><div><code>${esc(p.zk.scheme ?? "—")}</code></div>
-            <strong>Poseidon Hash</strong><div><code>${esc(p.zk.poseidon ?? "—")}</code></div>
+            ${codeLine("Scheme", p.zk.scheme ?? "—")}
+            ${codeLine("Poseidon Hash", p.zk.poseidon ?? "—")}
           ${kvClose}
         ${cardTail}
       `
       : "";
 
-  // Optional provenance table
+  // Optional provenance table (newest first)
   let provDetail = "";
   if (p.provenance?.length) {
     const rows = p.provenance
       .slice()
       .reverse()
-      .map(
-        (r) => `
-        <tr>
-          <td>${esc(String(r.action ?? ""))}</td>
-          <td>${esc(String(r.pulse ?? ""))}</td>
-          <td>${esc(String(r.beat ?? ""))}:${esc(String(r.stepIndex ?? ""))}</td>
-          <td>${r.ownerPhiKey ? esc(String(r.ownerPhiKey)).slice(0, 16) + "…" : "—"}</td>
-        </tr>`
-      )
+      .map((r) => {
+        const ownerShort = r.ownerPhiKey ? `${String(r.ownerPhiKey).slice(0, 16)}…` : "—";
+        return `
+          <tr>
+            <td>${esc(String(r.action ?? ""))}</td>
+            <td>${esc(String(r.pulse ?? ""))}</td>
+            <td>${esc(String(r.beat ?? ""))}:${esc(String(r.stepIndex ?? ""))}</td>
+            <td>${esc(ownerShort)}</td>
+          </tr>`;
+      })
       .join("");
 
     provDetail = `
@@ -119,26 +123,26 @@ export function buildProofPagesHTML(p: ProofPagesParams): string {
 
       ${cardHead("Identity & Σ")}
         ${kvOpen}
-          <strong>kaiSignature</strong><div><code>${esc(ksig || "—")}</code></div>
-          <strong>userΦkey</strong><div><code>${esc(uphi || "—")}</code></div>
-          <strong>Σ (canonical)</strong><div><code>${esc(sigma || "—")}</code></div>
+          ${codeLine("kaiSignature", ksig || "—")}
+          ${codeLine("userΦkey", uphi || "—")}
+          ${codeLine("Σ (canonical)", sigma || "—")}
         ${kvClose}
       ${cardTail}
 
       ${cardHead("Hash & Derivation")}
         ${kvOpen}
-          <strong>sha256(Σ)</strong><div><code>${esc(sha || "—")}</code></div>
-          <strong>Φ (derived)</strong><div><code>${esc(phi || "—")}</code></div>
+          ${codeLine("sha256(Σ)", sha || "—")}
+          ${codeLine("Φ (derived)", phi || "—")}
         ${kvClose}
       ${cardTail}
 
       ${cardHead("Valuation")}
         ${kvOpen}
-          <strong>Algorithm</strong><div><code>${esc(alg)}</code></div>
-          <strong>Valuation Pulse</strong><div><code>${esc(frozen)}</code></div>
-          <strong>Value Φ</strong><div><code>${esc(val)}</code></div>
-          <strong>Premium Φ</strong><div><code>${esc(prem)}</code></div>
-          <strong>Valuation Stamp</strong><div><code>${esc(stamp || "—")}</code></div>
+          ${codeLine("Algorithm", alg)}
+          ${codeLine("Valuation Pulse", frozen)}
+          ${codeLine("Value Φ", val)}
+          ${codeLine("Premium Φ", prem)}
+          ${codeLine("Valuation Stamp", stamp || "—")}
         ${kvClose}
       ${cardTail}
 
@@ -150,9 +154,11 @@ export function buildProofPagesHTML(p: ProofPagesParams): string {
           <div>${qrSvg}</div>
           <div>
             ${hint("Open / scan:")}
-            <div><a href="${esc(verify)}" target="_blank" rel="noopener" style="word-break:break-all">${esc(
-              verify
-            )}</a></div>
+            <div>
+              <a href="${esc(verify)}" target="_blank" rel="noopener" style="word-break:break-all">
+                ${esc(verify)}
+              </a>
+            </div>
           </div>
         </div>
       ${cardTail}
@@ -174,10 +180,10 @@ export function buildProofPagesHTML(p: ProofPagesParams): string {
 
       ${cardHead("Registry Attestation")}
         ${kvOpen}
-          <strong>Valid</strong><div><code>—</code></div>
-          <strong>r (claim)</strong><div><code>—</code></div>
-          <strong>s (signature)</strong><div><code>—</code></div>
-          <strong>kid</strong><div><code>—</code></div>
+          ${codeLine("Valid", "—")}
+          ${codeLine("r (claim)", "—")}
+          ${codeLine("s (signature)", "—")}
+          ${codeLine("kid", "—")}
         ${kvClose}
         <div style="margin-top:8px">
           ${hint("Decoded claim JSON")}
@@ -193,6 +199,7 @@ export function buildProofPagesHTML(p: ProofPagesParams): string {
   `.trim();
 
   // PAGE 4 — Raw Sigil SVG (sanitized) + verify link again
+  const safeSigil = sanitizeSvg(p.sigilSvg || "");
   const page4 = `
     <div class="print-page">
       <div class="page-stamp-top">
@@ -201,14 +208,16 @@ export function buildProofPagesHTML(p: ProofPagesParams): string {
       </div>
 
       ${cardHead("SVG")}
-        <pre class="out">${esc(sanitizeSvg(p.sigilSvg || ""))}</pre>
+        <pre class="out">${esc(safeSigil)}</pre>
       ${cardTail}
 
       ${cardHead("Verify URL (clickable — same as seal QR)")}
         ${hint("Open / scan:")}
-        <div><a href="${esc(verify)}" target="_blank" rel="noopener" style="word-break:break-all">${esc(
-          verify
-        )}</a></div>
+        <div>
+          <a href="${esc(verify)}" target="_blank" rel="noopener" style="word-break:break-all">
+            ${esc(verify)}
+          </a>
+        </div>
       ${cardTail}
 
       <div class="page-stamp-bot">

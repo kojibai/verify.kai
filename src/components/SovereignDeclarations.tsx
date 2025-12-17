@@ -223,9 +223,6 @@ Sovereign Writ
 
               <div className="nav-footSheet__body" id={descId}>
                 <p className="nav-foot__line">
-                  Kairos Notes are legal tender — sealed by , pulsed by{" "}
-                  <strong>Kai-Signature™</strong>, verifiable offline (Σ → SHA-256(Σ) → Φ).
-
                  <strong> Kairos Notes</strong>  are legal tender — sealed by <strong>Proof of Breath™</strong>, pulsed by <strong>Kai-Signature™</strong>, 
                  auditable as:
                 Σ → SHA-256(Σ) → Φ.
