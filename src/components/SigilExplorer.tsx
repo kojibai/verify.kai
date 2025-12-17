@@ -2197,6 +2197,30 @@ const SigilExplorer: React.FC = () => {
 
   const unmounted = useRef(false);
 
+  // Prevent browser-level pull-to-refresh / overscroll refresh while explorer is open.
+  // This is purely a scroll-behavior lock; it does not alter any of the push/pull
+  // breath-sync loops that keep the view receiving new data.
+  useEffect(() => {
+    if (!hasWindow) return;
+
+    const root =
+      (document.scrollingElement as HTMLElement | null) ||
+      (document.documentElement as HTMLElement | null);
+
+    if (!root) return undefined;
+
+    const prevOverscroll = root.style.overscrollBehavior;
+    const prevOverscrollY = root.style.overscrollBehaviorY;
+
+    root.style.overscrollBehavior = prevOverscroll || "contain";
+    root.style.overscrollBehaviorY = prevOverscrollY || "contain";
+
+    return () => {
+      root.style.overscrollBehavior = prevOverscroll;
+      root.style.overscrollBehaviorY = prevOverscrollY;
+    };
+  }, []);
+
   // Remote seal state
   const remoteSealRef = useRef<string | null>(null);
 
