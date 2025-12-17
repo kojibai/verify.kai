@@ -31,7 +31,7 @@ export type KaiPriceChartProps = {
   className?: string;
   style?: React.CSSProperties;
   formatter?: (v: number) => string;
-  gridXTicks?: number; // default 6
+  gridXTicks?: number; // default 6 (this is a MAX now; chart auto-reduces on small widths)
   gridYTicks?: number; // default 4
   bandLevels?: number[]; // default [0.236, 0.382, 0.5, 0.618]
   showVWAP?: boolean; // default true
@@ -67,7 +67,12 @@ const kaiPulseNow = (): number => (Date.now() - KAI_EPOCH_MS) / BREATH_MS;
 const clamp = (x: number, min: number, max: number) => Math.max(min, Math.min(max, x));
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const fmtUSD = (n: number) =>
-  n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 // Fallback φ-oscillator — deterministic
 const phiFallbackPrice = (pulse: number, base: number) => {
@@ -124,6 +129,22 @@ const getGlobal = <T,>(key: string): T | undefined => {
   return g[key] as T | undefined;
 };
 
+// Choose an X grid segment count that guarantees label spacing (no overlap),
+// based on the *display* width (mobile-safe), while respecting gridXTicks as a MAX.
+const computeXSegmentsNoOverlap = (displayIw: number, minX: number, maxX: number, maxSegments: number) => {
+  const min = Math.floor(minX);
+  const max = Math.floor(maxX);
+  const digits = Math.max(String(min).length, String(max).length, 1);
+
+  // font-size ~11px; average digit ~7px including spacing
+  const approxCharPx = 7;
+  const labelPx = digits * approxCharPx + 18; // number + breathing room
+  const minSpacingPx = clamp(Math.ceil(labelPx + 14), 56, 140); // hard comfort bounds
+
+  const segsByWidth = Math.max(1, Math.floor(displayIw / minSpacingPx));
+  return clamp(Math.min(maxSegments, segsByWidth), 1, Math.max(1, maxSegments));
+};
+
 const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
   points,
   width = 720,
@@ -158,6 +179,10 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
 }) => {
   const padding = defaultPadding;
   const wrapRef = React.useRef<HTMLDivElement | null>(null);
+
+  // IMPORTANT:
+  // Even when autoWidth=false, the SVG is still displayed at container width via CSS width:100%,
+  // so we ALWAYS measure container width for tick-density math (prevents mobile overlap).
   const [measuredW, setMeasuredW] = React.useState<number>(width);
 
   // ----- Engine glue — fall back to globals if props not provided -----
@@ -184,22 +209,28 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
   // ----- Live series state -----
   const [livePts, setLivePts] = React.useState<KPricePoint[]>([]);
   const lastPulseRef = React.useRef<number | null>(null);
-  const lastPriceRef = React.useRef<number | null>(null); // track last price for consistent ticks
+  const lastPriceRef = React.useRef<number | null>(null);
   const [meta, setMeta] = React.useState<SigilMeta | null>(null);
 
-  // Auto-width using ResizeObserver (optional; client only)
+  // Always measure container width for mobile-safe tick density.
   React.useLayoutEffect(() => {
-    if (!autoWidth || !wrapRef.current) return;
+    if (!wrapRef.current) return;
+
+    const el = wrapRef.current;
+
+    const measureNow = () => {
+      const w = Math.floor(el.getBoundingClientRect().width || width);
+      if (w > 0) setMeasuredW(w);
+    };
+
+    measureNow();
+
     if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver((entries) => {
-      for (const e of entries) {
-        const w = Math.floor(e.contentRect.width || width);
-        if (w > 0) setMeasuredW(w);
-      }
-    });
-    ro.observe(wrapRef.current);
+
+    const ro = new ResizeObserver(() => measureNow());
+    ro.observe(el);
     return () => ro.disconnect();
-  }, [autoWidth, width]);
+  }, [width]);
 
   // Fetch issuance meta once
   React.useEffect(() => {
@@ -240,7 +271,7 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
             return { price: round2(Math.max(0.0001, lastPoint.usdPerPhi)), vol };
           }
         } catch {
-          // fall through to fallback
+          // fall through
         }
       }
 
@@ -283,7 +314,7 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, windowPoints, computeForPulse, meta, onTick, points]);
 
-  // Pulse-aligned scheduler — emits onTick EVERY breath
+  // Pulse-aligned scheduler — emits onTick every breath
   React.useEffect(() => {
     if (!live) return;
 
@@ -334,10 +365,14 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
     [live, livePts, points]
   );
 
-  // ---------- Dimensions ----------
+  // SVG coordinate width (layout). Display width may differ (CSS scales to container).
   const W = autoWidth ? measuredW : width;
   const iw = Math.max(10, W - padding.l - padding.r);
   const ih = Math.max(10, height - padding.t - padding.b);
+
+  // Display width (for label density / overlap safety)
+  const displayW = Math.max(10, measuredW || width);
+  const displayIw = Math.max(10, displayW - padding.l - padding.r);
 
   // Bounds + VWAP-ish
   const { minX, maxX, minY, maxY, vwap } = React.useMemo(() => {
@@ -359,17 +394,19 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
     return { minX: minXv, maxX: maxXv, minY: Math.max(0, minYv - pad), maxY: maxYv + pad, vwap: vwapVal };
   }, [pts]);
 
-  // Scales
+  // ✅ Dynamic X tick density — NEVER OVERLAPS on mobile (gridXTicks is the MAX)
+  const xSegments = React.useMemo(() => {
+    return computeXSegmentsNoOverlap(displayIw, minX, maxX, Math.max(1, gridXTicks));
+  }, [displayIw, minX, maxX, gridXTicks]);
+
+  // Scales (SVG coordinate space)
   const nx = React.useCallback((x: number) => (maxX === minX ? 0 : (x - minX) / (maxX - minX)), [minX, maxX]);
   const ny = React.useCallback((y: number) => (maxY === minY ? 1 : 1 - (y - minY) / (maxY - minY)), [minY, maxY]);
   const sx = React.useCallback((x: number) => nx(x) * iw + padding.l, [nx, iw, padding.l]);
   const sy = React.useCallback((y: number) => ny(y) * ih + padding.t, [ny, ih, padding.t]);
 
   // Screen points
-  const screenPts = React.useMemo(
-    () => pts.map((pt: KPricePoint) => ({ x: sx(pt.p), y: sy(pt.price) })),
-    [pts, sx, sy]
-  );
+  const screenPts = React.useMemo(() => pts.map((pt: KPricePoint) => ({ x: sx(pt.p), y: sy(pt.price) })), [pts, sx, sy]);
 
   // Smoothed path (Catmull-Rom to Bezier)
   const path = React.useMemo(() => {
@@ -451,11 +488,10 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
   const change = last && prev ? round2(last.price - prev.price) : 0;
   const changePct = last && prev && prev.price !== 0 ? (change / prev.price) * 100 : 0;
 
-  // ✅ Tooltip placement (FIX: flip left near right edge + clamp inside plot)
+  // Tooltip placement (flip + clamp)
   const tip = React.useMemo(() => {
     if (!hover) return null;
 
-    // keep exactly your look/size
     const tipW = 184;
     const tipH = 36;
     const gap = 10;
@@ -466,24 +502,19 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
     const plotTop = padding.t;
     const plotBot = padding.t + ih;
 
-    // Prefer right, but flip to left if it would overflow the plot area
     let x = hover.x + gap;
-    const wouldOverflowRight = x + tipW > plotRight;
-    if (wouldOverflowRight) x = hover.x - gap - tipW;
+    if (x + tipW > plotRight) x = hover.x - gap - tipW;
 
-    // Clamp horizontally so it never gets cut off
-    const minX = plotLeft + pad;
-    const maxX = Math.max(minX, plotRight - tipW - pad);
-    x = clamp(x, minX, maxX);
+    const minXc = plotLeft + pad;
+    const maxXc = Math.max(minXc, plotRight - tipW - pad);
+    x = clamp(x, minXc, maxXc);
 
-    // Vertical: prefer slightly above centerline, else below; clamp
     let y = hover.y - 22;
-    const wouldOverflowTop = y < plotTop + pad;
-    if (wouldOverflowTop) y = hover.y + gap;
+    if (y < plotTop + pad) y = hover.y + gap;
 
-    const minY = plotTop + pad;
-    const maxY = Math.max(minY, plotBot - tipH - pad);
-    y = clamp(y, minY, maxY);
+    const minYc = plotTop + pad;
+    const maxYc = Math.max(minYc, plotBot - tipH - pad);
+    y = clamp(y, minYc, maxYc);
 
     return { x, y, w: tipW, h: tipH, textX: x + 8, textY: y + 20 };
   }, [hover, iw, ih, padding.l, padding.t]);
@@ -515,7 +546,6 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
         aria-label="Live Φ value in fiat over Kai pulses"
       >
         <defs>
-          {/* Glow */}
           <filter id="kpc-glow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="4" result="coloredBlur" />
             <feMerge>
@@ -524,13 +554,11 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
             </feMerge>
           </filter>
 
-          {/* Gradient fill under line */}
           <linearGradient id="kpc-fill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="rgba(55,255,228,0.28)" />
             <stop offset="100%" stopColor="rgba(55,255,228,0.00)" />
           </linearGradient>
 
-          {/* VWAP band gradient */}
           <linearGradient id="kpc-band" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="rgba(167,139,250,0.12)" />
             <stop offset="100%" stopColor="rgba(55,255,228,0.12)" />
@@ -561,11 +589,12 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
           <>
             {/* Grid */}
             <g className="kpc-grid">
-              {Array.from({ length: Math.max(1, gridXTicks) + 1 }).map((_, i) => {
-                const v = minX + (i * (maxX - minX)) / Math.max(1, gridXTicks);
+              {Array.from({ length: xSegments + 1 }).map((_, i) => {
+                const v = minX + (i * (maxX - minX)) / Math.max(1, xSegments);
                 const x = sx(v);
                 return <line key={`x-${i}`} x1={x} x2={x} y1={padding.t} y2={padding.t + ih} className="kpc-gridline" />;
               })}
+
               {Array.from({ length: Math.max(1, gridYTicks) + 1 }).map((_, i) => {
                 const v = minY + (i * (maxY - minY)) / Math.max(1, gridYTicks);
                 const y = sy(v);
@@ -602,8 +631,8 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
 
             {/* Axes labels */}
             <g className="kpc-axes">
-              {Array.from({ length: Math.max(1, gridXTicks) + 1 }).map((_, i) => {
-                const v = minX + (i * (maxX - minX)) / Math.max(1, gridXTicks);
+              {Array.from({ length: xSegments + 1 }).map((_, i) => {
+                const v = minX + (i * (maxX - minX)) / Math.max(1, xSegments);
                 const x = sx(v);
                 return (
                   <text key={`xl-${i}`} x={x} y={padding.t + ih + 22} textAnchor="middle" className="kpc-axis-text">
@@ -630,7 +659,6 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
             {last && (
               <g className="kpc-last-tag">
                 <circle cx={sx(last.p)} cy={sy(last.price)} r="4.5" className="kpc-dot" />
-                {/* badge */}
                 <rect x={padding.l + iw - 158} y={sy(last.price) - 12} width="150" height="24" rx="12" className="kpc-badge" />
                 <text x={padding.l + iw - 150} y={sy(last.price) + 5} className="kpc-badge-text">
                   {formatter(last.price)} {change >= 0 ? "▲" : "▼"} {Math.abs(changePct).toFixed(2)}%
@@ -643,8 +671,6 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
               <g className="kpc-xhair">
                 <line x1={hover.x} x2={hover.x} y1={padding.t} y2={padding.t + ih} className="kpc-xhair-line" />
                 <line x1={padding.l} x2={padding.l + iw} y1={hover.y} y2={hover.y} className="kpc-xhair-line" />
-
-                {/* ✅ Tooltip (flips left + clamps so it never cuts off) */}
                 <rect x={tip.x} y={tip.y} width={tip.w} height={tip.h} rx="8" ry="8" className="kpc-tip" />
                 <text x={tip.textX} y={tip.textY} className="kpc-tip-text">
                   pulse {Math.floor(hover.p)} • {formatter(hover.price)}
