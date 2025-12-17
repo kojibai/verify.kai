@@ -22,12 +22,21 @@
 // ✅ Hook ordering + refs cleaned (prevents subtle StrictMode/HMR weirdness)
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { FeedPostPayload } from "../utils/feedPayload";
 import {
   extractPayloadFromUrl,
   resolveLineageBackwards,
   getOriginUrl,
 } from "../utils/sigilUrl";
 import type { SigilSharePayloadLoose } from "../utils/sigilUrl";
+import { normalizeClaimGlyphRef, normalizeUsername } from "../utils/usernameClaim";
+import {
+  getUsernameClaimRegistry,
+  ingestUsernameClaimGlyph,
+  subscribeUsernameClaimRegistry,
+  type UsernameClaimRegistry,
+} from "../utils/usernameClaimRegistry";
+import { USERNAME_CLAIM_KIND, type UsernameClaimPayload } from "../types/usernameClaim";
 import "./SigilExplorer.css";
 
 
@@ -911,6 +920,9 @@ function upsertRegistryPayload(
   payload: SigilSharePayloadLoose,
 ): boolean {
   const key = canonicalizeUrl(url);
+
+  ingestUsernameClaimEvidence(key, payload);
+
   const prev = memoryRegistry.get(key);
   if (!prev) {
     memoryRegistry.set(key, payload);
@@ -936,6 +948,55 @@ function upsertRegistryPayload(
   }
 
   return false;
+}
+
+function ingestUsernameClaimEvidence(url: string, payload: SigilSharePayloadLoose): void {
+  const feed = (payload as { feed?: unknown }).feed as FeedPostPayload | undefined;
+  if (!feed) return;
+
+  const claimEvidence = (feed as FeedPostPayload & { usernameClaim?: unknown }).usernameClaim;
+
+  const normalizedFromClaim = claimEvidence
+    ? normalizeUsername(
+        (claimEvidence as { payload?: { normalized?: string; username?: string } }).payload
+          ?.normalized ||
+          (claimEvidence as { payload?: { normalized?: string; username?: string } }).payload
+            ?.username ||
+          "",
+      )
+    : "";
+
+  const normalizedFromAuthor = normalizeUsername(feed.author ?? "");
+  const normalizedUsername = normalizedFromClaim || normalizedFromAuthor;
+
+  if (!normalizedUsername) return;
+  if (!claimEvidence) return;
+
+  const claimHash = normalizeClaimGlyphRef((claimEvidence as { hash?: string }).hash ?? "");
+  const claimUrl = (claimEvidence as { url?: string }).url?.trim() || url;
+
+  if (!claimHash || !claimUrl) return;
+
+  const payloadObj = (claimEvidence as { payload?: unknown }).payload as
+    | UsernameClaimPayload
+    | undefined;
+
+  if (!payloadObj || payloadObj.kind !== USERNAME_CLAIM_KIND) return;
+
+  const normalizedPayloadUser =
+    normalizeUsername(payloadObj.normalized || payloadObj.username || "") || normalizedUsername;
+
+  if (normalizedPayloadUser !== normalizedUsername) return;
+
+  const ownerHint =
+    (claimEvidence as { ownerHint?: string | null }).ownerHint ?? payloadObj.ownerHint ?? null;
+
+  ingestUsernameClaimGlyph({
+    hash: claimHash,
+    url: canonicalizeUrl(claimUrl),
+    payload: { ...payloadObj, normalized: normalizedPayloadUser },
+    ownerHint,
+  });
 }
 
 function ensureUrlInRegistry(url: string): boolean {
@@ -1640,13 +1701,53 @@ function buildForest(reg: Registry): SigilNode[] {
 /* ─────────────────────────────────────────────────────────────────────
  *  Memory Stream detail extraction (per content node)
  *  ───────────────────────────────────────────────────────────────────── */
-function buildDetailEntries(node: SigilNode): DetailEntry[] {
+function buildDetailEntries(
+  node: SigilNode,
+  usernameClaims: UsernameClaimRegistry,
+): DetailEntry[] {
   const record = node.payload as unknown as Record<string, unknown>;
   const entries: DetailEntry[] = [];
   const usedKeys = new Set<string>();
 
   const phiSelf = getPhiFromPayload(node.payload);
   if (phiSelf !== undefined) entries.push({ label: "This glyph Φ", value: `${formatPhi(phiSelf)} Φ` });
+
+  const feed = record.feed as FeedPostPayload | undefined;
+  const authorRaw =
+    typeof feed?.author === "string"
+      ? feed.author
+      : typeof record.author === "string"
+        ? record.author
+        : undefined;
+
+  const claimEvidence = feed ? (feed as FeedPostPayload & { usernameClaim?: unknown }).usernameClaim : undefined;
+  const normalizedFromClaim = claimEvidence
+    ? normalizeUsername(
+        (claimEvidence as { payload?: { normalized?: string; username?: string } }).payload?.normalized ||
+          (claimEvidence as { payload?: { normalized?: string; username?: string } }).payload?.username ||
+          "",
+      )
+    : "";
+  const normalizedFromAuthor = normalizeUsername(authorRaw ?? "");
+  const normalizedUsername = normalizedFromClaim || normalizedFromAuthor;
+
+  if (normalizedUsername) {
+    const claimEntry = usernameClaims[normalizedUsername];
+    const displayName =
+      typeof authorRaw === "string" && authorRaw.trim().length > 0
+        ? authorRaw.trim()
+        : `@${normalizedUsername}`;
+
+    if (claimEntry) {
+      entries.push({
+        label: "Username (claimed)",
+        value: `${displayName} → glyph ${short(claimEntry.claimHash, 10)}`,
+      });
+      entries.push({ label: "Claim glyph", value: browserViewUrl(claimEntry.claimUrl) });
+    } else {
+      entries.push({ label: "Username", value: displayName });
+    }
+  }
 
   const addFromKey = (key: string, label: string) => {
     const v = record[key];
@@ -1798,9 +1899,16 @@ type SigilTreeNodeProps = {
   expanded: ReadonlySet<string>;
   toggle: (id: string) => void;
   phiTotalsByPulse: ReadonlyMap<number, number>;
+  usernameClaims: UsernameClaimRegistry;
 };
 
-function SigilTreeNode({ node, expanded, toggle, phiTotalsByPulse }: SigilTreeNodeProps) {
+function SigilTreeNode({
+  node,
+  expanded,
+  toggle,
+  phiTotalsByPulse,
+  usernameClaims,
+}: SigilTreeNodeProps) {
   const open = expanded.has(node.id);
 
   const hash = parseHashFromUrl(node.url);
@@ -1811,7 +1919,7 @@ function SigilTreeNode({ node, expanded, toggle, phiTotalsByPulse }: SigilTreeNo
   const phiSentFromPulse = pulseKey != null ? phiTotalsByPulse.get(pulseKey) : undefined;
 
   const openHref = explorerOpenUrl(node.url);
-  const detailEntries = open ? buildDetailEntries(node) : [];
+  const detailEntries = open ? buildDetailEntries(node, usernameClaims) : [];
 
   return (
     <div className="node" style={chakraTintStyle(chakraDay)} data-chakra={String(chakraDay ?? "")}>
@@ -1888,6 +1996,7 @@ function SigilTreeNode({ node, expanded, toggle, phiTotalsByPulse }: SigilTreeNo
                   expanded={expanded}
                   toggle={toggle}
                   phiTotalsByPulse={phiTotalsByPulse}
+                  usernameClaims={usernameClaims}
                 />
               ))}
             </div>
@@ -1903,11 +2012,13 @@ function OriginPanel({
   expanded,
   toggle,
   phiTotalsByPulse,
+  usernameClaims,
 }: {
   root: SigilNode;
   expanded: ReadonlySet<string>;
   toggle: (id: string) => void;
   phiTotalsByPulse: ReadonlyMap<number, number>;
+  usernameClaims: UsernameClaimRegistry;
 }) {
   const count = useMemo(() => {
     let n = 0;
@@ -1967,6 +2078,7 @@ function OriginPanel({
                 expanded={expanded}
                 toggle={toggle}
                 phiTotalsByPulse={phiTotalsByPulse}
+                usernameClaims={usernameClaims}
               />
             ))}
           </div>
@@ -2079,6 +2191,9 @@ function ExplorerToolbar({
 const SigilExplorer: React.FC = () => {
   const [registryRev, setRegistryRev] = useState(0);
   const [lastAdded, setLastAdded] = useState<string | undefined>(undefined);
+  const [usernameClaims, setUsernameClaims] = useState<UsernameClaimRegistry>(() =>
+    getUsernameClaimRegistry(),
+  );
 
   const unmounted = useRef(false);
 
@@ -2111,6 +2226,24 @@ const SigilExplorer: React.FC = () => {
   const bump = useCallback(() => {
     if (unmounted.current) return;
     setRegistryRev((v) => v + 1);
+  }, []);
+
+  useEffect(() => {
+    return subscribeUsernameClaimRegistry((entry) => {
+      setUsernameClaims((prev) => {
+        const current = prev[entry.normalized];
+        if (
+          current &&
+          current.claimHash === entry.claimHash &&
+          current.claimUrl === entry.claimUrl &&
+          current.originHash === entry.originHash &&
+          current.ownerHint === entry.ownerHint
+        ) {
+          return prev;
+        }
+        return { ...prev, [entry.normalized]: entry };
+      });
+    });
   }, []);
 
   const forest = useMemo(() => buildForest(memoryRegistry), [registryRev]);
@@ -2585,6 +2718,7 @@ const SigilExplorer: React.FC = () => {
                   expanded={expanded}
                   toggle={toggle}
                   phiTotalsByPulse={phiTotalsByPulse}
+                  usernameClaims={usernameClaims}
                 />
               ))}
             </div>
