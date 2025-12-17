@@ -1,0 +1,428 @@
+/* src/pages/VerifyPage.css
+   ΦNet · Kai-Sigil Verifier Page
+   Atlantean Glass + Breath Shimmer (compositor-friendly)
+   ✅ No paint-heavy filter tweens
+   ✅ Mobile-safe, readable, legendary
+*/
+
+:root{
+  --v-bg0: rgba(6, 12, 16, 0.92);
+  --v-bg1: rgba(8, 18, 26, 0.78);
+  --v-ink: rgba(240, 255, 252, 0.92);
+  --v-ink-dim: rgba(240, 255, 252, 0.72);
+  --v-ink-faint: rgba(240, 255, 252, 0.52);
+
+  --v-aqua: rgba(55, 255, 228, 1);
+  --v-aqua-dim: rgba(55, 255, 228, 0.55);
+  --v-aqua-faint: rgba(55, 255, 228, 0.22);
+
+  --v-gold: rgba(255, 231, 160, 1);
+  --v-gold-dim: rgba(255, 231, 160, 0.55);
+  --v-gold-faint: rgba(255, 231, 160, 0.18);
+
+  --v-rose: rgba(255, 92, 140, 1);
+  --v-rose-dim: rgba(255, 92, 140, 0.55);
+  --v-rose-faint: rgba(255, 92, 140, 0.18);
+
+  --v-ok: rgba(0, 255, 160, 1);
+  --v-ok-dim: rgba(0, 255, 160, 0.22);
+
+  --v-bad: rgba(255, 80, 80, 1);
+  --v-bad-dim: rgba(255, 80, 80, 0.22);
+
+  --v-br: 18px;
+  --v-br2: 24px;
+
+  --v-pad: clamp(14px, 2.2vw, 22px);
+  --v-gap: clamp(12px, 1.8vw, 16px);
+
+  --v-border: rgba(255,255,255,0.12);
+  --v-border-strong: rgba(255,255,255,0.18);
+
+  --v-glass: rgba(255,255,255,0.06);
+  --v-glass-2: rgba(255,255,255,0.035);
+
+  --v-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --v-sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+
+  --v-breath: var(--breath-s, 5.236s);
+  --v-safe-top: env(safe-area-inset-top);
+  --v-safe-bot: env(safe-area-inset-bottom);
+  --v-safe-left: env(safe-area-inset-left);
+  --v-safe-right: env(safe-area-inset-right);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Page shell
+─────────────────────────────────────────────────────────────── */
+.verify-page{
+  position: relative;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding:
+    calc(var(--v-pad) + var(--v-safe-top))
+    calc(var(--v-pad) + var(--v-safe-right))
+    calc(var(--v-pad) + var(--v-safe-bot))
+    calc(var(--v-pad) + var(--v-safe-left));
+  color: var(--v-ink);
+  font-family: var(--v-sans);
+}
+
+.verify-page::before{
+  content:"";
+  position:absolute;
+  inset: 0;
+  pointer-events:none;
+  background:
+    radial-gradient(1200px 520px at 12% 0%,
+      rgba(55,255,228,0.18),
+      rgba(55,255,228,0.06) 40%,
+      rgba(0,0,0,0) 70%),
+    radial-gradient(980px 520px at 92% 6%,
+      rgba(255,231,160,0.14),
+      rgba(255,231,160,0.05) 45%,
+      rgba(0,0,0,0) 72%),
+    radial-gradient(900px 700px at 55% 110%,
+      rgba(120,180,255,0.10),
+      rgba(0,0,0,0) 66%),
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.00) 32%);
+  opacity: 1;
+}
+
+.verify-page::after{
+  content:"";
+  position:absolute;
+  inset: 0;
+  pointer-events:none;
+  background:
+    linear-gradient(90deg,
+      rgba(255,255,255,0.00),
+      rgba(255,255,255,0.06),
+      rgba(255,255,255,0.00));
+  opacity: 0.18;
+  transform: translateX(-45%);
+  animation: verify-scan var(--v-breath) ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes verify-scan{
+  0%{ transform: translateX(-48%); opacity: 0.12; }
+  50%{ transform: translateX(48%); opacity: 0.22; }
+  100%{ transform: translateX(-48%); opacity: 0.12; }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Hero
+─────────────────────────────────────────────────────────────── */
+.verify-hero{
+  position: relative;
+  border-radius: var(--v-br2);
+  padding: calc(var(--v-pad) + 2px);
+  border: 1px solid var(--v-border);
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+  overflow: hidden;
+}
+
+.verify-hero::before{
+  content:"";
+  position:absolute;
+  inset:-2px;
+  pointer-events:none;
+  background:
+    radial-gradient(800px 220px at 10% 0%,
+      rgba(55,255,228,0.18),
+      rgba(0,0,0,0) 62%),
+    radial-gradient(620px 220px at 92% 6%,
+      rgba(255,231,160,0.14),
+      rgba(0,0,0,0) 60%);
+  opacity: 0.9;
+}
+
+.verify-title{
+  position: relative;
+  margin: 0 0 8px 0;
+  letter-spacing: 0.02em;
+  font-weight: 800;
+  font-size: clamp(1.28rem, 2.5vw, 1.7rem);
+  text-shadow: 0 0 26px rgba(55,255,228,0.12);
+}
+
+.verify-subtitle{
+  position: relative;
+  margin: 0 0 12px 0;
+  color: var(--v-ink-dim);
+  line-height: 1.35;
+  max-width: 72ch;
+}
+
+.verify-slug{
+  position: relative;
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.18);
+}
+
+.verify-slug-label{
+  color: var(--v-ink-faint);
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+}
+
+.verify-slug-value{
+  font-family: var(--v-mono);
+  font-size: 0.92rem;
+  color: rgba(240,255,252,0.92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: min(92vw, 760px);
+  padding: 2px 0;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Layout
+─────────────────────────────────────────────────────────────── */
+.verify-main{
+  margin-top: var(--v-gap);
+  display: grid;
+  gap: var(--v-gap);
+}
+
+@media (min-width: 980px){
+  .verify-main{
+    grid-template-columns: 1.05fr 0.95fr;
+    align-items: start;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Cards (Atlantean glass)
+─────────────────────────────────────────────────────────────── */
+.verify-card{
+  position: relative;
+  border-radius: var(--v-br2);
+  padding: var(--v-pad);
+  border: 1px solid var(--v-border);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.018));
+  overflow: hidden;
+  box-shadow:
+    0 12px 34px rgba(0,0,0,0.34),
+    0 0 0 1px rgba(255,255,255,0.05) inset;
+}
+
+.verify-card::before{
+  content:"";
+  position:absolute;
+  inset: -1px;
+  pointer-events:none;
+  background:
+    radial-gradient(700px 260px at 18% 0%,
+      rgba(55,255,228,0.11),
+      rgba(0,0,0,0) 62%),
+    radial-gradient(640px 260px at 92% 12%,
+      rgba(255,231,160,0.10),
+      rgba(0,0,0,0) 62%),
+    radial-gradient(680px 420px at 30% 120%,
+      rgba(120,180,255,0.08),
+      rgba(0,0,0,0) 70%);
+  opacity: 0.9;
+}
+
+.verify-card-title{
+  position: relative;
+  margin: 0 0 10px 0;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  font-size: 1.05rem;
+  color: rgba(240,255,252,0.92);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Upload row + buttons
+─────────────────────────────────────────────────────────────── */
+.verify-upload-row{
+  position: relative;
+  display:flex;
+  gap: 10px;
+  align-items:center;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.verify-upload input{
+  display:none;
+}
+
+.verify-upload,
+.verify-btn{
+  position: relative;
+  border-radius: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: var(--v-ink);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 120ms ease, border-color 160ms ease, background 160ms ease;
+  will-change: transform;
+}
+
+.verify-upload:hover,
+.verify-btn:hover{
+  transform: translateY(-1px);
+  border-color: rgba(55,255,228,0.28);
+}
+
+.verify-upload:active,
+.verify-btn:active{
+  transform: translateY(0px);
+}
+
+.verify-btn{
+  padding: 10px 16px;
+  background:
+    linear-gradient(180deg, rgba(55,255,228,0.18), rgba(55,255,228,0.08));
+  border-color: rgba(55,255,228,0.22);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.22);
+}
+
+.verify-btn:disabled{
+  opacity: 0.6;
+  cursor: default;
+  transform: none;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Textarea (sealed SVG)
+─────────────────────────────────────────────────────────────── */
+.verify-textarea{
+  position: relative;
+  width: 100%;
+  min-height: 190px;
+  border-radius: 16px;
+  padding: 12px 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.22);
+  color: rgba(240,255,252,0.90);
+  font-family: var(--v-mono);
+  font-size: 0.86rem;
+  line-height: 1.35;
+  outline: none;
+  resize: vertical;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.04) inset;
+}
+
+.verify-textarea::placeholder{
+  color: rgba(240,255,252,0.45);
+}
+
+.verify-textarea:focus{
+  border-color: rgba(55,255,228,0.30);
+  box-shadow:
+    0 0 0 1px rgba(55,255,228,0.10) inset,
+    0 0 0 4px rgba(55,255,228,0.10);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Status section
+─────────────────────────────────────────────────────────────── */
+.verify-status{
+  position: relative;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.16);
+}
+
+.verify-muted{
+  margin: 0;
+  color: var(--v-ink-dim);
+}
+
+.verify-badge{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+}
+
+.verify-badge--ok{
+  border-color: rgba(0,255,160,0.28);
+  background: linear-gradient(180deg, rgba(0,255,160,0.14), rgba(0,255,160,0.06));
+  box-shadow: 0 0 0 4px rgba(0,255,160,0.08);
+}
+
+.verify-badge--fail{
+  border-color: rgba(255,80,80,0.28);
+  background: linear-gradient(180deg, rgba(255,80,80,0.14), rgba(255,80,80,0.06));
+  box-shadow: 0 0 0 4px rgba(255,80,80,0.08);
+}
+
+.verify-line{
+  margin: 0 0 10px 0;
+  color: rgba(240,255,252,0.88);
+}
+
+.verify-line code{
+  font-family: var(--v-mono);
+  font-size: 0.92em;
+  padding: 2px 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.20);
+}
+
+.verify-checks{
+  margin: 8px 0 0 18px;
+  padding: 0;
+  color: rgba(240,255,252,0.82);
+}
+
+.verify-checks li{
+  margin: 6px 0;
+}
+
+.verify-checks strong{
+  color: rgba(240,255,252,0.95);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Make VerifierFrame look like it belongs (light touch)
+   (VerifierFrame.css still owns internals; this just aligns spacing)
+─────────────────────────────────────────────────────────────── */
+.verify-card [data-role="verifier-frame"]{
+  margin: 0;
+  border-radius: 20px;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Reduced motion
+─────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce){
+  .verify-page::after{
+    animation: none;
+    opacity: 0.12;
+    transform: none;
+  }
+  .verify-upload,
+  .verify-btn{
+    transition: none;
+  }
+}

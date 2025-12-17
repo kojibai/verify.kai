@@ -3,14 +3,12 @@
 
 /**
  * FeedCard — Sigil-Glyph Capsule Renderer
- * v4.9.5 — STREAM TOKEN CANON (t=) + ORIGIN v→t FIX IN REPLIES
+ * v4.9.4 — STREAM TOKEN CANON (t=) + NO /stream/p OUTPUT + v→t MIGRATION
  *
  * CORE FIXES:
  * ✅ Stream links NEVER output /stream/p/<token> anymore
  * ✅ Token links ALWAYS output as /stream#t=<token> (hash-based = safest for very long tokens)
- * ✅ Any legacy token links using v=<LONG_TOKEN> are normalized → t=
- * ✅ FIX: thread “Origin” (especially for long-token origins) now always normalizes v=<token> → t=<token>
- *    (and will also look inside the payload for a token when the URL doesn’t carry it)
+ * ✅ Any legacy token links using v=<LONG_TOKEN> are normalized → t= (but ignores v=2 / v=1 / short numeric versions)
  *
  * KEEP (same behavior + same look/classes):
  * ✅ Replies no longer cause the Origin to appear again as separate feed items
@@ -162,7 +160,7 @@ function normalizeToken(raw: string): string {
 
   if (t.includes(" ")) t = t.replaceAll(" ", "+");
 
-  // base64 -> base64url (keeps '.' if JWT-like)
+  // base64 -> base64url
   if (/[+/=]/.test(t)) {
     t = t.replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
   }
@@ -170,23 +168,8 @@ function normalizeToken(raw: string): string {
   return stripEdgePunct(t);
 }
 
-/**
- * Token detector (supports base64url and JWT-like dot-separated base64url chunks).
- * MUST ignore numeric version markers like v=2.
- */
-function looksLikeToken(sRaw: string): boolean {
-  const s = normalizeToken(sRaw);
-  if (!s) return false;
-  if (/^\d{1,4}$/.test(s)) return false;
-  if (s === MEM_V) return false;
-
-  // base64url-ish
-  if (/^[A-Za-z0-9_-]{16,}$/.test(s)) return true;
-
-  // JWT-like: <b64url>.<b64url>(.<b64url>)?
-  if (/^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(\.[A-Za-z0-9_-]{8,})?$/.test(s)) return true;
-
-  return false;
+function isLikelyToken(s: string): boolean {
+  return /^[A-Za-z0-9_-]{16,}$/.test(s);
 }
 
 function baseRootForLinks(): string {
@@ -260,16 +243,12 @@ function extractFromPath(pathname: string): string | null {
   return null;
 }
 
-function paramGetAny(p: URLSearchParams, key: string): string | null {
-  return p.get(key) ?? p.get(key.toUpperCase());
-}
-
 /**
  * Token extraction candidates:
  * - Looks for t/p/token/capsule in hash or query
  * - ALSO migrates legacy v=<LONG_TOKEN> → t= (but ignores v=2 / v=1 / short numeric versioning)
  * - Also checks path patterns (/stream/p, /p~, /p/)
- * - Also checks nested add= urls once (depth < 1)
+ * - Also checks nested add= urls once
  */
 function extractTokenCandidates(rawUrl: string, depth = 0): string[] {
   const out: string[] = [];
@@ -277,13 +256,13 @@ function extractTokenCandidates(rawUrl: string, depth = 0): string[] {
     if (!v) return;
     const tok = normalizeToken(v);
     if (!tok) return;
-    if (!looksLikeToken(tok)) return;
+    if (!isLikelyToken(tok)) return;
     if (!out.includes(tok)) out.push(tok);
   };
 
   const raw = stripEdgePunct(rawUrl);
 
-  if (looksLikeToken(raw)) push(raw);
+  if (isLikelyToken(raw)) push(raw);
 
   const u = tryParseUrl(raw);
   if (!u) return out;
@@ -294,20 +273,20 @@ function extractTokenCandidates(rawUrl: string, depth = 0): string[] {
 
   const keys = ["t", "p", "token", "capsule"] as const;
   for (const k of keys) {
-    push(paramGetAny(hash, k));
-    push(paramGetAny(search, k));
+    push(hash.get(k));
+    push(search.get(k));
   }
 
   // v=<token> migration (only if it looks like a token and is NOT a version marker)
-  const vHash = paramGetAny(hash, "v");
-  const vSearch = paramGetAny(search, "v");
+  const vHash = hash.get("v");
+  const vSearch = search.get("v");
   for (const vv of [vHash, vSearch]) {
     if (!vv) continue;
     const candidate = normalizeToken(vv);
     // ignore numeric/small versions (v=2 etc)
     if (/^\d{1,4}$/.test(candidate)) continue;
     if (candidate === MEM_V) continue;
-    if (looksLikeToken(candidate)) push(candidate);
+    push(candidate);
   }
 
   push(extractFromPath(u.pathname));
@@ -332,24 +311,6 @@ function extractTokenCandidates(rawUrl: string, depth = 0): string[] {
 }
 
 /**
- * If URL params contain legacy v=<LONG_TOKEN> (not version),
- * migrate it into t= and remove v=.
- */
-function migrateLegacyVParamToT(p: URLSearchParams): void {
-  if (p.get("t") || p.get("p") || p.get("token") || p.get("capsule")) return;
-
-  const vv = paramGetAny(p, "v");
-  if (!vv) return;
-
-  const candidate = normalizeToken(vv);
-  if (!looksLikeToken(candidate)) return;
-
-  p.set("t", candidate);
-  p.delete("v");
-  p.delete("V");
-}
-
-/**
  * CANON: token open URL is always hash-based:
  *   /stream#t=<token>
  */
@@ -360,13 +321,13 @@ function makeStreamOpenUrlFromToken(tokenRaw: string): string {
 }
 
 /**
- * Best-effort “moment” URL (URL-only; does NOT inspect nested add=):
+ * Best-effort “moment” URL:
  * - If a token exists in the input (including legacy /stream/p, or legacy v= token), return /stream#t=...
  * - Otherwise null.
  */
 function makeStreamMomentUrl(rawUrl: string): string | null {
   const raw = stripEdgePunct(rawUrl);
-  const tok = extractTokenCandidates(raw, 1)[0];
+  const tok = extractTokenCandidates(raw)[0];
   return tok ? makeStreamOpenUrlFromToken(tok) : null;
 }
 
@@ -386,17 +347,13 @@ function normalizeResolvedUrlForBrowser(rawUrl: string): string {
     const sp = u.searchParams;
 
     // If it is a memory stream (root present), normalize to /stream#... (hash-only)
-    const hasRoot = Boolean(paramGetAny(hp, "root") || paramGetAny(sp, "root"));
+    const hasRoot = Boolean(hp.get("root") || sp.get("root"));
     if (hasRoot) {
       const base = streamBaseHref();
       const outUrl = new URL(base || STREAM_PATH, originForParse());
       const p = new URLSearchParams();
       for (const [k, v] of hp.entries()) p.append(k, v);
       for (const [k, v] of sp.entries()) p.append(k, v);
-
-      // 🔥 migrate legacy v=<LONG_TOKEN> → t= inside hash/query normalization
-      migrateLegacyVParamToT(p);
-
       outUrl.hash = p.toString() ? `#${p.toString()}` : "";
       outUrl.search = "";
       return outUrl.toString();
@@ -405,7 +362,7 @@ function normalizeResolvedUrlForBrowser(rawUrl: string): string {
 
   if (isSPayloadUrl(raw)) return raw;
 
-  const tok = extractTokenCandidates(raw, 1)[0] ?? extractTokenCandidates(raw)[0];
+  const tok = extractTokenCandidates(raw)[0];
   return tok ? makeStreamOpenUrlFromToken(tok) : raw;
 }
 
@@ -430,8 +387,6 @@ function buildDecodeUrlCandidates(token: string): string[] {
     // legacy v= token input
     `${base}/stream#v=${t}`,
     `${base}/stream?v=${t}`,
-    `${base}/stream#V=${t}`,
-    `${base}/stream?V=${t}`,
   ];
 }
 
@@ -863,7 +818,7 @@ function extractAddChain(rawUrl: string): string[] {
       continue;
     }
 
-    const tok = extractTokenCandidates(v, 1)[0] ?? extractTokenCandidates(v)[0];
+    const tok = extractTokenCandidates(v)[0];
     if (tok) {
       out.push(makeStreamOpenUrlFromToken(tok));
       continue;
@@ -888,7 +843,7 @@ function extractRootRef(rawUrl: string): string | null {
   const hp = new URLSearchParams(hashStr);
   const sp = u.searchParams;
 
-  let r = paramGetAny(hp, "root") ?? paramGetAny(sp, "root");
+  let r = hp.get("root") ?? sp.get("root");
   if (!r) return null;
 
   r = stripEdgePunct(r);
@@ -917,7 +872,7 @@ function extractSegMeta(rawUrl: string): SegMeta | null {
   const hp = new URLSearchParams(hashStr);
   const sp = u.searchParams;
 
-  const s = paramGetAny(hp, "seg") ?? paramGetAny(sp, "seg");
+  const s = hp.get("seg") ?? sp.get("seg");
   if (!s) return null;
 
   let v = stripEdgePunct(s);
@@ -948,11 +903,11 @@ function normalizeInternalRefString(raw: string): string | null {
       const hashStr = u.hash && u.hash.startsWith("#") ? u.hash.slice(1) : "";
       const hp = new URLSearchParams(hashStr);
       const sp = u.searchParams;
-      if (paramGetAny(hp, "root") || paramGetAny(sp, "root")) return normalizeResolvedUrlForBrowser(s);
+      if (hp.get("root") || sp.get("root")) return normalizeResolvedUrlForBrowser(s);
     }
   }
 
-  const tok = extractTokenCandidates(s, 1)[0] ?? extractTokenCandidates(s)[0];
+  const tok = extractTokenCandidates(s)[0];
   if (tok) return makeStreamOpenUrlFromToken(tok);
 
   return null;
@@ -1164,7 +1119,7 @@ function threadSeenKey(rawRef: string, payloadMaybe?: unknown): string {
     return `k:${fnv1a64Hex(ref)}`;
   }
 
-  const tok = extractTokenCandidates(ref, 1)[0] ?? extractTokenCandidates(ref)[0];
+  const tok = extractTokenCandidates(ref)[0];
   if (tok) return `t:${normalizeToken(tok)}`;
 
   return `u:${normalizeResolvedUrlForBrowser(ref)}`;
@@ -1700,8 +1655,8 @@ function computeSigilSUrl(rawInputUrl: string, capsule: Capsule | null): string 
   const sigilId = isRecord(capsule) ? (capsule as Record<string, unknown>).sigilId : undefined;
   if (typeof sigilId === "string" && sigilId.trim()) return makeSigilSUrlFromId(sigilId);
 
-  const tok = extractTokenCandidates(raw, 1)[0] ?? extractTokenCandidates(raw)[0];
-  if (tok && /^[0-9a-fA-F]{64}$/.test(tok)) return makeSigilSUrlFromId(tok);
+  const tok = extractTokenCandidates(raw)[0];
+  if (tok) return makeSigilSUrlFromId(tok);
 
   return null;
 }
@@ -1737,7 +1692,7 @@ function registryScore(raw: string): number {
 }
 
 function keyForRegistryUrl(raw: string): string {
-  const tok = extractTokenCandidates(raw, 1)[0] ?? extractTokenCandidates(raw)[0];
+  const tok = extractTokenCandidates(raw)[0];
   if (tok) return `t:${normalizeToken(tok)}`;
 
   const rootRef = extractRootRef(raw);
@@ -2041,50 +1996,6 @@ function readUserIdLoose(v: unknown): unknown {
   return d;
 }
 
-function extractTokenFromPayloadLoose(v: unknown, depth = 0): string | null {
-  if (!v || depth > 4) return null;
-
-  if (typeof v === "string") {
-    const t = normalizeToken(v);
-    return looksLikeToken(t) ? t : null;
-  }
-
-  if (!isRecord(v)) return null;
-
-  // direct token-ish keys
-  const direct =
-    readStringField(v, ["t", "token", "streamToken", "capsuleToken", "momentToken"]) ??
-    null;
-  if (direct) {
-    const t = normalizeToken(direct);
-    if (looksLikeToken(t)) return t;
-  }
-
-  // legacy v=<token> stored in data (not version)
-  const legacyV = readStringField(v, ["v", "V"]) ?? null;
-  if (legacyV) {
-    const t = normalizeToken(legacyV);
-    if (looksLikeToken(t)) return t;
-  }
-
-  // ids that may function as tokens
-  const idLike =
-    readStringField(v, ["id", "contentId", "cid", "hash", "contentHash"]) ?? null;
-  if (idLike) {
-    const t = normalizeToken(idLike);
-    if (looksLikeToken(t)) return t;
-  }
-
-  // recurse common wrappers
-  for (const k of ["data", "capsule", "payload", "post", "message", "share", "reaction"] as const) {
-    const inner = (v as Record<string, unknown>)[k];
-    const t = extractTokenFromPayloadLoose(inner, depth + 1);
-    if (t) return t;
-  }
-
-  return null;
-}
-
 function parseInputKind(rawUrl: string): InputKind {
   const raw = stripEdgePunct(rawUrl);
 
@@ -2347,11 +2258,8 @@ const FeedCardThread: React.FC<ThreadProps> = ({
     };
 
     for (const u of pool) {
-      const canon0 = canonicalizeForStorage(u);
-      if (!canon0) continue;
-
-      // 🔥 ensure v=<token> becomes /stream#t=<token> BEFORE keying/scoring
-      const canon = normalizeResolvedUrlForBrowser(canon0);
+      const canon = canonicalizeForStorage(u);
+      if (!canon) continue;
 
       const candKey = originKeyFromUrlLike(canon);
       if (!candKey) continue;
@@ -2379,14 +2287,13 @@ const FeedCardThread: React.FC<ThreadProps> = ({
 
       const prior = bestByKey.get(candKey);
       if (!prior || sc > prior.score) {
-        // normalize candidate to t= canon if token exists (and strip legacy v= token)
-        const normalized = normalizeResolvedUrlForBrowser(makeStreamMomentUrl(canon) ?? canon);
+        // normalize candidate to t= canon if token exists
+        const normalized = makeStreamMomentUrl(canon) ?? canon;
         bestByKey.set(candKey, { url: normalized, score: sc, pulse: p });
       }
     }
 
-    const originPickedRaw = bestByKey.get(originKey)?.url ?? originHref;
-    const originPicked = normalizeResolvedUrlForBrowser(originPickedRaw);
+    const originPicked = bestByKey.get(originKey)?.url ?? originHref;
     const originPulse = (() => {
       const d = decodeSigilUrlSmart(originPicked);
       return d.decoded.ok ? readPulseLoose(d.decoded.data) : 0;
@@ -2399,7 +2306,7 @@ const FeedCardThread: React.FC<ThreadProps> = ({
       if (k === originKey) continue;
       if (k === selfThreadKey) continue;
       if (isSPayloadUrl(v.url)) continue;
-      replies.push({ key: k, url: normalizeResolvedUrlForBrowser(v.url), pulse: v.pulse });
+      replies.push({ key: k, url: v.url, pulse: v.pulse });
     }
 
     replies.sort((a, b) => (b.pulse ?? 0) - (a.pulse ?? 0));
@@ -2489,15 +2396,10 @@ const FeedCardThread: React.FC<ThreadProps> = ({
   const hasArchives = rememberPack.archives.length > 0;
 
   // ✅ token-canon moment stream for this node (NO /stream/p; NO v= token)
-  // Now also checks the payload for an embedded token so Origin-in-replies can normalize to t=
-  const momentStreamUrl = useMemo(() => {
-    const tok =
-      extractTokenCandidates(url, 1)[0] ??
-      extractTokenCandidates(node.openUrl, 1)[0] ??
-      (nodeOk && nodeStorePayload ? extractTokenFromPayloadLoose(nodeStorePayload) : null);
-
-    return tok ? makeStreamOpenUrlFromToken(tok) : null;
-  }, [url, node.openUrl, nodeOk, nodeStorePayload]);
+  const momentStreamUrl = useMemo(
+    () => makeStreamMomentUrl(url) ?? makeStreamMomentUrl(node.openUrl),
+    [url, node.openUrl],
+  );
 
   const v3Derived = useMemo(
     () => deriveV3PostLike(capsuleForSUrl, nodeOk ? nodeResolved!.dataRaw : null),

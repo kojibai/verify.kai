@@ -3,10 +3,15 @@
 
 /**
  * MultiShareDispatcher — Connected broadcast + manual share hub
- * v1.4 — FIX: remove setState-in-effect cascade by deriving selection from targets
- *        - Keeps only user overrides in state
- *        - Newly connected platforms default to selected (true) unless user overrides
- *        - Disconnected platforms always resolve to false
+ * v1.5 — FIX: Share-step proof capsule is now canonical
+ *        - shareMetadata ALWAYS includes a non-empty verifierUrl
+ *        - chakraDay is normalized to canonical ChakraDay labels (e.g., "Third Eye", "Solar Plexus")
+ *        - SocialConnector (manual share + copy-proof) now receives the corrected proof capsule
+ *
+ * Guarantees:
+ * ✅ metadata.verifierUrl is never null/empty (computed if missing)
+ * ✅ metadata.chakraDay is normalized (never "ThirdEye"/"Solar")
+ * ✅ Captions always use the same proof URL shown/copied
  */
 
 import { useMemo, useState } from "react";
@@ -17,6 +22,9 @@ import type { EmbeddedMediaResult } from "./SignatureEmbedder";
 import SocialConnector from "./SocialConnector";
 import type { SocialMediaPayload, SocialPlatform } from "./SocialConnector.shared";
 
+import { buildVerifierUrl, normalizeChakraDay } from "./verifierProof";
+import type { ChakraDay } from "../../utils/kai_pulse";
+
 import "./styles/MultiShareDispatcher.css";
 
 /* -------------------------------------------------------------------------- */
@@ -26,21 +34,32 @@ import "./styles/MultiShareDispatcher.css";
 /** Platforms we can broadcast to via backend /api/post/:platform */
 type BroadcastPlatform = "x" | "ig" | "tiktok" | "threads";
 
-export interface MultiShareDispatcherProps {
+export type MultiShareDispatcherProps = Readonly<{
   media: EmbeddedMediaResult;
+  /**
+   * Optional canonical proof capsule from the flow (preferred).
+   * If provided, it overrides any stale/partial fields in media.metadata.
+   */
+  proof?: Readonly<{
+    pulse: number;
+    kaiSignature: string;
+    phiKey: string;
+    chakraDay?: ChakraDay;
+    verifierUrl?: string;
+  }>;
   onComplete: (result: { platform: BroadcastPlatform; link: string }[]) => void;
-}
+}>;
 
-interface PostResult {
+type PostResult = Readonly<{
   platform: BroadcastPlatform;
   link: string;
-}
+}>;
 
-interface PlatformStatus {
+type PlatformStatus = Readonly<{
   platform: BroadcastPlatform;
   label: string;
   handle?: string;
-}
+}>;
 
 type SigMetadata = EmbeddedMediaResult["metadata"];
 type ShareMetadata = NonNullable<SocialMediaPayload["metadata"]>;
@@ -55,6 +74,29 @@ function isBroadcastPlatform(k: string): k is BroadcastPlatform {
   return k === "x" || k === "ig" || k === "tiktok" || k === "threads";
 }
 
+function isHttpUrl(v: unknown): v is string {
+  return (
+    typeof v === "string" &&
+    v.trim().length > 0 &&
+    (v.startsWith("http://") || v.startsWith("https://"))
+  );
+}
+
+function readString(meta: Record<string, unknown>, key: string): string | undefined {
+  const v = meta[key];
+  return typeof v === "string" && v.trim().length > 0 ? v.trim() : undefined;
+}
+
+function readNumber(meta: Record<string, unknown>, key: string): number | undefined {
+  const v = meta[key];
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
 /* -------------------------------------------------------------------------- */
 /*                         Caption / Verify URL helpers                       */
 /* -------------------------------------------------------------------------- */
@@ -64,76 +106,77 @@ function ensureMaxLen(s: string, limit: number): string {
   return `${s.slice(0, Math.max(0, limit - 1))}…`;
 }
 
-function makeVerifyUrl(pulse: unknown, sig: unknown): string {
-  const p = typeof pulse === "number" ? String(pulse) : String(pulse ?? "");
-  const s =
-    typeof sig === "string" ? sig.slice(0, 10) : String(sig ?? "").slice(0, 10);
-  return `https://kai.ac/verify/${p}-${s}`;
-}
-
 /**
  * Sanitize KaiSig / KKS metadata into a primitive-only, share-safe bag.
  * - Only primitive fields (string | number | boolean | null | undefined)
- * - Ensures canonical keys exist when available:
+ * - Ensures canonical keys exist:
  *   pulse, kaiSignature, phiKey, chakraDay, verifierUrl, etc.
+ *
+ * IMPORTANT:
+ * - We ALWAYS guarantee verifierUrl is a non-empty http(s) URL by computing it if missing.
+ * - We normalize chakraDay using the canonical ChakraDay literals.
  */
-function sanitizeMetadataForSocial(meta: SigMetadata | undefined): ShareMetadata {
+function sanitizeMetadataForSocial(
+  meta: SigMetadata | undefined,
+  proof?: MultiShareDispatcherProps["proof"],
+): ShareMetadata {
   const result: ShareMetadata = {};
   const source = (meta ?? {}) as Record<string, unknown>;
 
-  // Pulse: always normalized to number for ShareMetadata
-  const pulseRaw = source["pulse"];
-  let pulseNumber: number | undefined;
-
-  if (typeof pulseRaw === "number") {
-    pulseNumber = pulseRaw;
-  } else if (typeof pulseRaw === "string") {
-    const parsed = Number(pulseRaw);
-    if (!Number.isNaN(parsed)) pulseNumber = parsed;
-  }
+  // ----- Pulse (prefer proof) -----
+  const pulseNumber =
+    typeof proof?.pulse === "number" && Number.isFinite(proof.pulse)
+      ? proof.pulse
+      : readNumber(source, "pulse");
 
   if (typeof pulseNumber === "number") result.pulse = pulseNumber;
 
-  // Kai Signature
-  const kaiSignatureRaw = source["kaiSignature"];
-  if (typeof kaiSignatureRaw === "string") result.kaiSignature = kaiSignatureRaw;
+  // ----- Kai Signature (prefer proof) -----
+  const kaiSignature =
+    typeof proof?.kaiSignature === "string" && proof.kaiSignature.trim().length > 0
+      ? proof.kaiSignature.trim()
+      : readString(source, "kaiSignature");
 
-  // PhiKey ID
-  const phiKeyRaw = source["phiKey"];
-  if (typeof phiKeyRaw === "string") result.phiKey = phiKeyRaw;
+  if (typeof kaiSignature === "string") result.kaiSignature = kaiSignature;
 
-  // Chakra day
-  const chakraDayRaw = source["chakraDay"];
-  if (typeof chakraDayRaw === "string") result.chakraDay = chakraDayRaw;
+  // ----- PhiKey (prefer proof) -----
+  const phiKey =
+    typeof proof?.phiKey === "string" && proof.phiKey.trim().length > 0
+      ? proof.phiKey.trim()
+      : readString(source, "phiKey");
 
-  // Verifier URL (must be a real http(s) URL)
-  const verifierUrlRaw = source["verifierUrl"];
-  if (
-    typeof verifierUrlRaw === "string" &&
-    (verifierUrlRaw.startsWith("http://") || verifierUrlRaw.startsWith("https://"))
-  ) {
-    result.verifierUrl = verifierUrlRaw;
-  }
+  if (typeof phiKey === "string") result.phiKey = phiKey;
+
+  // ----- Chakra day (prefer proof, normalize) -----
+  const chakraRaw =
+    typeof proof?.chakraDay === "string" && proof.chakraDay.trim().length > 0
+      ? proof.chakraDay
+      : readString(source, "chakraDay");
+
+  const chakraNormalized = normalizeChakraDay(chakraRaw);
+  if (typeof chakraNormalized === "string") result.chakraDay = chakraNormalized;
+
+  // ----- Verifier URL (prefer proof/meta, otherwise compute) -----
+  const metaVerifier = source["verifierUrl"];
+  const proofVerifier = proof?.verifierUrl;
+
+  let verifierUrl: string | undefined;
+  if (isHttpUrl(proofVerifier)) verifierUrl = proofVerifier.trim();
+  else if (isHttpUrl(metaVerifier)) verifierUrl = metaVerifier.trim();
+
+  // If still missing, compute deterministically (never null/empty)
+  const safePulse = typeof pulseNumber === "number" ? pulseNumber : 0;
+  const safeSig = typeof kaiSignature === "string" && kaiSignature.length > 0 ? kaiSignature : "unknown-signature";
+  if (!verifierUrl) verifierUrl = buildVerifierUrl(safePulse, safeSig);
+
+  result.verifierUrl = verifierUrl;
 
   // Copy a few extra well-known KKS fields (primitives only) for future-proofing.
-  const extraKeys = [
-    "beat",
-    "stepIndex",
-    "step",
-    "kaiTime",
-    "kksVersion",
-    "userPhiKey",
-    "timestamp",
-  ];
+  const extraKeys = ["beat", "stepIndex", "step", "kaiTime", "kksVersion", "userPhiKey", "timestamp"] as const;
 
   for (const key of extraKeys) {
     const value = source[key];
-    if (
-      typeof value === "string" ||
-      typeof value === "number" ||
-      typeof value === "boolean" ||
-      value === null
-    ) {
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null) {
       result[key] = value;
     }
   }
@@ -145,24 +188,16 @@ function sanitizeMetadataForSocial(meta: SigMetadata | undefined): ShareMetadata
  * Build a platform-specific caption.
  * Uses sanitized ShareMetadata so everything is deterministic and safe.
  */
-function buildCaption(
-  meta: ShareMetadata,
-  platform: BroadcastPlatform,
-  handle?: string,
-): string {
+function buildCaption(meta: ShareMetadata, platform: BroadcastPlatform, handle?: string): string {
   const pulseRaw = meta.pulse;
   const pulseDisplay = typeof pulseRaw === "number" ? pulseRaw : "∞";
 
   const fullSig = typeof meta.kaiSignature === "string" ? meta.kaiSignature : "";
   const shortSig = fullSig.slice(0, 10);
 
-  const phiKey =
-    typeof meta.phiKey === "string" && meta.phiKey.length > 0 ? meta.phiKey : "φK";
+  const phiKey = typeof meta.phiKey === "string" && meta.phiKey.length > 0 ? meta.phiKey : "φK";
 
-  const link =
-    typeof meta.verifierUrl === "string" && meta.verifierUrl.length > 0
-      ? meta.verifierUrl
-      : makeVerifyUrl(pulseRaw ?? "", fullSig);
+  const link = typeof meta.verifierUrl === "string" && meta.verifierUrl.length > 0 ? meta.verifierUrl : buildVerifierUrl(0, "unknown-signature");
 
   const baseHashtags = ["#KaiKlok", "#SigilProof", "#PostedByBreath"];
   const platformHashtags: Record<BroadcastPlatform, string[]> = {
@@ -217,10 +252,7 @@ function buildCaption(
 /*                          MultiShareDispatcher UI                           */
 /* -------------------------------------------------------------------------- */
 
-export default function MultiShareDispatcher({
-  media,
-  onComplete,
-}: MultiShareDispatcherProps): ReactElement {
+export default function MultiShareDispatcher({ media, proof, onComplete }: MultiShareDispatcherProps): ReactElement {
   const { session } = useSession();
 
   // Connected accounts → broadcast targets
@@ -248,10 +280,7 @@ export default function MultiShareDispatcher({
   }, [session?.connectedAccounts]);
 
   // Connected set (stable, derived)
-  const connected = useMemo(
-    () => new Set<BroadcastPlatform>(targets.map((t) => t.platform)),
-    [targets],
-  );
+  const connected = useMemo(() => new Set<BroadcastPlatform>(targets.map((t) => t.platform)), [targets]);
 
   /**
    * User overrides only.
@@ -289,44 +318,37 @@ export default function MultiShareDispatcher({
     });
   };
 
-  const [broadcastStatus, setBroadcastStatus] = useState<
-    "idle" | "posting" | "done"
-  >("idle");
-  const [broadcastResults, setBroadcastResults] = useState<PostResult[]>([]);
+  const [broadcastStatus, setBroadcastStatus] = useState<"idle" | "posting" | "done">("idle");
+  const [broadcastResults, setBroadcastResults] = useState<ReadonlyArray<PostResult>>([]);
 
   // Manual share tracking (from SocialConnector)
   const [manualShared, setManualShared] = useState(false);
-  const [lastManualPlatform, setLastManualPlatform] =
-    useState<SocialPlatform | null>(null);
+  const [lastManualPlatform, setLastManualPlatform] = useState<SocialPlatform | null>(null);
   const [manualError, setManualError] = useState<string | null>(null);
 
   /* ------------------------------------------------------------------------ */
   /*                   Canonical share metadata & payload                     */
   /* ------------------------------------------------------------------------ */
 
-  const shareMetadata = useMemo<ShareMetadata>(
-    () => sanitizeMetadataForSocial(media.metadata),
-    [media.metadata],
-  );
+  const shareMetadata = useMemo<ShareMetadata>(() => sanitizeMetadataForSocial(media.metadata, proof), [media.metadata, proof]);
 
-  const socialMedia = useMemo<SocialMediaPayload>(
-    () => ({
+  const socialMedia = useMemo<SocialMediaPayload>(() => {
+    const payloadType: SocialMediaPayload["type"] =
+      media.type === "video" ? "video" : "image";
+
+    return {
       content: media.content,
       filename: media.filename,
-      type: "image",
+      type: payloadType,
       metadata: shareMetadata,
-    }),
-    [media.content, media.filename, shareMetadata],
-  );
+    };
+  }, [media.content, media.filename, media.type, shareMetadata]);
 
   /* ------------------------------------------------------------------------ */
   /*                             Backend posting                              */
   /* ------------------------------------------------------------------------ */
 
-  async function postToPlatform(
-    platform: BroadcastPlatform,
-    handle?: string,
-  ): Promise<{ link: string }> {
+  async function postToPlatform(platform: BroadcastPlatform, handle?: string): Promise<{ link: string }> {
     const form = new FormData();
     form.append("file", media.content, media.filename);
 
@@ -359,10 +381,10 @@ export default function MultiShareDispatcher({
       selectedTargets.map(async (t) => {
         try {
           const result = await postToPlatform(t.platform, t.handle);
-          return { platform: t.platform, link: result.link };
+          return { platform: t.platform, link: result.link } as const;
         } catch (e) {
           console.warn(`Post to ${t.platform} failed:`, e);
-          return { platform: t.platform, link: "❌ Failed" };
+          return { platform: t.platform, link: "❌ Failed" } as const;
         }
       }),
     );
@@ -371,8 +393,7 @@ export default function MultiShareDispatcher({
     setBroadcastStatus("done");
   };
 
-  const allDisabled =
-    targets.length === 0 || !targets.some((t) => selection[t.platform]);
+  const allDisabled = targets.length === 0 || !targets.some((t) => selection[t.platform]);
   const canContinue = broadcastStatus === "done" || manualShared;
 
   /* ------------------------------------------------------------------------ */
@@ -384,16 +405,13 @@ export default function MultiShareDispatcher({
       <header className="kv-share-header">
         <h2 className="kv-share-title">Broadcast to connected socials</h2>
         <p className="kv-share-subtitle">
-          Post directly to linked accounts, then (or instead) use the manual share hub
-          below to reach any platform — every share carries your Kai-Sigil proof.
+          Post directly to linked accounts, then (or instead) use the manual share hub below to reach any platform — every share carries your Kai-Sigil proof.
         </p>
       </header>
 
       <section className="kv-share-broadcast">
         {targets.length === 0 ? (
-          <p className="kv-share-empty">
-            No platforms connected yet. You can still share manually below.
-          </p>
+          <p className="kv-share-empty">No platforms connected yet. You can still share manually below.</p>
         ) : (
           <>
             <div className="kv-share-connected-label">Connected accounts</div>
@@ -403,9 +421,7 @@ export default function MultiShareDispatcher({
                 <label
                   key={t.platform}
                   className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition ${
-                    selection[t.platform]
-                      ? "border-emerald-400 bg-emerald-400/10"
-                      : "border-white/20 bg-white/5"
+                    selection[t.platform] ? "border-emerald-400 bg-emerald-400/10" : "border-white/20 bg-white/5"
                   }`}
                 >
                   <input
@@ -430,9 +446,7 @@ export default function MultiShareDispatcher({
                 type="button"
                 disabled={allDisabled || broadcastStatus === "posting"}
                 onClick={() => void handlePostSelected()}
-                className={`kv-btn kv-btn-primary ${
-                  allDisabled || broadcastStatus === "posting" ? "kv-btn-disabled" : ""
-                }`}
+                className={`kv-btn kv-btn-primary ${allDisabled || broadcastStatus === "posting" ? "kv-btn-disabled" : ""}`}
               >
                 {broadcastStatus === "posting"
                   ? "Posting with breath…"
@@ -442,27 +456,18 @@ export default function MultiShareDispatcher({
               </button>
             </div>
 
-            {broadcastStatus === "done" && (
+            {broadcastStatus === "done" ? (
               <div className="kv-share-results mt-3">
-                <h3 className="text-xs uppercase tracking-wide opacity-60 mb-2">
-                  Post results
-                </h3>
+                <h3 className="text-xs uppercase tracking-wide opacity-60 mb-2">Post results</h3>
                 <ul className="text-sm space-y-1">
                   {broadcastResults.map((r) => (
                     <li key={r.platform} className="flex items-center gap-2 break-all">
-                      <span className="font-semibold min-w-[80px] capitalize">
-                        {r.platform}
-                      </span>
+                      <span className="font-semibold min-w-[80px] capitalize">{r.platform}</span>
                       <span>:</span>
                       {r.link === "❌ Failed" ? (
                         <span className="text-red-400">{r.link}</span>
                       ) : (
-                        <a
-                          href={r.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline"
-                        >
+                        <a href={r.link} target="_blank" rel="noopener noreferrer" className="underline">
                           {r.link}
                         </a>
                       )}
@@ -470,7 +475,7 @@ export default function MultiShareDispatcher({
                   ))}
                 </ul>
               </div>
-            )}
+            ) : null}
           </>
         )}
       </section>
@@ -488,18 +493,15 @@ export default function MultiShareDispatcher({
           }}
         />
 
-        {lastManualPlatform && (
+        {lastManualPlatform ? (
           <p className="kv-share-status text-xs opacity-70 mt-2">
-            Last shared via{" "}
-            <span className="font-semibold">{lastManualPlatform}</span>.
+            Last shared via <span className="font-semibold">{lastManualPlatform}</span>.
           </p>
-        )}
+        ) : null}
 
-        {manualError && (
-          <p className="kv-share-error text-xs text-red-400 mt-1">
-            {manualError}
-          </p>
-        )}
+        {manualError ? (
+          <p className="kv-share-error text-xs text-red-400 mt-1">{manualError}</p>
+        ) : null}
       </section>
 
       <footer className="kv-share-footer mt-4 flex flex-col items-center gap-2">
@@ -508,7 +510,7 @@ export default function MultiShareDispatcher({
           className={`kv-btn kv-btn-primary ${!canContinue ? "kv-btn-disabled" : ""}`}
           disabled={!canContinue}
           onClick={() => {
-            onComplete(broadcastResults);
+            onComplete(broadcastResults.map((r) => ({ platform: r.platform, link: r.link })));
           }}
         >
           {canContinue ? "Continue to Verify" : "Share at least once to continue"}

@@ -1,6 +1,7 @@
 // /components/KaiVoh/SignatureEmbedder.ts
 import type { SealedPost } from "./BreathSealer";
 import { momentFromPulse, STEPS_BEAT, type ChakraDay } from "../../utils/kai_pulse";
+import { derivePhiKeyFromSig } from "../VerifierStamper/sigilUtils";
 
 export interface KaiSigKksMediaDescriptor {
   kind: "image" | "video";
@@ -79,6 +80,12 @@ interface KaiVohSealedPostExtras {
   stepIndex?: number;
   userPhiKey?: string | null;
   kksNonce?: string | null;
+}
+function normalizeKaiSignature(sig: string): string {
+  let s = sig.trim();
+  if (s.startsWith("0x") || s.startsWith("0X")) s = s.slice(2);
+  if (/^[0-9a-fA-F]+$/.test(s)) s = s.toLowerCase();
+  return s;
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -170,10 +177,21 @@ async function buildKksMetadata(
     (post as { authorDisplayName?: string }).authorDisplayName ?? null;
 
   const timestamp = new Date().toISOString();
-  const phiKeyShort = `φK-${kaiSignature.slice(0, 8)}`;
+  const proofSig = normalizeKaiSignature(kaiSignature);
 
-  // If upstream gave us a real Φ-key, we preserve it; otherwise null.
-  const userPhiKey = sealed.userPhiKey ?? null;
+  // ✅ Derive canonical Φ-Key from the exact embedded signature
+  const derivedPhiKey = await derivePhiKeyFromSig(proofSig);
+
+  // Optional invariant: if upstream supplied userPhiKey, it MUST match
+  const upstreamPhiKey = sealed.userPhiKey ?? null;
+  if (upstreamPhiKey && upstreamPhiKey !== derivedPhiKey) {
+    throw new Error("embedKaiSignature: userPhiKey does not match derived Φ-Key from kaiSignature.");
+  }
+
+  const userPhiKey = derivedPhiKey;
+
+  // Display-only short label (keep if you want)
+  const phiKeyShort = `φK-${derivedPhiKey.slice(0, 8)}`;
 
   const statementMedia: KaiSigKksMediaDescriptor = {
     kind: mediaKind,
@@ -220,10 +238,15 @@ async function buildKksMetadata(
     chakraDay,
     kaiMomentId: momentId,
 
-    kaiSignature,
+    kaiSignature: proofSig,
+
+    // ✅ these must be the *real* Φ-Key (base58), not a label
     userPhiKey,
-    phiKey: phiKeyShort, // legacy alias
+    phiKey: derivedPhiKey,
+
+    // keep short for UI if desired
     phiKeyShort,
+
 
     caption,
     timestamp,

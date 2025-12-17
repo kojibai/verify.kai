@@ -51,6 +51,8 @@ import SigilFeedPage from "./pages/SigilFeedPage";
 import SigilPage from "./pages/SigilPage/SigilPage";
 import PShort from "./pages/PShort";
 
+import VerifyPage from "./pages/VerifyPage";
+
 import "./App.css";
 
 type NavItem = {
@@ -1343,10 +1345,10 @@ function AppChrome(): React.JSX.Element {
                       href="https://github.com/phinetwork/phi.network"
                       target="_blank"
                       rel="noreferrer"
-                      aria-label="Version 29.0.3 (opens GitHub)"
+                      aria-label="Version 29.0.4 (opens GitHub)"
                       title="Open GitHub"
                     >
-                      29.0.3
+                      29.0.4
                     </a>
                   </div>
                 </footer>
@@ -1393,6 +1395,7 @@ export default function App(): React.JSX.Element {
         <Route path="token" element={<SigilFeedPage />} />
         <Route path="p~token" element={<SigilFeedPage />} />
         <Route path="p" element={<PShort />} />
+        <Route path="verify/*" element={<VerifyPage />} />
 
         <Route element={<AppChrome />}>
           <Route index element={<VerifierStamper />} />

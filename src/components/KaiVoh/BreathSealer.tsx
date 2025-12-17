@@ -3,61 +3,83 @@
 
 /**
  * BreathSealer — Kairos breath-encoded sealing step
- * v3.0 — Atlantean Φ-Breath Orb
+ * v3.1 — Stable Identity Signature + Pure Timer
  *
- * Flow:
- * 1) User taps "Begin Breath".
- * 2) Inhale for 1 Kai pulse (PULSE_MS).
- * 3) Exhale for 1 Kai pulse; at the end:
- *      • sample live Kai via fetchKai()
- *      • derive kaiSignature = BLAKE2b(file.name + "-" + pulse)
- *      • emit SealedPost → parent via onSealComplete
- *
- * This is the ritual gate between raw media and sovereign Kai-stamped post.
+ * Fixes:
+ * ✅ No performance.now() (React purity / compiler-safe)
+ * ✅ kaiSignature is the SESSION identity signature (stable) — prevents Φ-Key mismatch
+ * ✅ Optional kksNonce + userPhiKey included for embedding/audit (doesn't change identity)
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import blake from "blakejs";
-import { fetchKai } from "../../utils/kai_pulse";
+import { fetchKai, type ChakraDay } from "../../utils/kai_pulse";
 import type { ComposedPost } from "./PostComposer";
 import "./styles/BreathSealer.css";
 
 export interface SealedPost {
   pulse: number;
+  /** Identity signature (stable across session) */
   kaiSignature: string;
-  chakraDay: string;
+  chakraDay: ChakraDay | null;
   post: ComposedPost;
+
+  /** Optional extras consumed by SignatureEmbedder (safe additions) */
+  userPhiKey?: string | null;
+  kksNonce?: string | null;
 }
 
 interface BreathSealerProps {
   post: ComposedPost;
+  /** MUST be the verified session identity signature (from login) */
+  identityKaiSignature: string;
+  /** Optional: pass the session Φ-Key so embed metadata can carry it */
+  userPhiKey?: string | null;
   onSealComplete: (sealed: SealedPost) => void;
 }
 
 type BreathPhase = "idle" | "inhale" | "exhale" | "sealed";
 
 const PULSE_MS = 5236; // φ-breath duration
+const TICK_MS = 50;
+
+function isChakraDay(v: unknown): v is ChakraDay {
+  return (
+    v === "root" ||
+    v === "sacral" ||
+    v === "solar" ||
+    v === "heart" ||
+    v === "throat" ||
+    v === "thirdEye" ||
+    v === "crown" ||
+    v === "krown"
+  );
+}
 
 export default function BreathSealer({
   post,
+  identityKaiSignature,
+  userPhiKey,
   onSealComplete,
-}: BreathSealerProps) {
+}: BreathSealerProps): React.ReactElement {
   const [breathPhase, setBreathPhase] = useState<BreathPhase>("idle");
   const [progress, setProgress] = useState(0); // 0 → 1 across inhale+exhale
   const [error, setError] = useState<string | null>(null);
 
   const timerRef = useRef<number | null>(null);
   const sealingRef = useRef(false);
+  const elapsedRef = useRef(0);
+  const mountedRef = useRef(true);
 
-  // Clean up timers on unmount
-  useEffect(
-    () => () => {
-      if (timerRef.current != null) {
-        window.clearInterval(timerRef.current);
-      }
-    },
-    []
-  );
+  const totalDuration = useMemo(() => PULSE_MS * 2, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (timerRef.current != null) window.clearInterval(timerRef.current);
+    };
+  }, []);
 
   const clearTimer = (): void => {
     if (timerRef.current != null) {
@@ -67,8 +89,15 @@ export default function BreathSealer({
   };
 
   const startBreathCycle = (): void => {
-    // prevent double-start while sealing
     if (sealingRef.current) return;
+
+    const sig = identityKaiSignature.trim();
+    if (!sig) {
+      setError("Missing identityKaiSignature (session signature). Please re-login.");
+      setBreathPhase("idle");
+      setProgress(0);
+      return;
+    }
 
     clearTimer();
     setError(null);
@@ -76,12 +105,12 @@ export default function BreathSealer({
     setProgress(0);
     sealingRef.current = false;
 
-    const totalDuration = PULSE_MS * 2;
-    const start = performance.now();
+    elapsedRef.current = 0;
 
     timerRef.current = window.setInterval(() => {
-      const now = performance.now();
-      const elapsed = now - start;
+      // Pure timer: deterministic tick accumulator (no performance.now / Date.now)
+      elapsedRef.current += TICK_MS;
+      const elapsed = elapsedRef.current;
 
       if (elapsed < PULSE_MS) {
         setBreathPhase("inhale");
@@ -95,7 +124,7 @@ export default function BreathSealer({
 
       const ratio = Math.min(elapsed / totalDuration, 1);
       setProgress(ratio);
-    }, 50);
+    }, TICK_MS);
   };
 
   const sealNow = async (): Promise<void> => {
@@ -103,24 +132,30 @@ export default function BreathSealer({
     sealingRef.current = true;
 
     try {
+      const sig = identityKaiSignature.trim();
+      if (!sig) throw new Error("Missing identityKaiSignature (session signature).");
+
       const kai = await fetchKai();
       const pulse = Number(kai.pulse ?? 0);
-      const chakraDay =
-        typeof kai.chakraDay === "string" && kai.chakraDay.length > 0
-          ? kai.chakraDay
-          : "Crown";
+
+      const chakraDay: ChakraDay | null = isChakraDay(kai.chakraDay)
+        ? kai.chakraDay
+        : null;
 
       const fileName = post.file?.name ?? "unknown";
-      const keyMaterial = `${fileName}-${pulse}`;
-      const kaiSignature = blake.blake2bHex(keyMaterial, undefined, 32);
+      // Nonce is per-file/per-pulse (audit / uniqueness) — NOT identity
+      const kksNonce = blake.blake2bHex(`${fileName}-${pulse}`, undefined, 16);
 
       onSealComplete({
         pulse,
-        kaiSignature,
+        kaiSignature: sig,          // ✅ identity signature (stable)
         chakraDay,
         post,
+        userPhiKey: userPhiKey ?? null,
+        kksNonce,
       });
 
+      if (!mountedRef.current) return;
       setBreathPhase("sealed");
     } catch (e: unknown) {
       sealingRef.current = false;
@@ -128,6 +163,7 @@ export default function BreathSealer({
         e instanceof Error
           ? e.message
           : "Failed to seal with live Kai pulse. Please try again.";
+      if (!mountedRef.current) return;
       setError(msg);
       setBreathPhase("idle");
       setProgress(0);
@@ -150,8 +186,8 @@ export default function BreathSealer({
     }
   })();
 
-  const inhalePercent = Math.round(Math.min(progress, 0.5) * 200); // 0–100 over first half
-  const exhalePercent = Math.round(Math.max(progress - 0.5, 0) * 200); // 0–100 over second half
+  const inhalePercent = Math.round(Math.min(progress, 0.5) * 200);
+  const exhalePercent = Math.round(Math.max(progress - 0.5, 0) * 200);
 
   const phaseText: string = (() => {
     if (error) return error;
@@ -191,12 +227,7 @@ export default function BreathSealer({
       : post.file?.name ?? "Unnamed glyph";
 
   return (
-    <div
-      className="kv-breath-root"
-      data-phase={breathPhase}
-      aria-live="polite"
-    >
-      {/* Top meta strip */}
+    <div className="kv-breath-root" data-phase={breathPhase} aria-live="polite">
       <div className="kv-breath-meta">
         <div className="kv-breath-meta-left">
           <span className="kv-breath-pill">Breath Seal • φ 5.236s</span>
@@ -209,12 +240,8 @@ export default function BreathSealer({
         </div>
       </div>
 
-      {/* Orb + progress */}
       <div className="kv-breath-orb-row">
-        <div
-          className="kv-breath-orb"
-          aria-label={`Breath phase: ${phaseLabel}`}
-        >
+        <div className="kv-breath-orb" aria-label={`Breath phase: ${phaseLabel}`}>
           <div className="kv-breath-orb-inner">
             <span className="kv-breath-orb-emoji">{orbEmoji}</span>
           </div>
@@ -231,11 +258,10 @@ export default function BreathSealer({
         <div className="kv-breath-status">
           <div className="kv-breath-status-row">
             <span className="kv-breath-status-label">{phaseLabel}</span>
-            <span className="kv-breath-status-percent">
-              {Math.round(progress * 100)}%
-            </span>
+            <span className="kv-breath-status-percent">{Math.round(progress * 100)}%</span>
           </div>
           <p className="kv-breath-status-text">{phaseText}</p>
+
           <div className="kv-breath-bars">
             <div className="kv-breath-bar">
               <span className="kv-breath-bar-label">Inhale</span>
@@ -246,6 +272,7 @@ export default function BreathSealer({
                 />
               </div>
             </div>
+
             <div className="kv-breath-bar">
               <span className="kv-breath-bar-label">Exhale</span>
               <div className="kv-breath-bar-track" aria-hidden="true">
@@ -259,42 +286,27 @@ export default function BreathSealer({
         </div>
       </div>
 
-      {/* Controls */}
       <div className="kv-breath-actions">
         {breathPhase === "idle" && !sealingRef.current && !error && (
-          <button
-            type="button"
-            onClick={startBreathCycle}
-            className="kv-breath-btn kv-breath-btn-primary"
-          >
+          <button type="button" onClick={startBreathCycle} className="kv-breath-btn kv-breath-btn-primary">
             Begin Breath
           </button>
         )}
 
         {error && breathPhase === "idle" && (
-          <button
-            type="button"
-            onClick={startBreathCycle}
-            className="kv-breath-btn kv-breath-btn-warning"
-          >
+          <button type="button" onClick={startBreathCycle} className="kv-breath-btn kv-breath-btn-warning">
             Retry Breath Seal
           </button>
         )}
 
         {breathPhase !== "idle" && breathPhase !== "sealed" && !error && (
-          <button
-            type="button"
-            className="kv-breath-btn kv-breath-btn-ghost"
-            disabled
-          >
+          <button type="button" className="kv-breath-btn kv-breath-btn-ghost" disabled>
             Sealing on this exhale…
           </button>
         )}
 
         {breathPhase === "sealed" && (
-          <div className="kv-breath-sealed-note">
-            Sealed. The stream will remember this breath forever.
-          </div>
+          <div className="kv-breath-sealed-note">Sealed. The stream will remember this breath forever.</div>
         )}
       </div>
     </div>
