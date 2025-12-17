@@ -12,6 +12,14 @@ export interface UsernameClaimPayload {
   ownerHint?: string | null; // optional owner hint (phiKey, label, etc.)
 }
 
+/** Evidence of a claim glyph used to bind a username inside a payload. */
+export interface UsernameClaimGlyphEvidence {
+  hash: string;                // username-claim glyph hash (derivative glyph)
+  url?: string;                // Memory Stream token/URL that renders the glyph
+  payload: UsernameClaimPayload; // embedded username-claim payload (for ingest)
+  ownerHint?: string | null;   // optional hint from ingest time (overrides payload.ownerHint)
+}
+
 /** Registry entry surfaced to explorers (normalized username keyed). */
 export interface UsernameClaimRegistryEntry {
   username: string;

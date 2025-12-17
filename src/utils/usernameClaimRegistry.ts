@@ -3,17 +3,10 @@
 
 import {
   USERNAME_CLAIM_KIND,
-  type UsernameClaimPayload,
   type UsernameClaimRegistryEntry,
+  type UsernameClaimGlyphEvidence,
 } from "../types/usernameClaim";
-import { normalizeUsername } from "./usernameClaim";
-
-export type UsernameClaimGlyphRef = {
-  hash: string; // username-claim glyph hash (derivative glyph)
-  url: string; // Memory Stream token/URL that renders the glyph
-  payload: UsernameClaimPayload;
-  ownerHint?: string | null; // optional hint from ingest time (overrides payload.ownerHint)
-};
+import { normalizeClaimGlyphRef, normalizeUsername } from "./usernameClaim";
 
 export type UsernameClaimRegistry = Record<string, UsernameClaimRegistryEntry>;
 
@@ -97,29 +90,32 @@ export type IngestResult = {
 
 function upsertEntry(
   registry: UsernameClaimRegistry,
-  ref: UsernameClaimGlyphRef,
+  ref: UsernameClaimGlyphEvidence,
 ): { updated: boolean; entry?: UsernameClaimRegistryEntry; reason?: string } {
   const payload = ref.payload;
   if (!payload || payload.kind !== USERNAME_CLAIM_KIND) {
     return { updated: false, reason: "not a username-claim glyph" };
   }
 
+  const claimHash = normalizeClaimGlyphRef(ref.hash);
+  if (!claimHash) return { updated: false, reason: "missing glyph hash" };
+
   const normalized = normalizeUsername(payload.normalized || payload.username);
   if (!normalized) return { updated: false, reason: "missing username" };
 
   const current = registry[normalized];
-  if (current && current.claimHash !== ref.hash) {
+  if (current && current.claimHash !== claimHash) {
     return { updated: false, reason: "username already bound" };
   }
 
-  const claimUrl = canonicalizeUrl(ref.url);
+  const claimUrl = canonicalizeUrl(ref.url ?? "");
   if (!claimUrl) return { updated: false, reason: "missing claim url" };
 
   const ownerHint = ref.ownerHint ?? payload.ownerHint ?? null;
   const entry: UsernameClaimRegistryEntry = {
     username: payload.username,
     normalized,
-    claimHash: ref.hash,
+    claimHash,
     claimUrl,
     originHash: payload.originHash,
     ownerHint,
@@ -138,7 +134,7 @@ function upsertEntry(
 }
 
 /** Ingest a single username-claim glyph into the global registry. */
-export function ingestUsernameClaimGlyph(ref: UsernameClaimGlyphRef): IngestResult {
+export function ingestUsernameClaimGlyph(ref: UsernameClaimGlyphEvidence): IngestResult {
   const registry = readRegistry();
   const { updated, entry, reason } = upsertEntry(registry, ref);
 
@@ -152,7 +148,7 @@ export function ingestUsernameClaimGlyph(ref: UsernameClaimGlyphRef): IngestResu
 }
 
 /** Batch-ingest multiple username-claim glyphs; stops on first rejection. */
-export function ingestUsernameClaimGlyphs(refs: UsernameClaimGlyphRef[]): IngestResult {
+export function ingestUsernameClaimGlyphs(refs: UsernameClaimGlyphEvidence[]): IngestResult {
   const registry = readRegistry();
   for (const ref of refs) {
     const { updated, entry, reason } = upsertEntry(registry, ref);
