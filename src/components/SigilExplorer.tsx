@@ -2203,7 +2203,12 @@ const SigilExplorer: React.FC = () => {
   useEffect(() => {
     if (!hasWindow) return;
 
-    const root = document.scrollingElement || document.documentElement;
+    const root =
+      (document.scrollingElement as HTMLElement | null) ||
+      (document.documentElement as HTMLElement | null);
+
+    if (!root) return undefined;
+
     const prevOverscroll = root.style.overscrollBehavior;
     const prevOverscrollY = root.style.overscrollBehaviorY;
 
