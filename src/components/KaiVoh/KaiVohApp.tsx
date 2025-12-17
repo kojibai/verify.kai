@@ -3,23 +3,18 @@
 
 /**
  * KaiVohApp — Kai-Sigil Posting OS
- * v5.1 — Canonical Proof Capsule (Share-step proof copy is now correct)
+ * v5.2 — KPV-1 Proof Hash (payload-bound verification)
  *
- * FIXES (requested):
- * ✅ Share-step JSON proof (manual share / copy) now carries:
- *    - correct canonical chakraDay (e.g., "Third Eye", "Solar Plexus")
- *    - non-null verifierUrl (computed + bound at embed time)
+ * NEW (requested):
+ * ✅ Adds a deterministic proof hash that binds the full capsule:
+ *    pulse + chakraDay + kaiSignature + phiKey + verifierSlug  → SHA-256
+ * ✅ proofHash is embedded into the file metadata (SVG <metadata>) and carried in Share-step proof capsule
+ * ✅ verifierUrl remains for convenience/QR, but is NOT part of the hash (host can change)
+ *
+ * Preserved guarantees:
+ * ✅ Sealed chakraDay (moment-of-sealing) is canonical
+ * ✅ verifierUrl is never null and is bound at embed time
  * ✅ MultiShareDispatcher receives the canonical proof capsule (verifierData)
- * ✅ chakraDay is normalized at login + embed (no raw/non-canonical strings leak through)
- *
- * Flow:
- *   1. Login   — Scan / upload Kai-Sigil, verify Kai Signature → derive Φ-Key.
- *   2. Connect — Configure KaiVoh (accounts, docs, attachments, stream tools).
- *   3. Compose — PostComposer: write post + choose media to be sealed.
- *   4. Seal    — Breath-based sealing (Kai pulse, chakra day, KKS v1).
- *   5. Embed   — Embed Kai Signature + Φ-Key metadata directly into media.
- *   6. Share   — Broadcast hub (MultiShareDispatcher + /api/post/*).
- *   7. Verify  — VerifierFrame (QR + proof) so anyone can confirm human origin.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -41,9 +36,15 @@ import type { EmbeddedMediaResult } from "./SignatureEmbedder";
 import MultiShareDispatcher from "./MultiShareDispatcher";
 import { buildNextSigilSvg, downloadSigil } from "./SigilMemoryBuilder";
 
-/* Verifier UI + proof URL helpers (moved out of VerifierFrame for Fast Refresh) */
+/* Verifier UI + proof helpers */
 import VerifierFrame from "./VerifierFrame";
-import { buildVerifierUrl, normalizeChakraDay } from "./verifierProof";
+import {
+  buildVerifierSlug,
+  buildVerifierUrl,
+  hashProofCapsuleV1,
+  normalizeChakraDay,
+  type ProofCapsuleV1,
+} from "./verifierProof";
 
 /* Canonical crypto parity (match VerifierStamper): derive Φ-Key FROM SIGNATURE */
 import { derivePhiKeyFromSig } from "../VerifierStamper/sigilUtils";
@@ -85,15 +86,27 @@ type ExtendedKksMetadata = KaiSigKksMetadataShape & {
   originPulse?: number;
   sigilPulse?: number;
   exhalePulse?: number;
+
   verifierUrl?: string;
+  verifierSlug?: string;
+
+  /** KPV-1: hash that binds the proof capsule */
+  proofHash?: string;
+
+  /** KPV-1: canonical capsule used to compute proofHash */
+  proofCapsule?: ProofCapsuleV1;
 };
 
 type VerifierData = Readonly<{
   pulse: number;
+  chakraDay: ChakraDay;
   kaiSignature: string;
   phiKey: string;
-  chakraDay: ChakraDay;
+
+  verifierSlug: string;
   verifierUrl: string;
+
+  proofHash: string;
 }>;
 
 /* -------------------------------------------------------------------------- */
@@ -565,8 +578,23 @@ function KaiVohFlow(): ReactElement {
           normalizeChakraDay(session.chakraDay ?? undefined) ??
           "Crown";
 
-        // ✅ canonical verifier URL (never null)
+        // ✅ domain-stable slug (bound into proof hash)
+        const verifierSlug = buildVerifierSlug(exhalePulse, proofSig);
+
+        // ✅ canonical verifier URL (convenience/QR; host can change)
         const verifierUrl = buildVerifierUrl(exhalePulse, proofSig);
+
+        // ✅ KPV-1 capsule + hash (binds the payload)
+        const capsule: ProofCapsuleV1 = {
+          v: "KPV-1",
+          pulse: exhalePulse,
+          chakraDay: proofChakraDay,
+          kaiSignature: proofSig,
+          phiKey: proofPhiKey,
+          verifierSlug,
+        };
+
+        const proofHash = await hashProofCapsuleV1(capsule);
 
         const mergedMetadata: ExtendedKksMetadata = {
           ...baseMeta,
@@ -581,8 +609,12 @@ function KaiVohFlow(): ReactElement {
           userPhiKey: proofPhiKey,
           phiKeyShort: `φK-${proofPhiKey.slice(0, 8)}`,
 
-          // ✅ bind URL to the proof object (never null)
           verifierUrl,
+          verifierSlug,
+
+          // ✅ payload-bound integrity proof
+          proofCapsule: capsule,
+          proofHash,
 
           originPulse,
           sigilPulse: originPulse,
@@ -611,13 +643,15 @@ function KaiVohFlow(): ReactElement {
 
         setFinalMedia(media);
 
-        // ✅ canonical proof capsule for Share step + Verify step
+        // ✅ canonical proof capsule for Share step + Verify step (includes proofHash)
         setVerifierData({
           pulse: exhalePulse,
+          chakraDay: proofChakraDay,
           kaiSignature: proofSig,
           phiKey: proofPhiKey,
-          chakraDay: proofChakraDay,
+          verifierSlug,
           verifierUrl,
+          proofHash,
         });
 
         setStep("share");
@@ -674,11 +708,7 @@ function KaiVohFlow(): ReactElement {
       return (
         <div className="kv-connect-step">
           <KaiVoh />
-          <button
-            type="button"
-            onClick={() => setStep("compose")}
-            className="kv-btn kv-btn-primary kv-btn-wide"
-          >
+          <button type="button" onClick={() => setStep("compose")} className="kv-btn kv-btn-primary kv-btn-wide">
             Continue to Compose
           </button>
         </div>
@@ -722,7 +752,7 @@ function KaiVohFlow(): ReactElement {
       return (
         <MultiShareDispatcher
           media={finalMedia}
-          proof={verifierData} // ✅ KEY FIX: share-step proof copy uses canonical capsule
+          proof={verifierData}
           onComplete={(results) => {
             appendBroadcastToLedger(results, sealed.pulse);
             setStep("verify");

@@ -7,7 +7,7 @@
    - Audio/video range support; fonts cached; CDNs handled
 */
 
-const VERSION = "v29.0.3"; // ⬅️ bump every deploy
+const VERSION = "v29.0.5"; // ⬅️ bump every deploy
 const PREFIX  = "PHINETWORK";
 const PRECACHE = `${PREFIX}-precache-${VERSION}`;
 const RUNTIME  = `${PREFIX}-runtime-${VERSION}`;

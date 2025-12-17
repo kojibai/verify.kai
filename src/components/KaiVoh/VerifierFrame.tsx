@@ -3,15 +3,23 @@
 
 /**
  * VerifierFrame — Kai-Sigil Verification Panel
- * v2.3 — Canonical Proof Capsule + Copy Proof JSON (verifierUrl never null)
+ * v2.4 — KPV-1 Proof Hash (payload-bound proof capsule)
  *
  * Guarantees:
  * ✅ Default verifier base is ALWAYS current app origin (+ Vite BASE_URL subpath) + "/verify"
  * ✅ verifierUrl is always a non-empty string (even on localhost)
- * ✅ "Copy Proof" copies a JSON capsule including verifierUrl + canonical chakraDay
+ * ✅ "Copy Proof" copies a JSON capsule including:
+ *    - canonical chakraDay
+ *    - verifierSlug (domain-stable)
+ *    - proofCapsule (KPV-1)
+ *    - proofHash (SHA-256 over the capsule)
+ *
+ * Note:
+ * - verifierUrl is convenience/QR and may change across hosts.
+ * - proofHash binds the capsule fields (pulse/chakra/signature/phiKey/slug), not the host URL.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 import * as ReactQrCodeModule from "react-qr-code";
 import "./styles/VerifierFrame.css";
@@ -21,8 +29,10 @@ import {
   buildVerifierSlug,
   buildVerifierUrl,
   defaultHostedVerifierBaseUrl,
+  hashProofCapsuleV1,
   normalizeChakraDay,
   shortKaiSig10,
+  type ProofCapsuleV1,
 } from "./verifierProof";
 
 export interface VerifierFrameProps {
@@ -84,15 +94,29 @@ function truncateMiddle(value: string, head = 6, tail = 6): string {
   return `${value.slice(0, head)}…${value.slice(-tail)}`;
 }
 
-export type ProofCapsule = Readonly<{
+function truncateHash(h: string, head = 10, tail = 10): string {
+  if (!h) return "";
+  if (h.length <= head + tail + 3) return h;
+  return `${h.slice(0, head)}…${h.slice(-tail)}`;
+}
+
+export type ProofCopy = Readonly<{
   verifierUrl: string;
   verifierBaseUrl: string;
   verifierSlug: string;
+
   pulse: number;
   chakraDay?: ChakraDay;
+
   kaiSignature: string;
   kaiSignatureShort: string;
   phiKey: string;
+
+  /** KPV-1: canonical capsule that gets hashed */
+  proofCapsule: ProofCapsuleV1 | null;
+
+  /** KPV-1: SHA-256 over proofCapsule (hex) */
+  proofHash?: string;
 }>;
 
 export default function VerifierFrame({
@@ -106,8 +130,9 @@ export default function VerifierFrame({
 }: VerifierFrameProps): ReactElement {
   const [copyStatus, setCopyStatus] = useState<"idle" | "ok" | "error">("idle");
   const [copyProofStatus, setCopyProofStatus] = useState<"idle" | "ok" | "error">("idle");
+  const [proofHash, setProofHash] = useState<string | null>(null);
 
-  const proof = useMemo<ProofCapsule>(() => {
+  const proof = useMemo<ProofCopy>(() => {
     const baseRaw = verifierBaseUrl ?? defaultHostedVerifierBaseUrl();
     const base = String(baseRaw).replace(/\/+$/, "") || "/verify";
 
@@ -117,20 +142,57 @@ export default function VerifierFrame({
     const slug = buildVerifierSlug(pulse, sigFull);
     const url = buildVerifierUrl(pulse, sigFull, base);
 
-    const chakraRaw = typeof chakraDay === "string" ? chakraDay : undefined;
-    const chakra = normalizeChakraDay(chakraRaw);
+    const chakraNorm =
+      typeof chakraDay === "string" ? normalizeChakraDay(chakraDay) : normalizeChakraDay(String(chakraDay ?? ""));
+
+    const phiKeyClean = typeof phiKey === "string" ? phiKey.trim() : "";
+
+    const capsule: ProofCapsuleV1 | null =
+      pulse > 0 && sigFull.length > 0 && phiKeyClean.length > 0 && chakraNorm
+        ? {
+            v: "KPV-1",
+            pulse,
+            chakraDay: chakraNorm,
+            kaiSignature: sigFull,
+            phiKey: phiKeyClean,
+            verifierSlug: slug,
+          }
+        : null;
 
     return {
       verifierUrl: url,
       verifierBaseUrl: base,
       verifierSlug: slug,
       pulse,
-      chakraDay: chakra,
+      chakraDay: chakraNorm,
       kaiSignature: sigFull,
       kaiSignatureShort: sigShort,
-      phiKey: typeof phiKey === "string" ? phiKey.trim() : "",
+      phiKey: phiKeyClean,
+      proofCapsule: capsule,
+      proofHash: undefined,
     };
   }, [chakraDay, kaiSignature, phiKey, pulse, verifierBaseUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async (): Promise<void> => {
+      if (!proof.proofCapsule) {
+        setProofHash(null);
+        return;
+      }
+      try {
+        const h = await hashProofCapsuleV1(proof.proofCapsule);
+        if (!cancelled) setProofHash(h);
+      } catch {
+        if (!cancelled) setProofHash(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [proof.proofCapsule]);
 
   const qrSize = compact ? 96 : 160;
 
@@ -154,7 +216,18 @@ export default function VerifierFrame({
       return;
     }
     try {
-      await navigator.clipboard.writeText(JSON.stringify(proof, null, 2));
+      let h: string | undefined = proofHash ?? undefined;
+      if (!h && proof.proofCapsule) {
+        h = await hashProofCapsuleV1(proof.proofCapsule);
+        setProofHash(h);
+      }
+
+      const payload: ProofCopy = {
+        ...proof,
+        proofHash: h,
+      };
+
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
       setCopyProofStatus("ok");
       window.setTimeout(() => setCopyProofStatus("idle"), 2000);
     } catch {
@@ -166,6 +239,7 @@ export default function VerifierFrame({
   const pulseLabel = Number.isFinite(pulse) && pulse > 0 ? String(pulse) : "—";
   const captionClean = typeof caption === "string" ? caption.trim() : "";
   const truncatedPhiKey = truncateMiddle(proof.phiKey);
+  const hashDisplay = proofHash ? truncateHash(proofHash) : "—";
 
   return (
     <section className={rootClass} aria-label="Kai-Sigil verification frame" data-role="verifier-frame">
@@ -183,7 +257,7 @@ export default function VerifierFrame({
         <header className="kv-verifier__header">
           <h3 className="kv-verifier__title">Kai-Sigil Verifier</h3>
           <p className="kv-verifier__subtitle">
-            Scan or open the verifier link to confirm this post was sealed by this Φ-Key.
+            Scan or open the verifier link to confirm this post was sealed by this Φ-Key (KPV-1 payload-bound proof).
           </p>
         </header>
 
@@ -211,6 +285,13 @@ export default function VerifierFrame({
               <dd className="kv-verifier__meta-value">{proof.chakraDay}</dd>
             </div>
           ) : null}
+
+          <div className="kv-verifier__meta-row">
+            <dt className="kv-verifier__meta-label">🔒 Proof Hash</dt>
+            <dd className="kv-verifier__meta-value kv-verifier__mono" title={proofHash ?? ""}>
+              {hashDisplay}
+            </dd>
+          </div>
         </dl>
 
         {captionClean.length > 0 ? (
@@ -236,7 +317,7 @@ export default function VerifierFrame({
             className="kv-verifier__btn kv-verifier__btn--ghost"
             data-role="verifier-copy-link"
           >
-            {copyStatus === "ok" ? "Copied!" : copyStatus === "error" ? "Copy failed" : "Copy Link"}
+            {copyStatus === "ok" ? "Remembered!" : copyStatus === "error" ? "Remember failed" : "Remember Link"}
           </button>
 
           <button
@@ -246,10 +327,10 @@ export default function VerifierFrame({
             data-role="verifier-copy-proof"
           >
             {copyProofStatus === "ok"
-              ? "Proof copied!"
+              ? "Proof Remembered!"
               : copyProofStatus === "error"
-                ? "Copy failed"
-                : "Copy Proof"}
+                ? "Remember failed"
+                : "Remember Proof"}
           </button>
         </div>
 

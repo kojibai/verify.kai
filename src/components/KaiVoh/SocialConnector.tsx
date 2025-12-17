@@ -450,14 +450,14 @@ export default function SocialConnector({
             className="kv-btn kv-btn-outline"
             onClick={() => void handleShare("copy-caption")}
           >
-            Copy Caption with Proof
+            Remember Caption with Proof
           </button>
           <button
             type="button"
             className="kv-btn kv-btn-outline"
             onClick={() => void handleShare("copy-proof")}
           >
-            Copy Proof JSON
+            Remember Proof JSON
           </button>
         </div>
       </div>
