@@ -1,5 +1,5 @@
 // src/pages/SigilExplorer.tsx
-// v3.10.5 — LAH-MAH-TOR Breath Sync (Parent-First /s Branching) ✨
+// v3.10.6 — LAH-MAH-TOR Breath Sync (Parent-First /s Branching) ✨
 //
 // CORE TRUTH (production behavior):
 // ✅ On OPEN: push (inhale) everything you have → API, then pull (exhale) anything new ← API
@@ -15,13 +15,13 @@
 // ✅ Copy/Open always uses the working hash-viewer form (prevents “route not found” / broken deep links)
 // ✅ Parent/Origin URLs in details also normalize to hash-viewer form when applicable
 //
-// NEW (stability refactor — same behavior, no UI change):
-// ✅ Node expand/collapse is now stable across any forest rebuild (no “random refresh” feel)
-// ✅ Removed localhost → phi.network rewrite (canonicalization is host-rooted to current origin)
-// ✅ Removed redundant forced rerenders; single registry revision drives derived recompute
-// ✅ Φ totals are computed once per registry change (no per-node full registry scans)
+// NEW (v3.10.6 — stability hardening):
+// ✅ Never fetch/probe non-viewable `/stream/p/<token>` routes (no 404 spam / no network console noise)
+// ✅ Probe runs only in idle time + never while user is actively scrolling
+// ✅ Stronger SSR/host canonicalization safety (no accidental host rewrites)
+// ✅ Hook ordering + refs cleaned (prevents subtle StrictMode/HMR weirdness)
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   extractPayloadFromUrl,
   resolveLineageBackwards,
@@ -29,6 +29,8 @@ import {
 } from "../utils/sigilUrl";
 import type { SigilSharePayloadLoose } from "../utils/sigilUrl";
 import "./SigilExplorer.css";
+
+
 
 /* ─────────────────────────────────────────────────────────────────────
    Live base (API + canonical sync target)
@@ -220,9 +222,16 @@ function saveApiBaseHint(): void {
 }
 
 function apiBases(): string[] {
-  return apiBaseHint === API_BASE_FALLBACK
-    ? [API_BASE_FALLBACK, API_BASE_PRIMARY]
-    : [API_BASE_PRIMARY, API_BASE_FALLBACK];
+  const list =
+    apiBaseHint === API_BASE_FALLBACK
+      ? [API_BASE_FALLBACK, API_BASE_PRIMARY]
+      : [API_BASE_PRIMARY, API_BASE_FALLBACK];
+
+  if (!hasWindow) return list;
+
+  const isHttpsPage = window.location.protocol === "https:";
+  // Never try http fallback from an https page (browser will block + log loudly)
+  return isHttpsPage ? list.filter((b) => b.startsWith("https://")) : list;
 }
 
 function shouldFailoverStatus(status: number): boolean {
@@ -270,7 +279,10 @@ async function apiFetchWithFailover(
 async function apiFetchJsonWithFailover<T>(
   makeUrl: (base: string) => string,
   init?: RequestInit,
-): Promise<{ ok: true; value: T; status: number } | { ok: false; status: number }> {
+): Promise<
+  | { ok: true; value: T; status: number }
+  | { ok: false; status: number }
+> {
   const res = await apiFetchWithFailover(makeUrl, init);
   if (!res) return { ok: false, status: 0 };
   if (!res.ok) return { ok: false, status: res.status };
@@ -450,7 +462,9 @@ function explorerOpenUrl(raw: string): string {
     return `${origin}${u.pathname}${u.search}${u.hash}`;
   } catch {
     const m = safe.match(/^(?:https?:\/\/[^/]+)?(\/.*)$/i);
-    const rel = (m?.[1] ?? safe).startsWith("/") ? (m?.[1] ?? safe) : `/${m?.[1] ?? safe}`;
+    const rel = (m?.[1] ?? safe).startsWith("/")
+      ? (m?.[1] ?? safe)
+      : `/${m?.[1] ?? safe}`;
     return `${origin}${rel}`;
   }
 }
@@ -548,15 +562,28 @@ function isCanonicalHost(host: string): boolean {
   const backupHost = new URL(LIVE_BACKUP_URL).host;
   const viewHost = new URL(viewBaseOrigin()).host;
   const fallbackHost = new URL(VIEW_BASE_FALLBACK).host;
-  return host === liveHost || host === backupHost || host === viewHost || host === fallbackHost;
+  return (
+    host === liveHost ||
+    host === backupHost ||
+    host === viewHost ||
+    host === fallbackHost
+  );
 }
 
 async function probeUrl(u: string): Promise<"ok" | "bad" | "unknown"> {
   if (!hasWindow) return "unknown";
 
+  // ✅ Never probe the non-viewable server routes; probe the browser-view form instead.
+  const target = browserViewUrl(u);
+
+  let parsed: URL;
   try {
-    const url = new URL(u, viewBaseOrigin());
-    if (!isCanonicalHost(url.host)) return "unknown";
+    parsed = new URL(target, viewBaseOrigin());
+    if (!isCanonicalHost(parsed.host)) return "unknown";
+
+    // ✅ /stream#p=... is SPA-viewed; probing it would just hit /stream anyway.
+    // Treat as OK with zero network to avoid console spam + scroll jitter.
+    if (parsed.pathname.toLowerCase() === "/stream") return "ok";
   } catch {
     return "unknown";
   }
@@ -565,19 +592,25 @@ async function probeUrl(u: string): Promise<"ok" | "bad" | "unknown"> {
     const ac = new AbortController();
     const t = window.setTimeout(() => ac.abort(), URL_PROBE_TIMEOUT_MS);
 
-    const res = await fetch(u, {
-      method: "GET",
-      cache: "no-store",
-      signal: ac.signal,
-      redirect: "follow",
-      mode: "cors",
-    }).finally(() => window.clearTimeout(t));
+    const doFetch = (method: "HEAD" | "GET") =>
+      fetch(parsed.toString(), {
+        method,
+        cache: "no-store",
+        signal: ac.signal,
+        redirect: "follow",
+        mode: "cors",
+      });
 
-    if (!res.ok) return "bad";
+    let res: Response;
+    try {
+      res = await doFetch("HEAD");
+    } catch {
+      res = await doFetch("GET");
+    } finally {
+      window.clearTimeout(t);
+    }
 
-    const ct = res.headers.get("content-type") ?? "";
-    if (ct.toLowerCase().includes("text/html")) return "ok";
-    return "ok";
+    return res.ok ? "ok" : "bad";
   } catch {
     return "unknown";
   }
@@ -749,9 +782,10 @@ function pickPrimaryUrl(urls: string[], prefer: ContentKind): string {
   const nonPTilde = urls.filter((u) => !isPTildeUrl(u));
   const candidates = nonPTilde.length > 0 ? nonPTilde : urls;
 
+  // If only /p~ exists, choose a viewable stream URL by token.
   if (nonPTilde.length === 0 && urls.length > 0) {
     const tok = parseStreamToken(urls[0] ?? "");
-    if (tok) return canonicalizeUrl(streamUrlFromToken(tok));
+    if (tok) return canonicalizeUrl(streamHashViewerUrlFromToken(tok));
   }
 
   let best = candidates[0] ?? "";
@@ -816,7 +850,10 @@ function deriveWitnessContext(url: string): WitnessCtx {
   };
 }
 
-function mergeDerivedContext(payload: SigilSharePayloadLoose, ctx: WitnessCtx): SigilSharePayloadLoose {
+function mergeDerivedContext(
+  payload: SigilSharePayloadLoose,
+  ctx: WitnessCtx,
+): SigilSharePayloadLoose {
   const next: SigilSharePayloadLoose = { ...payload };
   if (ctx.originUrl && !next.originUrl) next.originUrl = ctx.originUrl;
   if (ctx.parentUrl && !next.parentUrl) next.parentUrl = ctx.parentUrl;
@@ -869,7 +906,10 @@ function persistRegistryToStorage(): void {
 }
 
 /** Upsert a payload into registry; returns true if materially changed. */
-function upsertRegistryPayload(url: string, payload: SigilSharePayloadLoose): boolean {
+function upsertRegistryPayload(
+  url: string,
+  payload: SigilSharePayloadLoose,
+): boolean {
   const key = canonicalizeUrl(url);
   const prev = memoryRegistry.get(key);
   if (!prev) {
@@ -909,7 +949,10 @@ function ensureUrlInRegistry(url: string): boolean {
   return upsertRegistryPayload(abs, merged);
 }
 
-function synthesizeEdgesFromWitnessChain(chain: readonly string[], leafUrl: string): boolean {
+function synthesizeEdgesFromWitnessChain(
+  chain: readonly string[],
+  leafUrl: string,
+): boolean {
   if (chain.length === 0) return false;
 
   const origin = canonicalizeUrl(chain[0]);
@@ -946,7 +989,8 @@ function synthesizeEdgesFromWitnessChain(chain: readonly string[], leafUrl: stri
   if (leafPayload) {
     const next: SigilSharePayloadLoose = { ...leafPayload };
     if (!next.originUrl) next.originUrl = origin;
-    if (!next.parentUrl) next.parentUrl = canonicalizeUrl(chain[chain.length - 1]);
+    if (!next.parentUrl)
+      next.parentUrl = canonicalizeUrl(chain[chain.length - 1]);
     changed = upsertRegistryPayload(leafAbs, next) || changed;
   }
 
@@ -1160,7 +1204,10 @@ function addUrl(url: string, opts?: AddOptions): boolean {
 /* ─────────────────────────────────────────────────────────────────────
  *  Import JSON (urls + optional krystals)
  *  ───────────────────────────────────────────────────────────────────── */
-function parseImportedJson(value: unknown): { urls: string[]; rawKrystals: Record<string, unknown>[] } {
+function parseImportedJson(value: unknown): {
+  urls: string[];
+  rawKrystals: Record<string, unknown>[];
+} {
   const urls: string[] = [];
   const rawKrystals: Record<string, unknown>[] = [];
 
@@ -1365,8 +1412,12 @@ function buildContentIndex(reg: Registry): Map<string, ContentEntry> {
     const pm = prev.momentKey;
     const nm = mkey;
     if (pm.startsWith("u:") && !nm.startsWith("u:")) prev.momentKey = nm;
-    if (pm.startsWith("h:") && (nm.startsWith("k:") || nm.startsWith("sig:") || nm.startsWith("tok:")))
+    if (
+      pm.startsWith("h:") &&
+      (nm.startsWith("k:") || nm.startsWith("sig:") || nm.startsWith("tok:"))
+    ) {
       prev.momentKey = nm;
+    }
   }
 
   type EntryPre = {
@@ -1416,11 +1467,19 @@ function buildContentIndex(reg: Registry): Map<string, ContentEntry> {
     if (postParents.length > 0) {
       parent = postParents
         .slice()
-        .sort((a, b) => scoreUrlForView(b.primaryUrl, "post") - scoreUrlForView(a.primaryUrl, "post"))[0];
+        .sort(
+          (a, b) =>
+            scoreUrlForView(b.primaryUrl, "post") -
+            scoreUrlForView(a.primaryUrl, "post"),
+        )[0];
     } else {
       parent = candidates
         .slice()
-        .sort((a, b) => scoreUrlForView(b.primaryUrl, b.kind) - scoreUrlForView(a.primaryUrl, a.kind))[0];
+        .sort(
+          (a, b) =>
+            scoreUrlForView(b.primaryUrl, b.kind) -
+            scoreUrlForView(a.primaryUrl, a.kind),
+        )[0];
     }
 
     const parentId = parent?.id ?? ids[0]!;
@@ -1442,11 +1501,14 @@ function buildContentIndex(reg: Registry): Map<string, ContentEntry> {
 
     const originUrlRaw = readStringField(e.payload as unknown, "originUrl");
     const originUrl =
-      originUrlRaw ? canonicalizeUrl(originUrlRaw) : (getOriginUrl(e.primaryUrl) ?? e.primaryUrl);
+      originUrlRaw
+        ? canonicalizeUrl(originUrlRaw)
+        : (getOriginUrl(e.primaryUrl) ?? e.primaryUrl);
 
     const originAnyId = urlToContentId.get(originUrl);
     const originMomentParent =
-      momentParentByUrl.get(originUrl) ?? (originAnyId ? momentParentById.get(originAnyId) : undefined);
+      momentParentByUrl.get(originUrl) ??
+      (originAnyId ? momentParentById.get(originAnyId) : undefined);
 
     momentOriginByParent.set(mp, originMomentParent ?? mp);
   }
@@ -1467,7 +1529,8 @@ function buildContentIndex(reg: Registry): Map<string, ContentEntry> {
         const parentUrl = canonicalizeUrl(parentUrlRaw);
         const parentAnyId = urlToContentId.get(parentUrl);
         const parentMomentParent =
-          momentParentByUrl.get(parentUrl) ?? (parentAnyId ? momentParentById.get(parentAnyId) : undefined);
+          momentParentByUrl.get(parentUrl) ??
+          (parentAnyId ? momentParentById.get(parentAnyId) : undefined);
 
         if (parentMomentParent && parentMomentParent !== e.id) parentId = parentMomentParent;
       }
@@ -1487,7 +1550,6 @@ function buildContentIndex(reg: Registry): Map<string, ContentEntry> {
   }
 
   void momentParentByMoment; // intentional: kept for conceptual clarity
-
   return out;
 }
 
@@ -1500,12 +1562,22 @@ function contentChildrenOf(parentId: string, idx: Map<string, ContentEntry>): st
   return out;
 }
 
-function buildContentTree(rootId: string, idx: Map<string, ContentEntry>, seen = new Set<string>()): SigilNode | null {
+function buildContentTree(
+  rootId: string,
+  idx: Map<string, ContentEntry>,
+  seen = new Set<string>(),
+): SigilNode | null {
   const e = idx.get(rootId);
   if (!e) return null;
 
   if (seen.has(rootId)) {
-    return { id: e.id, url: e.primaryUrl, urls: Array.from(e.urls), payload: e.payload, children: [] };
+    return {
+      id: e.id,
+      url: e.primaryUrl,
+      urls: Array.from(e.urls),
+      payload: e.payload,
+      children: [],
+    };
   }
   seen.add(rootId);
 
@@ -1513,7 +1585,13 @@ function buildContentTree(rootId: string, idx: Map<string, ContentEntry>, seen =
     .map((cid) => buildContentTree(cid, idx, seen))
     .filter(Boolean) as SigilNode[];
 
-  return { id: e.id, url: e.primaryUrl, urls: Array.from(e.urls), payload: e.payload, children: kids };
+  return {
+    id: e.id,
+    url: e.primaryUrl,
+    urls: Array.from(e.urls),
+    payload: e.payload,
+    children: kids,
+  };
 }
 
 function summarizeBranch(root: SigilNode): { nodeCount: number; latest: SigilSharePayloadLoose } {
@@ -1804,7 +1882,13 @@ function SigilTreeNode({ node, expanded, toggle, phiTotalsByPulse }: SigilTreeNo
           {node.children.length > 0 && (
             <div className="node-children" aria-label="Memory Imprints">
               {node.children.map((c) => (
-                <SigilTreeNode key={c.id} node={c} expanded={expanded} toggle={toggle} phiTotalsByPulse={phiTotalsByPulse} />
+                <SigilTreeNode
+                  key={c.id}
+                  node={c}
+                  expanded={expanded}
+                  toggle={toggle}
+                  phiTotalsByPulse={phiTotalsByPulse}
+                />
               ))}
             </div>
           )}
@@ -1877,7 +1961,13 @@ function OriginPanel({
         ) : (
           <div className="tree">
             {root.children.map((c) => (
-              <SigilTreeNode key={c.id} node={c} expanded={expanded} toggle={toggle} phiTotalsByPulse={phiTotalsByPulse} />
+              <SigilTreeNode
+                key={c.id}
+                node={c}
+                expanded={expanded}
+                toggle={toggle}
+                phiTotalsByPulse={phiTotalsByPulse}
+              />
             ))}
           </div>
         )}
@@ -2004,19 +2094,24 @@ const SigilExplorer: React.FC = () => {
   // Stable expand/collapse state (prevents “random refresh” feel)
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
-  const toggle = (id: string) => {
+  // Scroll safety guards (prevents “refresh feel” on mobile while reading)
+  const scrollElRef = useRef<HTMLDivElement | null>(null);
+  const scrollingRef = useRef(false);
+  const scrollIdleTimerRef = useRef<number | null>(null);
+
+  const toggle = useCallback((id: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  };
+  }, []);
 
-  const bump = () => {
+  const bump = useCallback(() => {
     if (unmounted.current) return;
     setRegistryRev((v) => v + 1);
-  };
+  }, []);
 
   const forest = useMemo(() => buildForest(memoryRegistry), [registryRev]);
 
@@ -2048,16 +2143,50 @@ const SigilExplorer: React.FC = () => {
     return totals;
   }, [registryRev]);
 
-  /** Opportunistically probe URL variants so “the one that loads” becomes primary. */
-  const probePrimaryCandidates = async () => {
+  // Scroll listener (isolated; does not touch state)
+  useEffect(() => {
     if (!hasWindow) return;
 
+    const el = scrollElRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      scrollingRef.current = true;
+      if (scrollIdleTimerRef.current != null) window.clearTimeout(scrollIdleTimerRef.current);
+      scrollIdleTimerRef.current = window.setTimeout(() => {
+        scrollingRef.current = false;
+        scrollIdleTimerRef.current = null;
+      }, 180);
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      if (scrollIdleTimerRef.current != null) window.clearTimeout(scrollIdleTimerRef.current);
+      scrollIdleTimerRef.current = null;
+      scrollingRef.current = false;
+    };
+  }, []);
+
+  /** Opportunistically probe URL variants so “the one that loads” becomes primary. */
+  const probePrimaryCandidates = useCallback(async () => {
+    if (!hasWindow) return;
+    if (scrollingRef.current) return; // never probe while user is scrolling
+    if (!isOnline()) return; // skip probes offline (prevents noise)
+
     const candidates: string[] = [];
+
     const walk = (n: SigilNode) => {
       if (n.urls.length > 1) {
         const prefer = contentKindForUrl(n.url);
-        const sorted = [...n.urls].sort((a, b) => scoreUrlForView(b, prefer) - scoreUrlForView(a, prefer));
-        for (const u of sorted.slice(0, 2)) {
+
+        const normalized = [...n.urls]
+          .map((u) => canonicalizeUrl(browserViewUrl(u))) // /stream/p → /stream#p
+          .filter((v, i, arr) => arr.indexOf(v) === i)
+          .sort((a, b) => scoreUrlForView(b, prefer) - scoreUrlForView(a, prefer));
+
+        for (const u of normalized.slice(0, 2)) {
           const key = canonicalizeUrl(u);
           if (!urlHealth.has(key) && !candidates.includes(key)) candidates.push(key);
         }
@@ -2068,15 +2197,12 @@ const SigilExplorer: React.FC = () => {
     for (const r of forest) walk(r);
     if (candidates.length === 0) return;
 
-    let changed = false;
     for (const u of candidates.slice(0, URL_PROBE_MAX_PER_REFRESH)) {
       const res = await probeUrl(u);
-      if (res === "ok") changed = setUrlHealth(u, 1) || changed;
-      if (res === "bad") changed = setUrlHealth(u, -1) || changed;
+      if (res === "ok") void setUrlHealth(u, 1);
+      if (res === "bad") void setUrlHealth(u, -1);
     }
-
-    if (changed) bump();
-  };
+  }, [forest]);
 
   useEffect(() => {
     unmounted.current = false;
@@ -2241,15 +2367,13 @@ const SigilExplorer: React.FC = () => {
             method: "GET",
             cache: "no-store",
             signal: ac.signal,
-            headers: prevSeal ? { "If-None-Match": `"${prevSeal}"` } : undefined,
+            headers: undefined,
           },
         );
 
         if (!res) return;
 
-        if (res.status === 304) {
-          return;
-        }
+        if (res.status === 304) return;
         if (!res.ok) return;
 
         const body = (await res.json()) as ApiSealResponse;
@@ -2318,70 +2442,102 @@ const SigilExplorer: React.FC = () => {
       unmounted.current = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [bump]);
 
   // After registry changes, probe a few URL candidates to improve primary URL selection.
   useEffect(() => {
-    void probePrimaryCandidates();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [registryRev]);
+    if (!hasWindow) return;
 
-  const handleAdd = (url: string) => {
-    const changed = addUrl(url, {
-      includeAncestry: true,
-      broadcast: true,
-      persist: true,
-      source: "local",
-      enqueueToApi: true,
-    });
-    if (changed) {
-      setLastAdded(browserViewUrl(url));
-      bump();
+    let cancelled = false;
+
+    const run = () => {
+      if (cancelled) return;
+      void probePrimaryCandidates();
+    };
+
+    const w = window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+
+    let cancel: (() => void) | null = null;
+
+    if (typeof w.requestIdleCallback === "function") {
+      const id = w.requestIdleCallback(run, { timeout: 900 });
+      cancel = () => w.cancelIdleCallback?.(id);
+    } else {
+      const id = window.setTimeout(run, 250);
+      cancel = () => window.clearTimeout(id);
     }
-  };
 
-  const handleImport = async (file: File) => {
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text) as unknown;
+    return () => {
+      cancelled = true;
+      cancel?.();
+    };
+  }, [registryRev, probePrimaryCandidates]);
 
-      const { urls, rawKrystals } = parseImportedJson(parsed);
-      if (urls.length === 0 && rawKrystals.length === 0) return;
-
-      let changed = false;
-      for (const u of urls) {
-        if (
-          addUrl(u, {
-            includeAncestry: true,
-            broadcast: false,
-            persist: false,
-            source: "local",
-            enqueueToApi: true,
-          })
-        ) {
-          changed = true;
-        }
-      }
-
-      setLastAdded(undefined);
-
+  const handleAdd = useCallback(
+    (url: string) => {
+      const changed = addUrl(url, {
+        includeAncestry: true,
+        broadcast: true,
+        persist: true,
+        source: "local",
+        enqueueToApi: true,
+      });
       if (changed) {
-        persistRegistryToStorage();
+        setLastAdded(browserViewUrl(url));
         bump();
       }
+    },
+    [bump],
+  );
 
-      if (rawKrystals.length > 0) {
-        for (const k of rawKrystals) enqueueInhaleRawKrystal(k);
-        void flushInhaleQueue();
-      } else if (urls.length > 0) {
-        forceInhaleUrls(urls);
+  const handleImport = useCallback(
+    async (file: File) => {
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text) as unknown;
+
+        const { urls, rawKrystals } = parseImportedJson(parsed);
+        if (urls.length === 0 && rawKrystals.length === 0) return;
+
+        let changed = false;
+        for (const u of urls) {
+          if (
+            addUrl(u, {
+              includeAncestry: true,
+              broadcast: false,
+              persist: false,
+              source: "local",
+              enqueueToApi: true,
+            })
+          ) {
+            changed = true;
+          }
+        }
+
+        setLastAdded(undefined);
+
+        if (changed) {
+          persistRegistryToStorage();
+          bump();
+        }
+
+        if (rawKrystals.length > 0) {
+          for (const k of rawKrystals) enqueueInhaleRawKrystal(k);
+          void flushInhaleQueue();
+        } else if (urls.length > 0) {
+          forceInhaleUrls(urls);
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
-    }
-  };
+    },
+    [bump],
+  );
 
-  const handleExport = () => {
+  const handleExport = useCallback(() => {
     const data = JSON.stringify(Array.from(memoryRegistry.keys()), null, 2);
     const blob = new Blob([data], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -2390,7 +2546,7 @@ const SigilExplorer: React.FC = () => {
     a.download = "sigils.json";
     a.click();
     URL.revokeObjectURL(url);
-  };
+  }, []);
 
   return (
     <div className="sigil-explorer">
@@ -2404,7 +2560,12 @@ const SigilExplorer: React.FC = () => {
         lastAdded={lastAdded}
       />
 
-      <div className="explorer-scroll" role="region" aria-label="Kairos Sigil-Glyph Explorer Content">
+      <div
+        className="explorer-scroll"
+        ref={scrollElRef}
+        role="region"
+        aria-label="Kairos Sigil-Glyph Explorer Content"
+      >
         <div className="explorer-inner">
           {forest.length === 0 ? (
             <div className="kx-empty">
