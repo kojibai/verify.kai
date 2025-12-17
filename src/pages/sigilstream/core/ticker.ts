@@ -7,53 +7,61 @@ import type { LocalKai } from "./types";
 
 /**
  * Returns seconds (float) until the next Kai pulse boundary, or null if inactive.
- * Uses a light interval (≈120ms) and snaps to 0.000000 at boundary.
- * Resyncs on tab visibility change to avoid background drift.
+ * Uses a lightweight RAF loop so the countdown flows smoothly instead of stuttering
+ * at 0. Resyncs on tab visibility change to avoid background drift.
  */
 export function useKaiPulseCountdown(active: boolean): number | null {
   const [secsLeft, setSecsLeft] = useState<number | null>(active ? KAI_PULSE_SEC : null);
-  const tickRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const targetRef = useRef<number | null>(null);
 
-  // Boundary aligned to GENESIS_TS + n * PULSE_MS
-  const nextBoundary = () => {
+  const scheduleNextBoundary = () => {
     const now = Date.now();
     const periods = Math.ceil((now - GENESIS_TS) / PULSE_MS);
-    return GENESIS_TS + periods * PULSE_MS;
+    targetRef.current = GENESIS_TS + periods * PULSE_MS;
   };
 
   useEffect(() => {
-    // Disable / cleanup
     if (!active) {
-      if (tickRef.current) window.clearInterval(tickRef.current);
-      tickRef.current = null;
+      if (rafRef.current != null) window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      targetRef.current = null;
       setSecsLeft(null);
       return;
     }
 
-    const run = () => {
-      const next = nextBoundary();
-      const now = Date.now();
-      if (now >= next) {
-        setSecsLeft(0);
+    scheduleNextBoundary();
+
+    const tick = () => {
+      const target = targetRef.current;
+      if (target == null) {
+        setSecsLeft(null);
       } else {
-        setSecsLeft((next - now) / 1000);
+        const now = Date.now();
+
+        // If we crossed the boundary, immediately align to the next one instead of sitting at 0.
+        if (now >= target) {
+          scheduleNextBoundary();
+          setSecsLeft(0);
+        } else {
+          setSecsLeft((target - now) / 1000);
+        }
       }
+
+      rafRef.current = window.requestAnimationFrame(tick);
     };
 
-    // Initial tick + interval
-    run();
-    tickRef.current = window.setInterval(run, 120) as unknown as number;
+    rafRef.current = window.requestAnimationFrame(tick);
 
-    // Resync when tab becomes visible
-    const vis = () => {
-      if (document.visibilityState === "visible") run();
+    const onVis = () => {
+      if (document.visibilityState === "visible") scheduleNextBoundary();
     };
-    document.addEventListener("visibilitychange", vis);
+    document.addEventListener("visibilitychange", onVis);
 
     return () => {
-      if (tickRef.current) window.clearInterval(tickRef.current);
-      tickRef.current = null;
-      document.removeEventListener("visibilitychange", vis);
+      if (rafRef.current != null) window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      document.removeEventListener("visibilitychange", onVis);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);

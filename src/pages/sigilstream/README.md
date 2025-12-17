@@ -370,9 +370,9 @@ Embeds in `attachments/embeds.tsx`:
 
 ## Performance notes
 
-* No long RAF loops; ticker only schedules at boundaries.
-* Attachment previews lazy load.
-* Embed iframes are sandboxed and lazy (`loading="lazy"`).
+* Countdown ticker uses a lightweight RAF loop to stay phase-locked at boundaries.
+* Attachment previews load eagerly to avoid on-scroll gaps.
+* Embed iframes are sandboxed and load eagerly (`loading="eager"`).
 * Large files are never inlined; they’re referenced by hash.
 
 ---

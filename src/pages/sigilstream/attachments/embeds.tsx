@@ -117,7 +117,7 @@ export function Favicon({ host }: { host: string }): React.JSX.Element {
       alt=""
       width={16}
       height={16}
-      loading="lazy"
+      loading="eager"
       decoding="async"
       onError={(e) => {
         (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
@@ -164,7 +164,7 @@ export function IframeEmbed({ src, title }: { src: string; title: string }): Rea
         className="sf-embed__frame"
         src={src}
         title={title}
-        loading="lazy"
+        loading="eager"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowFullScreen
         sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
@@ -218,7 +218,7 @@ export function UrlEmbed({ url, title }: { url: string; title?: string }): React
     return (
       <EmbedCard url={url} title={title}>
         <div className="sf-media sf-media--image">
-          <img className="sf-media__img" src={url} alt={title || "image"} loading="lazy" decoding="async" />
+          <img className="sf-media__img" src={url} alt={title || "image"} loading="eager" decoding="async" />
         </div>
       </EmbedCard>
     );
@@ -238,7 +238,7 @@ export function UrlEmbed({ url, title }: { url: string; title?: string }): React
     return (
       <EmbedCard url={url} title={title}>
         <div className="sf-embed sf-embed--doc">
-          <iframe className="sf-embed__frame" src={url} title={title || "Document"} loading="lazy" />
+          <iframe className="sf-embed__frame" src={url} title={title || "Document"} loading="eager" />
         </div>
       </EmbedCard>
     );
