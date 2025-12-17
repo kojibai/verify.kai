@@ -1849,7 +1849,7 @@ function SigilTreeNode({ node }: { node: SigilNode }) {
         <div className="node-main">
           <button
             className="twirl"
-            aria-label={open ? "Collapse branch" : "Expand branch"}
+            aria-label={open ? "Collapse memories" : "Expand memories"}
             aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
             title={open ? "Collapse" : "Expand"}
@@ -1916,7 +1916,7 @@ function SigilTreeNode({ node }: { node: SigilNode }) {
           </div>
 
           {node.children.length > 0 && (
-            <div className="node-children" aria-label="Branch children">
+            <div className="node-children" aria-label="Memory Imprints">
               {node.children.map((c) => (
                 <SigilTreeNode key={c.id} node={c} />
               ))}
@@ -1947,7 +1947,7 @@ function OriginPanel({ root }: { root: SigilNode }) {
   return (
     <section
       className="origin"
-      aria-label="Sigil origin branch"
+      aria-label="Sigil origin stream"
       style={chakraTintStyle(root.payload.chakraDay)}
       data-chakra={String(root.payload.chakraDay ?? "")}
     >
@@ -1977,7 +1977,7 @@ function OriginPanel({ root }: { root: SigilNode }) {
 
       <div className="origin-body">
         {root.children.length === 0 ? (
-          <div className="kx-empty">No branches yet. The tree begins here.</div>
+          <div className="kx-empty">No memories yet. The stream begins here.</div>
         ) : (
           <div className="tree">
             {root.children.map((c) => (
@@ -2045,7 +2045,7 @@ function ExplorerToolbar({
               spellCheck={false}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              aria-label="Sigil URL"
+              aria-label="Sigil Key"
             />
             <button className="kx-button" type="submit">
               Inhale
@@ -2053,7 +2053,7 @@ function ExplorerToolbar({
           </form>
 
           <div className="kx-io" role="group" aria-label="Import and export">
-            <label className="kx-import" title="Import a JSON list of URLs (or krystals)">
+            <label className="kx-import" title="Import a JSON list of Keys (or krystals)">
               <input
                 type="file"
                 accept="application/json"
@@ -2072,8 +2072,8 @@ function ExplorerToolbar({
           </div>
 
           <div className="kx-stats" aria-live="polite">
-            <span className="kx-pill" title="Total URLs in registry (includes variants)">
-              {total} URLs
+            <span className="kx-pill" title="Total KEYS in registry (includes variants)">
+              {total} KEYS
             </span>
             {lastAdded && (
               <span className="kx-pill subtle" title={lastAdded}>
@@ -2494,9 +2494,9 @@ const SigilExplorer: React.FC = () => {
             <div className="kx-empty">
               <p>No sigils in your keystream yet.</p>
               <ol>
-                <li>Import your keystream data.</li>
+                <li>Import your keystream memories.</li>
                 <li>Seal a moment — auto-registered here.</li>
-                <li>Inhale any sigil-glyph or memory URL above — lineage reconstructs instantly.</li>
+                <li>Inhale any sigil-glyph or memory key above — lineage reconstructs instantly.</li>
               </ol>
             </div>
           ) : (
