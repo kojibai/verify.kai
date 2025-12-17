@@ -39,7 +39,7 @@ function InlineFileCard({ it }: { it: AttachmentFileInline }): React.JSX.Element
   if (mime.startsWith("image/")) {
     return (
       <div className="sf-media sf-media--image">
-        <img src={dataUrl} alt={safeName} loading="lazy" decoding="async" />
+        <img src={dataUrl} alt={safeName} loading="eager" decoding="async" />
         <div className="sf-file-meta">
           <span>{safeName}</span>
           <span>

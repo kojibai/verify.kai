@@ -35,49 +35,6 @@ function clamp01(n: number): number {
   return n < 0 ? 0 : n > 1 ? 1 : n;
 }
 
-/** Smooth the authoritative countdown so the UI ticks perfectly between hook updates. */
-function useSmoothCountdown(anchorSeconds: number | null): number | null {
-  const [smooth, setSmooth] = React.useState<number | null>(anchorSeconds);
-
-  const anchorRef = React.useRef<number | null>(anchorSeconds);
-  const t0Ref = React.useRef<number>(0);
-  const rafRef = React.useRef<number | null>(null);
-
-  React.useEffect(() => {
-    anchorRef.current = anchorSeconds;
-    t0Ref.current = performance.now();
-    setSmooth(anchorSeconds);
-  }, [anchorSeconds]);
-
-  React.useEffect(() => {
-    let mounted = true;
-
-    const loop = (): void => {
-      if (!mounted) return;
-
-      const a = anchorRef.current;
-      if (a == null) {
-        setSmooth(null);
-        rafRef.current = window.requestAnimationFrame(loop);
-        return;
-      }
-
-      const dt = (performance.now() - t0Ref.current) / 1000;
-      setSmooth(Math.max(0, a - dt));
-
-      rafRef.current = window.requestAnimationFrame(loop);
-    };
-
-    rafRef.current = window.requestAnimationFrame(loop);
-    return () => {
-      mounted = false;
-      if (rafRef.current != null) window.cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
-
-  return smooth;
-}
-
 function readPulseDurSeconds(el: HTMLElement | null): number {
   if (!el) return DEFAULT_PULSE_DUR_S;
   const raw = window.getComputedStyle(el).getPropertyValue("--pulse-dur").trim();
@@ -327,8 +284,7 @@ const KaiKlock = KaiKlockRaw as unknown as React.ComponentType<KaiKlockProps>;
 
 export function KaiStatus(): React.JSX.Element {
   const kaiNow = useAlignedKaiTicker();
-  const secsLeftAnchor = useKaiPulseCountdown(true);
-  const secsLeft = useSmoothCountdown(secsLeftAnchor);
+  const secsLeft = useKaiPulseCountdown(true);
 
   const [dialOpen, setDialOpen] = React.useState<boolean>(false);
   const openDial = React.useCallback(() => setDialOpen(true), []);
@@ -364,15 +320,15 @@ export function KaiStatus(): React.JSX.Element {
 
   React.useEffect(() => {
     const prev = prevAnchorRef.current;
-    prevAnchorRef.current = secsLeftAnchor;
+    prevAnchorRef.current = secsLeft;
 
-    if (prev != null && secsLeftAnchor != null && secsLeftAnchor > prev + 0.25) {
+    if (prev != null && secsLeft != null && secsLeft > prev + 0.25) {
       setFlash(true);
       const t = window.setTimeout(() => setFlash(false), 180);
       return () => window.clearTimeout(t);
     }
     return;
-  }, [secsLeftAnchor]);
+  }, [secsLeft]);
 
   const beatStepDisp = `${kaiNow.beat}:${pad2(kaiNow.step)}`;
 
