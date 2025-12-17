@@ -1343,10 +1343,10 @@ function AppChrome(): React.JSX.Element {
                       href="https://github.com/phinetwork/phi.network"
                       target="_blank"
                       rel="noreferrer"
-                      aria-label="Version 28.8.8 (opens GitHub)"
+                      aria-label="Version 29.0 (opens GitHub)"
                       title="Open GitHub"
                     >
-                      28.8.8
+                      29.0
                     </a>
                   </div>
                 </footer>
