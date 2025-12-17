@@ -1,11 +1,163 @@
-/* src/components/HomePriceChartCard.compact.css
-   DROP-IN (full) — Mobile X-axis tick de-overlap
-   ✅ Shows fewer pulse labels on small devices (½, then ⅓, then ¼)
-   ✅ Always keeps FIRST + LAST tick visible
-   ✅ Prevents bottom label clipping
-*/
+/* Container */
+.hp-price-card{
+    position:relative;display:flex;flex-direction:column;gap:4px;padding:5px;border-radius:8px;
+    border:1px solid rgba(255,255,255,.12);
+    background:linear-gradient(180deg, rgba(10,18,20,.80), rgba(10,18,20,.60));
+    box-shadow:0 10px 30px rgba(0,0,0,.22), inset 0 0 0 1px rgba(255,255,255,.03);
+    transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease, filter .18s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .hp-price-card:focus-within{
+    box-shadow:0 16px 44px rgba(55,255,228,.14), inset 0 0 0 1px rgba(55,255,228,.22);
+    border-color: rgba(55,255,228,.28)
+  }
+  
+  /* ── Header (reduced ~50%) ───────────────────────────── */
+  .hp-head{display:flex;align-items:center;gap:4px; min-height:22px}
+  .hp-title{display:flex;align-items:center;gap:4px;font-weight:700;letter-spacing:.01em;font-size:0.70rem;line-height:1}
+  .hp-spacer{flex:1}
+  .hp-cta{font-weight:700;opacity:.95;border:1px solid rgba(55,255,228,.28);padding:2px 6px;border-radius:6px;background:rgba(55,255,228,.08);cursor:pointer;font-size:0.72rem;line-height:1}
+  .hp-cta:disabled{opacity:.6;cursor:not-allowed}
+  .phi-badge{display:inline-flex;align-items:center;justify-content:center;}
+  
+  /* Chart */
+  .hp-chart{
+    border-radius:6px;overflow:hidden;border:1px dashed rgba(55,255,228,.20);
+    background:linear-gradient(180deg, rgba(8,14,16,.65), rgba(8,14,16,.45))
+  }
+  .hp-chart:focus{outline:none}
+  
+  /* Footer + chips */
+  .hp-foot{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .hp-caption{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+  .hp-caption .dim{opacity:.8;font-size:10px}
+  .chip{font:inherit;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);padding:2px 6px;border-radius:999px;cursor:pointer;font-size:0.82rem;line-height:1.1}
+  .chip.active{border-color:rgba(55,255,228,.38);background:rgba(55,255,228,.10)}
+  .chip.ghost{border-style:dashed}
+  .hp-note{margin-left:auto;font-size:10px;opacity:.8}
+  
+  /* Errors + toast */
+  .hp-error{margin-top:4px;color:#ffb4b4;background:rgba(255,0,0,.08);border:1px solid rgba(255,0,0,.25);padding:6px;border-radius:6px;font-size:0.86rem}
+  .hp-toast{display:flex;align-items:center;gap:6px;margin-top:6px;padding:6px;border-radius:8px;background:rgba(55,255,228,.08);border:1px solid rgba(55,255,228,.28);font-size:0.9rem}
+  .hp-dot{width:7px;height:7px;border-radius:50%;background:rgba(55,255,228,1);display:inline-block;box-shadow:0 0 12px rgba(55,255,228,.7)}
+  
+  /* Inline checkout (compact) */
+  .hp-checkout{margin-top:6px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:linear-gradient(180deg, rgba(8,14,16,.75), rgba(8,14,16,.60));box-shadow:0 12px 36px rgba(0,0,0,.24), inset 0 0 0 1px rgba(255,255,255,.02)}
+  .hp-checkout-head{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px dashed rgba(55,255,228,.25)}
+  .hp-checkout-title{font-weight:700;letter-spacing:.01em;font-size:0.88rem;line-height:1}
+  .hp-x{margin-left:auto;background:transparent;border:0;color:#E8FBF8;font-size:15px;line-height:1;border-radius:6px;padding:1px 4px;cursor:pointer;opacity:.85}
+  .hp-x:hover{opacity:1;background:rgba(255,255,255,.06)}
+  .hp-checkout-body{padding:8px}
+  .hp-payment{border-radius:8px;background:rgba(255,255,255,.03);padding:8px;border:1px solid rgba(255,255,255,.06)}
+  .hp-actions{display:flex;gap:8px;margin-top:8px}
+  .hp-primary{cursor:pointer;border:1px solid rgba(55,255,228,.32);background:rgba(55,255,228,.10);padding:6px 10px;border-radius:8px;font-weight:700}
+  .hp-primary:disabled{opacity:.65;cursor:not-allowed}
+  .hp-secondary{cursor:pointer;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);padding:6px 10px;border-radius:8px}
+  .hp-fine{margin-top:6px;opacity:.85;font-size:10px}
+  /* ───────────────── Sleek overrides: tighter header/price/chart ─────────────── */
 
-/* Root */
+/* Container: slightly less padding + vertical gap */
+.hp-price-card{
+    gap:2px;
+    padding:4px;
+  }
+  
+  /* Header ~50% smaller, tighter line-height and spacing */
+  .hp-head{
+    min-height:18px;
+    gap:3px;
+    margin-bottom:2px; /* reduces space before the price/chart area */
+  }
+  .hp-title{
+    gap:3px;
+    font-size:0.62rem;      /* was 0.70rem */
+    line-height:1; 
+    letter-spacing:.005em;
+  }
+  .hp-cta{
+    padding:1px 6px;        /* slimmer pill */
+    font-size:0.68rem;
+    border-radius:6px;
+  }
+  
+  /* Chart card: tighter radius, less visual weight, minimal top spacing */
+  .hp-chart{
+    margin-top:2px;         /* pulls chart closer to header */
+    border-radius:6px;
+    border-width:1px;
+  }
+  
+  /* Footer/chips: smaller type + less spacing */
+  .hp-foot{ gap:4px; }
+  .hp-caption{ gap:3px; }
+  .hp-caption .dim{ font-size:9.5px; }
+  .chip{
+    padding:2px 5px;
+    font-size:0.78rem;
+    line-height:1.05;
+  }
+  
+  /* Error/toast: scale down a touch */
+  .hp-error{ font-size:0.82rem; padding:5px; }
+  .hp-toast{ font-size:0.86rem; padding:5px; gap:5px; }
+  .hp-dot{ width:6px; height:6px; }
+  
+  /* ── Likely KaiPriceChart overlay hooks (safe, no-op if classes differ) ──
+     These selectors target common overlay bits (price badge, "LIVE", pulse text,
+     tooltip bubble). If your KaiPriceChart uses different classnames, keep the
+     structure but swap the class hooks accordingly.
+  */
+  .hp-chart .kpc-live-strip,
+  .hp-chart .kpc-header,
+  .hp-chart .kpc-legend { 
+    margin-top:-2px;        /* nudge overlay up to reduce empty band */
+    gap:4px;
+  }
+  
+  /* Main live price number smaller */
+  .hp-chart .kpc-price,
+  .hp-chart .kpc-price-amount,
+  .hp-chart .kpc-price-badge {
+    font-size:0.9rem;       /* dial down the big price */
+    line-height:1;
+    padding:2px 6px;
+    border-radius:8px;
+  }
+  
+  /* Secondary stats (Δ, %, pulse) even smaller */
+  .hp-chart .kpc-delta,
+  .hp-chart .kpc-percent,
+  .hp-chart .kpc-pulse,
+  .hp-chart .kpc-subtle {
+    font-size:0.72rem;
+    opacity:.9;
+  }
+  
+  /* Tooltip bubble if your chart shows a trailing value cloud */
+  .hp-chart .kpc-tooltip,
+  .hp-chart .kpc-value-bubble{
+    transform:translateY(-2px);   /* lift bubble slightly */
+    font-size:0.82rem;
+    padding:4px 6px;
+    border-radius:10px;
+  }
+  
+  /* Axis labels & ticks (keeps chart readable but compact) */
+  .hp-chart .kpc-axis,
+  .hp-chart .kpc-tick,
+  .hp-chart .kpc-grid-label{
+    font-size:10px;
+    opacity:.85;
+  }
+  
+  /* Stripe block stays compact */
+  .hp-checkout{ margin-top:6px; }
+  
+  /* Responsive */
+  @media (max-width:680px){
+    .hp-note{display:none}
+  }
+  /* Root */
 .hp-card {
   --ink: #e8fbf8;
   --dim: #aee8df;
@@ -35,44 +187,26 @@
   padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
   backdrop-filter: blur(6px);
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease, transform 0.1s ease;
-}
-.hp-ticker:hover {
-  border-color: var(--line-strong);
-}
-.hp-ticker:active {
-  transform: translateY(1px);
+  transition: border-color .2s ease, background .2s ease, transform .1s ease;
 }
 
-.hp-left {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
+.hp-ticker:hover { border-color: var(--line-strong); }
+.hp-ticker:active { transform: translateY(1px); }
 
-.hp-right {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-.hp-price {
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-}
-.hp-pct {
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  opacity: 0.9;
-}
-.hp-pct.hp-up {
-  color: var(--up);
-}
-.hp-pct.hp-down {
-  color: var(--down);
-}
+.hp-left { display: flex; align-items: center; gap: 8px; }
+.hp-title { font-weight: 600; letter-spacing: .15px; opacity: .9; }
+
+.phi-badge { display: inline-flex; align-items: center; justify-content: center; }
+
+.hp-right { display: flex; align-items: baseline; gap: 10px; }
+.hp-price { font-variant-numeric: tabular-nums; font-weight: 700; }
+.hp-pct { font-variant-numeric: tabular-nums; font-weight: 600; opacity: .9; }
+.hp-pct.hp-up { color: var(--up); }
+.hp-pct.hp-down { color: var(--down); }
 
 /* Expanded region */
 .hp-expand {
@@ -80,25 +214,12 @@
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(8, 14, 16, 0.75), rgba(8, 14, 16, 0.55));
+  background: linear-gradient(180deg, rgba(8,14,16,.75), rgba(8,14,16,.55));
   backdrop-filter: blur(8px);
 }
 
-.hp-chart {
-  width: 100%;
-  border-radius: 6px;
-  border: 1px dashed rgba(55, 255, 228, 0.2);
-  background: linear-gradient(180deg, rgba(8, 14, 16, 0.65), rgba(8, 14, 16, 0.45));
+.hp-chart { width: 100%; }
 
-  /* ✅ label runway (prevents bottom clip) */
-  overflow: visible !important;
-  padding-bottom: 14px;
-}
-.hp-chart svg {
-  overflow: visible !important;
-}
-
-/* Controls */
 .hp-controls {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -106,41 +227,23 @@
   align-items: center;
   margin-top: 10px;
 }
-.hp-chips {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.dim {
-  color: var(--dim);
-  font-size: 12px;
-  margin-right: 4px;
-}
+
+.hp-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dim { color: var(--dim); font-size: 12px; margin-right: 4px; }
+
 .chip {
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255,255,255,0.04);
   padding: 6px 10px;
   border-radius: 999px;
   font-size: 12px;
   cursor: pointer;
-  line-height: 1.05;
 }
-.chip:hover {
-  border-color: var(--line-strong);
-}
-.chip.active {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent) inset;
-}
-.chip.ghost {
-  opacity: 0.9;
-}
+.chip:hover { border-color: var(--line-strong); }
+.chip.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.chip.ghost { opacity: .9; }
 
-.hp-actions-row {
-  display: flex;
-  gap: 8px;
-}
+.hp-actions-row { display: flex; gap: 8px; }
 
 .hp-primary {
   padding: 8px 14px;
@@ -148,30 +251,21 @@
   border: 0;
   font-weight: 700;
   cursor: pointer;
-  background: radial-gradient(
-      120% 140% at 0% 0%,
-      var(--accent) 0%,
-      rgba(55, 255, 228, 0.2) 60%,
-      transparent 100%
-    ),
-    linear-gradient(90deg, rgba(55, 255, 228, 0.25), rgba(167, 139, 250, 0.25));
+  background: radial-gradient(120% 140% at 0% 0%, var(--accent) 0%, rgba(55,255,228,.2) 60%, transparent 100%),
+              linear-gradient(90deg, rgba(55,255,228,.25), rgba(167,139,250,.25));
   color: #031a17;
 }
-.hp-primary:hover {
-  filter: brightness(1.08);
-}
+.hp-primary:hover { filter: brightness(1.08); }
 
 .hp-min {
   padding: 8px 12px;
   border-radius: 10px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255,255,255,0.03);
   color: var(--ink);
   cursor: pointer;
 }
-.hp-min:hover {
-  border-color: var(--line-strong);
-}
+.hp-min:hover { border-color: var(--line-strong); }
 
 /* Popover checkout */
 .hp-popover {
@@ -180,17 +274,14 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 10px;
-  background: linear-gradient(180deg, rgba(8, 14, 16, 0.9), rgba(8, 14, 16, 0.75));
+  background: linear-gradient(180deg, rgba(8,14,16,.9), rgba(8,14,16,.75));
 }
+
 .hp-pop-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 8px;
 }
-.hp-pop-title {
-  font-weight: 700;
-}
+.hp-pop-title { font-weight: 700; }
 .hp-x {
   appearance: none;
   border: 0;
@@ -199,31 +290,22 @@
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
-  opacity: 0.8;
+  opacity: .8;
 }
-.hp-x:hover {
-  opacity: 1;
-}
+.hp-x:hover { opacity: 1; }
 
-.hp-payment {
-  margin: 8px 0;
-}
-.hp-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
+.hp-payment { margin: 8px 0; }
+.hp-actions { display: flex; gap: 8px; margin-top: 8px; }
+
 .hp-secondary {
   padding: 8px 12px;
   border-radius: 10px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255,255,255,0.03);
   color: var(--ink);
   cursor: pointer;
 }
-.hp-secondary:hover {
-  border-color: var(--line-strong);
-}
+.hp-secondary:hover { border-color: var(--line-strong); }
 
 .hp-error {
   margin-top: 8px;
@@ -239,344 +321,16 @@
 
 /* Toast */
 .hp-toast {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: inline-flex; align-items: center; gap: 8px;
   margin-top: 10px;
   font-size: 13px;
   color: var(--ink);
-  opacity: 0.95;
+  opacity: .95;
 }
 .hp-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: 8px; height: 8px; border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 10px var(--accent);
-}
-
-/* Inline Φ icon in price */
-.hp-phi-icon {
-  width: 20px;
-  height: 20px;
-  display: inline-block;
-  vertical-align: -0.12em;
-  margin-left: 2px;
-  filter: drop-shadow(0 0 10px rgba(55, 255, 228, 0.22));
-}
-.hp-price-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.hp-price-slash {
-  opacity: 0.9;
-}
-
-/* =========================================================
-   Φ logo — masked /assets/phi.svg with subtle rainbow breathing
-   ========================================================= */
-.hp-ticker .phi-logo {
-  --phi-s: 5.236s;
-  --phi-size: 18px;
-  --halo: 0.35;
-  position: relative;
-  display: inline-block;
-  width: var(--phi-size);
-  height: var(--phi-size);
-  margin-right: 8px;
-  vertical-align: -2px;
-  isolation: isolate;
-}
-.hp-ticker .phi-logo .phi-core,
-.hp-ticker .phi-logo .phi-glow {
-  position: absolute;
-  inset: 0;
-  display: block;
-  pointer-events: none;
-}
-.hp-ticker .phi-logo .phi-core {
-  background: conic-gradient(
-    from 0turn,
-    #ff3366,
-    #ff9a00,
-    #ffe600,
-    #1dd07a,
-    #00b8ff,
-    #7a4dff,
-    #ff33d1,
-    #ff3366
-  );
-  filter: saturate(1.05) brightness(1.05) contrast(1.02) hue-rotate(0deg);
-  opacity: 0.92;
-  transform: scale(1);
-
-  -webkit-mask-image: url("/assets/phi.svg");
-  mask-image: url("/assets/phi.svg");
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  mask-position: center;
-  -webkit-mask-size: contain;
-  mask-size: contain;
-
-  animation: phiHue 120s linear infinite, phiBreathe var(--phi-s) ease-in-out infinite alternate;
-}
-.hp-ticker .phi-logo .phi-glow {
-  background: radial-gradient(
-    50% 50% at 50% 50%,
-    rgba(55, 255, 228, 0.15) 0%,
-    rgba(167, 139, 250, 0.1) 35%,
-    rgba(0, 0, 0, 0) 70%
-  );
-  filter: blur(1.2px);
-  opacity: var(--halo);
-  transform: scale(0.98);
-  animation: phiGlow var(--phi-s) ease-in-out infinite alternate;
-}
-.hp-ticker .phi-logo .phi-fallback {
-  width: var(--phi-size);
-  height: var(--phi-size);
-  opacity: 0.92;
-  display: inline-block;
-}
-@supports ((-webkit-mask: url("")) or (mask: url(""))) {
-  .hp-ticker .phi-logo .phi-fallback {
-    display: none;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .hp-ticker .phi-logo .phi-core,
-  .hp-ticker .phi-logo .phi-glow {
-    animation: none;
-  }
-}
-@keyframes phiBreathe {
-  from {
-    transform: scale(0.985);
-  }
-  to {
-    transform: scale(1.015);
-  }
-}
-@keyframes phiGlow {
-  from {
-    opacity: calc(var(--halo) * 0.85);
-  }
-  to {
-    opacity: calc(var(--halo) * 1.05);
-  }
-}
-@keyframes phiHue {
-  from {
-    filter: saturate(1.05) brightness(1.05) contrast(1.02) hue-rotate(0turn);
-  }
-  to {
-    filter: saturate(1.05) brightness(1.05) contrast(1.02) hue-rotate(1turn);
-  }
-}
-
-/* =========================================================
-   HP Title — prism text
-   ========================================================= */
-.hp-title {
-  display: inline-flex;
-  align-items: baseline;
-  line-height: 1.05;
-  letter-spacing: 0.02em;
-  font-weight: 860;
-  position: relative;
-  isolation: isolate;
-}
-.hp-titleText {
-  display: inline-block;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  -webkit-background-clip: text;
-  background-clip: text;
-
-  background-image: repeating-linear-gradient(
-      115deg,
-      rgba(255, 255, 255, 0.14) 0 1px,
-      rgba(255, 255, 255, 0) 1px 8px
-    ),
-    linear-gradient(
-      115deg,
-      rgba(255, 80, 190, 0.98) 0%,
-      rgba(120, 130, 255, 0.98) 18%,
-      rgba(80, 220, 255, 0.98) 36%,
-      rgba(120, 255, 210, 0.98) 54%,
-      rgba(255, 245, 120, 0.96) 72%,
-      rgba(255, 130, 70, 0.96) 86%,
-      rgba(255, 80, 190, 0.98) 100%
-    );
-  background-size: 120% 120%, 320% 320%;
-  background-position: 0% 0%, 0% 50%;
-  background-blend-mode: overlay;
-
-  text-shadow: 0 0 0.06em rgba(255, 255, 255, 0.28), 0 0 0.22em rgba(120, 255, 240, 0.26),
-    0 0 0.58em rgba(120, 130, 255, 0.16);
-
-  filter: saturate(1.55) brightness(1.05) drop-shadow(0 0 0.36em rgba(120, 255, 240, 0.16))
-    drop-shadow(0 0 0.72em rgba(120, 130, 255, 0.12)) drop-shadow(0 0 1.02em rgba(255, 80, 190, 0.1));
-
-  transform-origin: left center;
-  will-change: background-position, filter, text-shadow, transform;
-  animation: hpTitleBreath 5.236s ease-in-out infinite, hpTitleDrift 13.09s linear infinite;
-}
-@keyframes hpTitleBreath {
-  0% {
-    transform: translateZ(0) scale(1);
-    filter: saturate(1.45) brightness(1.02) drop-shadow(0 0 0.3em rgba(120, 255, 240, 0.12))
-      drop-shadow(0 0 0.62em rgba(120, 130, 255, 0.1));
-  }
-  38.2% {
-    transform: translateZ(0) scale(1.01);
-    filter: saturate(1.62) brightness(1.1) drop-shadow(0 0 0.42em rgba(120, 255, 240, 0.18))
-      drop-shadow(0 0 0.86em rgba(120, 130, 255, 0.14));
-  }
-  61.8% {
-    transform: translateZ(0) scale(1.016);
-    filter: saturate(1.76) brightness(1.16) drop-shadow(0 0 0.54em rgba(120, 255, 240, 0.22))
-      drop-shadow(0 0 1.02em rgba(120, 130, 255, 0.18));
-  }
-  100% {
-    transform: translateZ(0) scale(1);
-    filter: saturate(1.45) brightness(1.02) drop-shadow(0 0 0.3em rgba(120, 255, 240, 0.12))
-      drop-shadow(0 0 0.62em rgba(120, 130, 255, 0.1));
-  }
-}
-@keyframes hpTitleDrift {
-  0% {
-    background-position: 0% 0%, 0% 50%;
-  }
-  50% {
-    background-position: 0% 0%, 100% 50%;
-  }
-  100% {
-    background-position: 0% 0%, 0% 50%;
-  }
-}
-.hp-ticker:hover .hp-titleText,
-.hp-ticker:focus-visible .hp-titleText {
-  filter: saturate(1.75) brightness(1.1) drop-shadow(0 0 0.48em rgba(120, 255, 240, 0.2))
-    drop-shadow(0 0 0.92em rgba(120, 130, 255, 0.16)) drop-shadow(0 0 1.12em rgba(255, 80, 190, 0.12));
-}
-@media (prefers-reduced-motion: reduce) {
-  .hp-titleText {
-    animation: none;
-  }
-}
-
-/* =========================================================
-   AXIS TEXT (default) — crisp + readable over glow
-   ========================================================= */
-.hp-chart .kpc-axis,
-.hp-chart .kpc-tick,
-.hp-chart .kpc-grid-label,
-.hp-chart .recharts-cartesian-axis-tick text {
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.06em;
-  paint-order: stroke fill;
-  stroke: rgba(3, 8, 24, 0.85);
-  stroke-width: 3px;
-  stroke-linejoin: round;
-}
-
-/* =========================================================
-   ✅ MOBILE X-AXIS TICK DENSITY (REAL FIX)
-   -  <=520px  : show ~1/2 labels
-   -  <=380px  : show ~1/3 labels
-   -  <=330px  : show ~1/4 labels
-   Always keep first + last tick visible.
-   Works even if your tick labels are long.
-   ========================================================= */
-
-/* Base tick size */
-.hp-chart .recharts-cartesian-axis-x .recharts-cartesian-axis-tick text {
-  font-size: 11px;
-  opacity: 0.92;
-}
-
-@media (max-width: 520px) {
-  .hp-chart {
-    padding-bottom: 16px;
-  }
-
-  .hp-chart .recharts-cartesian-axis-x .recharts-cartesian-axis-tick text {
-    font-size: 10px !important;
-  }
-
-  /* Recharts: hide every other X tick group */
-  .hp-chart .recharts-cartesian-axis-x .recharts-cartesian-axis-ticks > g:nth-of-type(2n + 1) {
-    display: none !important;
-  }
-
-  /* Keep ends */
-  .hp-chart .recharts-cartesian-axis-x .recharts-cartesian-axis-ticks > g:first-of-type,
-  .hp-chart .recharts-cartesian-axis-x .recharts-cartesian-axis-ticks > g:last-of-type {
-    display: block !important;
-  }
-
-  /* Non-Recharts fallback: your custom tick nodes */
-  .hp-chart .kpc-tick:nth-child(2n + 1) {
-    display: none !important;
-  }
-  .hp-chart .kpc-tick:first-child,
-  .hp-chart .kpc-tick:last-child {
-    display: inline !important;
-  }
-}
-
-@media (max-width: 380px) {
-  .hp-chart {
-    padding-bottom: 18px;
-  }
-
-  .hp-chart .recharts-cartesian-axis-x .recharts-cartesian-axis-tick text {
-    font-size: 9px !important;
-    letter-spacing: 0.04em;
-  }
-
-  /* Show only every 3rd tick (plus ends) */
-  .hp-chart .recharts-cartesian-axis-x .recharts-cartesian-axis-ticks > g:not(:nth-of-type(3n)) {
-    display: none !important;
-  }
-  .hp-chart .recharts-cartesian-axis-x .recharts-cartesian-axis-ticks > g:first-of-type,
-  .hp-chart .recharts-cartesian-axis-x .recharts-cartesian-axis-ticks > g:last-of-type {
-    display: block !important;
-  }
-
-  .hp-chart .kpc-tick:not(:nth-child(3n)) {
-    display: none !important;
-  }
-  .hp-chart .kpc-tick:first-child,
-  .hp-chart .kpc-tick:last-child {
-    display: inline !important;
-  }
-}
-
-@media (max-width: 330px) {
-  .hp-chart {
-    padding-bottom: 20px;
-  }
-
-  /* Show only every 4th tick (plus ends) */
-  .hp-chart .recharts-cartesian-axis-x .recharts-cartesian-axis-ticks > g:not(:nth-of-type(4n)) {
-    display: none !important;
-  }
-  .hp-chart .recharts-cartesian-axis-x .recharts-cartesian-axis-ticks > g:first-of-type,
-  .hp-chart .recharts-cartesian-axis-x .recharts-cartesian-axis-ticks > g:last-of-type {
-    display: block !important;
-  }
-
-  .hp-chart .kpc-tick:not(:nth-child(4n)) {
-    display: none !important;
-  }
-  .hp-chart .kpc-tick:first-child,
-  .hp-chart .kpc-tick:last-child {
-    display: inline !important;
-  }
 }
 
 /* Responsive niceties */
@@ -588,29 +342,303 @@
     justify-content: flex-start;
   }
 }
-@media (max-width: 400px) {
-  .hp-ticker {
-    gap: 6px;
-    padding: 6px 10px;
+/* =========================================================
+   Φ logo — masked /phi.svg with subtle rainbow breathing
+   Works in Chrome/Edge/Firefox/Safari. Fallback <img> shown
+   if mask unsupported. 1 pulse ≈ 5.236s.
+   ========================================================= */
+
+   .hp-ticker .phi-logo {
+    --phi-s: 5.236s;      /* breath period */
+    --phi-size: 18px;     /* glyph size (adjust to taste) */
+    --halo: 0.35;         /* glow intensity (keep subtle) */
+    position: relative;
+    display: inline-block;
+    width: var(--phi-size);
+    height: var(--phi-size);
+    margin-right: 8px;
+    vertical-align: -2px;
+    isolation: isolate;
   }
-  .hp-right {
-    gap: 6px;
+  
+  .hp-ticker .phi-logo .phi-core,
+  .hp-ticker .phi-logo .phi-glow {
+    position: absolute;
+    inset: 0;
+    display: block;
+    pointer-events: none;
   }
-  .hp-price {
-    font-size: 14px;
+  
+  /* The rainbow lives inside the glyph via mask */
+  .hp-ticker .phi-logo .phi-core {
+    background: conic-gradient(
+      from 0turn,
+      #ff3366,
+      #ff9a00,
+      #ffe600,
+      #1dd07a,
+      #00b8ff,
+      #7a4dff,
+      #ff33d1,
+      #ff3366
+    );
+    filter: saturate(1.05) brightness(1.05) contrast(1.02) hue-rotate(0deg);
+    opacity: 0.92;
+    transform: scale(1);
+  
+    /* Mask to /phi.svg */
+    -webkit-mask-image: url("/assets/phi.svg");
+    mask-image: url("/assets/phi.svg");
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+  
+    animation:
+      phiHue 120s linear infinite,
+      phiBreathe var(--phi-s) ease-in-out infinite alternate;
   }
-  .hp-pct {
-    font-size: 12px;
+  
+  /* Very soft breathing halo */
+  .hp-ticker .phi-logo .phi-glow {
+    background: radial-gradient(
+      50% 50% at 50% 50%,
+      rgba(55, 255, 228, 0.15) 0%,
+      rgba(167, 139, 250, 0.10) 35%,
+      rgba(0, 0, 0, 0) 70%
+    );
+    filter: blur(1.2px);
+    opacity: var(--halo);
+    transform: scale(0.98);
+    animation: phiGlow var(--phi-s) ease-in-out infinite alternate;
+  }
+  
+  /* Fallback image shows only if mask unsupported */
+  .hp-ticker .phi-logo .phi-fallback {
+    width: var(--phi-size);
+    height: var(--phi-size);
+    opacity: 0.92;
+    display: inline-block;
+  }
+  @supports ((-webkit-mask: url("")) or (mask: url(""))) {
+    .hp-ticker .phi-logo .phi-fallback { display: none; }
+  }
+  
+  /* Respect reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    .hp-ticker .phi-logo .phi-core,
+    .hp-ticker .phi-logo .phi-glow { animation: none; }
+  }
+  
+  /* Animations */
+  @keyframes phiBreathe { from { transform: scale(0.985); } to { transform: scale(1.015); } }
+  @keyframes phiGlow    { from { opacity: calc(var(--halo) * 0.85); } to { opacity: calc(var(--halo) * 1.05); } }
+  @keyframes phiHue     { from { filter: saturate(1.05) brightness(1.05) contrast(1.02) hue-rotate(0turn); }
+                          to   { filter: saturate(1.05) brightness(1.05) contrast(1.02) hue-rotate(1turn); } }
+  
+  /* (Optional) ensure left side content aligns nicely */
+  .hp-ticker .hp-left {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  /* ───────────────────────────────────────────────────────────────
+   KAI Pulse axis — NO OVERLAP on mobile + NO CLIP
+   Paste LAST (last wins).
+──────────────────────────────────────────────────────────────── */
+
+.hp-chart{
+  /* let axis labels breathe (prevents clip at bottom) */
+  overflow: visible !important;
+  padding-bottom: 10px; /* creates safe runway for tick text */
+}
+
+/* If your chart is SVG-based, don’t clip text */
+.hp-chart svg{
+  overflow: visible !important;
+}
+
+/* Make ticks smaller + tighter by default */
+.hp-chart .kpc-axis,
+.hp-chart .kpc-tick,
+.hp-chart .kpc-grid-label{
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .06em;
+  paint-order: stroke fill;
+  stroke: rgba(3, 8, 24, 0.85); /* keeps text readable over glow */
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* Recharts-safe tick text polish (no-op if not using Recharts) */
+.hp-chart .recharts-cartesian-axis-tick text{
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .06em;
+  paint-order: stroke fill;
+  stroke: rgba(3, 8, 24, 0.85);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+/* ✅ Mobile: show ~1/2 the X-axis labels (prevents overlap) */
+@media (max-width: 520px){
+  .hp-chart{ padding-bottom: 14px; }
+
+  .hp-chart .kpc-axis,
+  .hp-chart .kpc-tick,
+  .hp-chart .kpc-grid-label,
+  .hp-chart .recharts-cartesian-axis-tick text{
+    font-size: 10px !important;
+    opacity: .92;
+  }
+
+  /* Recharts: hide every other tick group */
+  .hp-chart .recharts-cartesian-axis-tick:nth-child(2n+1){
+    display: none !important;
+  }
+  /* Always keep the LAST tick visible */
+  .hp-chart .recharts-cartesian-axis-tick:last-child{
+    display: block !important;
+  }
+
+  /* Your custom ticks (non-Recharts): hide every other tick */
+  .hp-chart .kpc-tick:nth-child(2n+1){
+    display: none !important;
+  }
+  .hp-chart .kpc-tick:last-child{
+    display: inline !important;
   }
 }
-@media (max-width: 350px) {
-  .hp-ticker {
-    padding: 6px 8px;
+.hp-phi-icon{
+  width: 20px;
+  height: 20px;
+  display: inline-block;
+  vertical-align: -0.12em;
+  margin-left: 2px;
+  filter: drop-shadow(0 0 10px rgba(55,255,228,.22));
+}
+
+.hp-price-row{ display:inline-flex; align-items:center; gap:4px; }
+.hp-price-slash{ opacity:.9; }
+/* =========================================================
+   HP Title — Atlantean “Value Index”
+   - lives INSIDE the glyphs (no badge)
+   - φ breath: 5.236s
+   - prismatic neon glass (text-clipped)
+   ========================================================= */
+
+.hp-title{
+  display: inline-flex;
+  align-items: baseline;
+  line-height: 1.05;
+  letter-spacing: 0.02em;
+  font-weight: 860;
+  position: relative;
+  isolation: isolate;
+}
+
+.hp-titleText{
+  display: inline-block;
+
+  /* fallback */
+  color: rgba(230, 250, 250, 0.92);
+
+  /* prism-in-text */
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+
+  background-image:
+    /* micro-etch shimmer */
+    repeating-linear-gradient(
+      115deg,
+      rgba(255,255,255,0.14) 0 1px,
+      rgba(255,255,255,0.00) 1px 8px
+    ),
+    /* aurora prism */
+    linear-gradient(
+      115deg,
+      rgba(255, 80, 190, 0.98) 0%,
+      rgba(120, 130, 255, 0.98) 18%,
+      rgba(80, 220, 255, 0.98) 36%,
+      rgba(120, 255, 210, 0.98) 54%,
+      rgba(255, 245, 120, 0.96) 72%,
+      rgba(255, 130, 70,  0.96) 86%,
+      rgba(255, 80, 190, 0.98) 100%
+    );
+
+  background-size: 120% 120%, 320% 320%;
+  background-position: 0% 0%, 0% 50%;
+  background-blend-mode: overlay;
+
+  /* crystalline clarity */
+  text-shadow:
+    0 0 0.06em rgba(255,255,255,0.28),
+    0 0 0.22em rgba(120,255,240,0.26),
+    0 0 0.58em rgba(120,130,255,0.16);
+
+  filter:
+    saturate(1.55)
+    brightness(1.05)
+    drop-shadow(0 0 0.36em rgba(120,255,240,0.16))
+    drop-shadow(0 0 0.72em rgba(120,130,255,0.12))
+    drop-shadow(0 0 1.02em rgba(255,80,190,0.10));
+
+  transform-origin: left center;
+  will-change: background-position, filter, text-shadow, transform;
+
+  animation:
+    hpTitleBreath 5.236s ease-in-out infinite,
+    hpTitleDrift 13.09s linear infinite;
+}
+
+/* φ pulse inhale/exhale */
+@keyframes hpTitleBreath{
+  0%{
+    transform: translateZ(0) scale(1);
+    filter: saturate(1.45) brightness(1.02)
+      drop-shadow(0 0 0.30em rgba(120,255,240,0.12))
+      drop-shadow(0 0 0.62em rgba(120,130,255,0.10));
   }
-  .hp-price {
-    font-size: 13px;
+  38.2%{
+    transform: translateZ(0) scale(1.010);
+    filter: saturate(1.62) brightness(1.10)
+      drop-shadow(0 0 0.42em rgba(120,255,240,0.18))
+      drop-shadow(0 0 0.86em rgba(120,130,255,0.14));
   }
-  .hp-pct {
-    font-size: 11px;
+  61.8%{
+    transform: translateZ(0) scale(1.016);
+    filter: saturate(1.76) brightness(1.16)
+      drop-shadow(0 0 0.54em rgba(120,255,240,0.22))
+      drop-shadow(0 0 1.02em rgba(120,130,255,0.18));
   }
+  100%{
+    transform: translateZ(0) scale(1);
+    filter: saturate(1.45) brightness(1.02)
+      drop-shadow(0 0 0.30em rgba(120,255,240,0.12))
+      drop-shadow(0 0 0.62em rgba(120,130,255,0.10));
+  }
+}
+
+/* slow living rainbow evolution */
+@keyframes hpTitleDrift{
+  0%{ background-position: 0% 0%, 0% 50%; }
+  50%{ background-position: 0% 0%, 100% 50%; }
+  100%{ background-position: 0% 0%, 0% 50%; }
+}
+
+.hp-ticker:hover .hp-titleText,
+.hp-ticker:focus-visible .hp-titleText{
+  filter:
+    saturate(1.75)
+    brightness(1.10)
+    drop-shadow(0 0 0.48em rgba(120,255,240,0.20))
+    drop-shadow(0 0 0.92em rgba(120,130,255,0.16))
+    drop-shadow(0 0 1.12em rgba(255,80,190,0.12));
+}
+
+@media (prefers-reduced-motion: reduce){
+  .hp-titleText{ animation: none; }
 }
