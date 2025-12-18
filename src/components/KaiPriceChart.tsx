@@ -149,7 +149,7 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
   points,
   width = 720,
   height = 280,
-  title = "Φ Value — Live (Kai pulses)",
+  title = "Φ Value — Live (☤Kai)",
   className,
   style,
   formatter = fmtUSD,
@@ -532,7 +532,7 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
           {change >= 0 ? "▲" : "▼"} {formatter(Math.abs(change))} ({changePct >= 0 ? "+" : ""}
           {changePct.toFixed(2)}%)
         </div>
-        {last && <div className="kpc-pulse">pulse {Math.floor(last.p)}</div>}
+        {last && <div className="kpc-pulse">☤KAI {Math.floor(last.p)}</div>}
       </div>
 
       {/* CHART */}
@@ -543,7 +543,7 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
         onMouseMove={onMove}
         onMouseLeave={onLeave}
         role="img"
-        aria-label="Live Φ value in fiat over Kai pulses"
+        aria-label="Live Φ value in fiat over ☤KAI Pulses"
       >
         <defs>
           <filter id="kpc-glow" x="-50%" y="-50%" width="200%" height="200%">
@@ -641,7 +641,7 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
                 );
               })}
               <text x={padding.l} y={padding.t + ih + 36} textAnchor="start" className="kpc-axis-text">
-                pulse
+                ☤KAI
               </text>
 
               {Array.from({ length: Math.max(1, gridYTicks) + 1 }).map((_, i) => {
@@ -673,7 +673,7 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
                 <line x1={padding.l} x2={padding.l + iw} y1={hover.y} y2={hover.y} className="kpc-xhair-line" />
                 <rect x={tip.x} y={tip.y} width={tip.w} height={tip.h} rx="8" ry="8" className="kpc-tip" />
                 <text x={tip.textX} y={tip.textY} className="kpc-tip-text">
-                  pulse {Math.floor(hover.p)} • {formatter(hover.price)}
+                  ☤KAI {Math.floor(hover.p)} • {formatter(hover.price)}
                 </text>
               </g>
             )}
