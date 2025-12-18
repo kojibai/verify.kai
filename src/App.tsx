@@ -43,6 +43,9 @@ import EternalKlock from "./components/EternalKlock";
 
 import "./App.css";
 
+export const DEFAULT_APP_VERSION = "29.3.7";
+const SW_VERSION_EVENT = "kairos:sw-version";
+
 type NavItem = {
   to: string;
   label: string;
@@ -100,7 +103,11 @@ function isInteractiveTarget(t: EventTarget | null): boolean {
   return Boolean(ht.isContentEditable) || Boolean(el.closest("[contenteditable='true']"));
 }
 
-
+function getInitialAppVersion(): string {
+  const swVersion = typeof window !== "undefined" ? window.kairosSwVersion : undefined;
+  if (typeof swVersion === "string" && swVersion.length) return swVersion;
+  return DEFAULT_APP_VERSION;
+}
 
 /* ──────────────────────────────────────────────────────────────────────────────
    KKS v1.0 display math (exact step)
@@ -992,8 +999,18 @@ export function AppChrome(): React.JSX.Element {
   useDisableZoom();
   usePerfMode();
 
+  const [appVersion, setAppVersion] = useState<string>(getInitialAppVersion);
 
+  useEffect(() => {
+    const onVersion = (event: Event): void => {
+      const detail = (event as CustomEvent<string>).detail;
+      if (typeof detail === "string" && detail.length) setAppVersion(detail);
+    };
 
+    window.addEventListener(SW_VERSION_EVENT, onVersion);
+
+    return () => window.removeEventListener(SW_VERSION_EVENT, onVersion);
+  }, []);
 
   const BREATH_S = useMemo(() => 3 + Math.sqrt(5), []);
   const BREATH_MS = useMemo(() => BREATH_S * 1000, [BREATH_S]);
@@ -1364,10 +1381,10 @@ export function AppChrome(): React.JSX.Element {
                       href="https://github.com/phinetwork/phi.network"
                       target="_blank"
                       rel="noreferrer"
-                      aria-label={`Version 29.3.6 (opens GitHub)`}
+                      aria-label={`Version ${appVersion} (opens GitHub)`}
                       title="Open GitHub"
                     >
-                      29.3.6
+                      {appVersion}
                     </a>
                   </div>
                 </footer>
