@@ -40,7 +40,6 @@ import HomePriceChartCard from "./components/HomePriceChartCard";
 import SovereignDeclarations from "./components/SovereignDeclarations";
 import SigilExplorer from "./components/SigilExplorer";
 import EternalKlock from "./components/EternalKlock";
-import PwaDelight from "./components/PwaDelight";
 
 import "./App.css";
 
@@ -1250,8 +1249,6 @@ export function AppChrome(): React.JSX.Element {
         role="main"
         aria-label="Sovereign Value Workspace"
       >
-        <PwaDelight emphasize />
-
         <div className="app-frame" role="region" aria-label="Secure frame">
           <div className="app-frame-inner">
             <div className="app-workspace">
