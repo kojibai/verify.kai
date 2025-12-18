@@ -7,7 +7,10 @@
    - Audio/video range support; fonts cached; CDNs handled
 */
 
-const VERSION = new URL(self.location.href).searchParams.get("v") || "dev"; // derived from build
+// Update this version string manually to keep the app + cache versions in sync.
+// The value is forwarded to the UI via the service worker "SW_ACTIVATED" message.
+const APP_VERSION = "29.3.6";
+const VERSION = new URL(self.location.href).searchParams.get("v") || APP_VERSION; // derived from build
 const PREFIX  = "PHINETWORK";
 const PRECACHE = `${PREFIX}-precache-${VERSION}`;
 const RUNTIME  = `${PREFIX}-runtime-${VERSION}`;

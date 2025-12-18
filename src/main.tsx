@@ -9,6 +9,13 @@ import AppRouter from "./router/AppRouter";
 
 const isProduction = import.meta.env.MODE === "production";
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || "dev";
+const SW_VERSION_EVENT = "kairos:sw-version";
+
+declare global {
+  interface Window {
+    kairosSwVersion?: string;
+  }
+}
 
 function rewriteLegacyHash(): void {
   const h = window.location.hash || "";
@@ -80,6 +87,10 @@ if ("serviceWorker" in navigator && isProduction) {
       navigator.serviceWorker.addEventListener("message", (event) => {
         if (event.data?.type === "SW_ACTIVATED") {
           console.log("Kairos service worker active", event.data.version);
+          if (typeof event.data.version === "string") {
+            window.kairosSwVersion = event.data.version;
+            window.dispatchEvent(new CustomEvent(SW_VERSION_EVENT, { detail: event.data.version }));
+          }
         }
       });
 

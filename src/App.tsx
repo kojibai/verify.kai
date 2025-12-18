@@ -43,8 +43,6 @@ import EternalKlock from "./components/EternalKlock";
 
 import "./App.css";
 
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "dev";
-
 type NavItem = {
   to: string;
   label: string;
@@ -101,6 +99,8 @@ function isInteractiveTarget(t: EventTarget | null): boolean {
   const ht = el as HTMLElement;
   return Boolean(ht.isContentEditable) || Boolean(el.closest("[contenteditable='true']"));
 }
+
+
 
 /* ──────────────────────────────────────────────────────────────────────────────
    KKS v1.0 display math (exact step)
@@ -992,6 +992,9 @@ export function AppChrome(): React.JSX.Element {
   useDisableZoom();
   usePerfMode();
 
+
+
+
   const BREATH_S = useMemo(() => 3 + Math.sqrt(5), []);
   const BREATH_MS = useMemo(() => BREATH_S * 1000, [BREATH_S]);
   const BREATHS_PER_DAY = useMemo(() => 17_491.270421, []);
@@ -1361,10 +1364,10 @@ export function AppChrome(): React.JSX.Element {
                       href="https://github.com/phinetwork/phi.network"
                       target="_blank"
                       rel="noreferrer"
-                      aria-label={`Version ${APP_VERSION} (opens GitHub)`}
+                      aria-label={`Version 29.3.6 (opens GitHub)`}
                       title="Open GitHub"
                     >
-                      {APP_VERSION}
+                      29.3.6
                     </a>
                   </div>
                 </footer>
