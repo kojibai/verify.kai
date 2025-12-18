@@ -5,10 +5,11 @@
 // Useful for production builds where no external network is allowed.
 // ────────────────────────────────────────────────────────────────
 
-import type { IpfsLike, PublishResult } from "./ipfsAdapter";
+export type PublishResult = { headCid: string };
 
-// Re-export the interface/types so consumers can import from this module too.
-export type { IpfsLike, PublishResult } from "./ipfsAdapter";
+export interface IpfsLike {
+  publish(buf: Uint8Array): Promise<PublishResult>;
+}
 
 /**
  * A no-op implementation of the IpfsLike interface.

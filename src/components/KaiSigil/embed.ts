@@ -11,7 +11,7 @@ import { generateKeyPair, signCanonicalMessage } from "../../lib/sigil/breathPro
 import { createLedger, packLedger } from "../../lib/ledger/log";
 import type { MintEntry } from "../../lib/ledger/types";
 import { buildDhtBlock } from "../../lib/sync/dht";
-import { ipfs } from "../../lib/sync/ipfsAdapter";
+import { NoopIpfs } from "../../lib/sync/nopAdapter";
 
 import {
   base58Encode,
@@ -327,7 +327,7 @@ export async function buildEmbeddedBundle(args: {
   const packedBytes = b64ToUint8(packed.payload);
 
   const dhtBlock = await buildDhtBlock({
-    ipfs,
+    ipfs: NoopIpfs,
     packedLedgerBytes: packedBytes,
     prevCid: undefined,
     pubKeyJwk: payloadObj.ownerPubKey,

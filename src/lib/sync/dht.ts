@@ -1,4 +1,4 @@
-import type { IpfsLike } from "./ipfsAdapter";
+import type { IpfsLike } from "./nopAdapter";
 import { NoopIpfs } from "./nopAdapter";
 
 export type DhtBlock = {
