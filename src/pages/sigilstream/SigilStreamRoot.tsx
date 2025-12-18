@@ -427,6 +427,10 @@ function extractTokenFromUrlLike(raw: string): string | null {
     const m = u.pathname.match(/\/p\/([^/?#]+)/);
     if (m?.[1]) return m[1];
   }
+  {
+    const m = u.pathname.match(/\/s\/([^/?#]+)/);
+    if (m?.[1]) return m[1];
+  }
 
   return null;
 }
