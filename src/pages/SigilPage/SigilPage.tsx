@@ -946,6 +946,20 @@ useEffect(() => {
     debits?: DebitLoose[];
     totalDebited?: number;
   };
+
+  const debitsSignature = (list?: DebitLoose[]): string => {
+    if (!Array.isArray(list)) return "";
+    return [...list]
+      .map((d) => ({
+        nonce: d.nonce,
+        amount: Number.isFinite(d.amount) ? Number(d.amount) : 0,
+        recipient: d.recipientPhiKey ?? "",
+        ts: d.timestamp ?? "",
+      }))
+      .sort((a, b) => a.nonce.localeCompare(b.nonce))
+      .map((d) => `${d.nonce}:${d.amount}:${d.recipient}:${d.ts}`)
+      .join("|");
+  };
   useEffect(() => {
     const dParam = urlQs.get("d");
     const raw = decodeDebitsQS(dParam);
@@ -958,16 +972,26 @@ useEffect(() => {
 
     if (h) writeDebitsStored(h, pruned, tok);
 
+    const nextOrig = typeof pruned.originalAmount === "number" ? pruned.originalAmount : undefined;
+    const nextDebits = Array.isArray(pruned.debits)
+      ? (pruned.debits as unknown as DebitLoose[])
+      : undefined;
+
     setPayload((prev) => {
       if (!prev) return prev;
-      const base = { ...(prev as SigilPayload) };
-      const next = base as SigilPayloadWithDebits;
-      if (typeof pruned.originalAmount === "number") next.originalAmount = pruned.originalAmount;
-      if (Array.isArray(pruned.debits)) {
-        next.debits = pruned.debits as unknown as DebitLoose[];
-        next.totalDebited = sumDebits(pruned.debits as unknown as DebitLoose[]);
+      const prevWithDebits = prev as SigilPayloadWithDebits;
+
+      const sameOrig = (prevWithDebits.originalAmount ?? undefined) === nextOrig;
+      const sameDebits = debitsSignature(prevWithDebits.debits) === debitsSignature(nextDebits);
+      if (sameOrig && sameDebits) return prev;
+
+      const nextPayload: SigilPayloadWithDebits = { ...(prev as SigilPayload) };
+      if (nextOrig !== undefined) nextPayload.originalAmount = nextOrig;
+      if (nextDebits) {
+        nextPayload.debits = nextDebits;
+        nextPayload.totalDebited = sumDebits(nextDebits);
       }
-      return next as SigilPayload;
+      return nextPayload as SigilPayload;
     });
   }, [urlQs, payload, localHash, legacyInfo, transferToken, setPayload]);
 
@@ -987,16 +1011,26 @@ useEffect(() => {
 
     updateDebitsEverywhere(pruned, h, tok, { broadcast: false, navigate: urlIsStale });
 
+    const nextOrig = typeof pruned.originalAmount === "number" ? pruned.originalAmount : undefined;
+    const nextDebits = Array.isArray(pruned.debits)
+      ? (pruned.debits as unknown as DebitLoose[])
+      : undefined;
+
     setPayload((prev) => {
       if (!prev) return prev;
-      const base = { ...(prev as SigilPayload) };
-      const next = base as SigilPayloadWithDebits;
-      if (typeof pruned.originalAmount === "number") next.originalAmount = pruned.originalAmount;
-      if (Array.isArray(pruned.debits)) {
-        next.debits = pruned.debits as unknown as DebitLoose[];
-        next.totalDebited = sumDebits(pruned.debits as unknown as DebitLoose[]);
+      const prevWithDebits = prev as SigilPayloadWithDebits;
+
+      const sameOrig = (prevWithDebits.originalAmount ?? undefined) === nextOrig;
+      const sameDebits = debitsSignature(prevWithDebits.debits) === debitsSignature(nextDebits);
+      if (sameOrig && sameDebits) return prev;
+
+      const nextPayload: SigilPayloadWithDebits = { ...(prev as SigilPayload) };
+      if (nextOrig !== undefined) nextPayload.originalAmount = nextOrig;
+      if (nextDebits) {
+        nextPayload.debits = nextDebits;
+        nextPayload.totalDebited = sumDebits(nextDebits);
       }
-      return next as SigilPayload;
+      return nextPayload as SigilPayload;
     });
   }, [payload?.canonicalHash, localHash, legacyInfo, urlQs, transferToken, setPayload]);
 
