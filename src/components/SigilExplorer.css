@@ -86,6 +86,10 @@
 
   /* compositor stability */
   isolation: isolate;
+
+  /* Lock root overscroll to avoid browser pull-to-refresh on mobile */
+  overscroll-behavior: contain;
+  touch-action: pan-y pinch-zoom;
 }
 
 @supports (min-height: 100dvh){
@@ -420,7 +424,8 @@
   display: grid;
   gap: 14px;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
+  overscroll-behavior: contain;
+  touch-action: pan-y pinch-zoom;
   scroll-behavior: smooth;
 
   scrollbar-gutter: stable both-edges;
