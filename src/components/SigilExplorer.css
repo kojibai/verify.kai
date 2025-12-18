@@ -1413,29 +1413,7 @@
   .kx-import,
   .kx-export{ padding: 6px 9px; }
 }
-/* ─────────────────────────────────────────────────────────────
-   ORIGIN CONTAINER (chakra-tinted, etched, breathing)
-   ───────────────────────────────────────────────────────────── */
-.origin{
-  border-radius: var(--sx-radius-md);
-  border: 1px solid rgba(255,255,255,0.16);
-  background:
-    radial-gradient(120% 180% at 0% 0%, color-mix(in oklab, var(--sx-chakra) 18%, transparent), transparent 60%),
-    radial-gradient(120% 180% at 100% 100%, color-mix(in oklab, var(--sx-chakra) 12%, transparent), transparent 62%),
-    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-  box-shadow:
-    0 16px 42px rgba(0,0,0,0.58),
-    inset 0 1px 0 rgba(255,255,255,0  
-,0.06);
-  position: relative;
-  overflow: hidden;
-  animation: sx-origin-breathe var(--sx-breath) ease-in-out infinite;     
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  will-change: transform, filter;
-}
+
 
 /* ─────────────────────────────────────────────────────────────
    TOOLBAR — KEYS INLINE + CLOSE BUTTON NUDGE
@@ -1481,4 +1459,27 @@
 .kx-toolbar :where(button[aria-label="Close"], button[title="Close"], button[aria-label="close"], button[title="close"]){
   transform: translate3d(0, -2px, 0);
   will-change: transform;
+}
+/* ─────────────────────────────────────────────────────────────
+   ORIGIN CONTAINER (chakra-tinted, etched, breathing)
+   ───────────────────────────────────────────────────────────── */
+.origin{
+  border-radius: var(--sx-radius-md);
+  border: 1px solid rgba(255,255,255,0.16);
+  background:
+    radial-gradient(120% 180% at 0% 0%, color-mix(in oklab, var(--sx-chakra) 18%, transparent), transparent 60%),
+    radial-gradient(120% 180% at 100% 100%, color-mix(in oklab, var(--sx-chakra) 12%, transparent), transparent 62%),
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  box-shadow:
+    0 16px 42px rgba(0,0,0,0.58),
+    inset 0 1px 0 rgba(255,255,255,0  
+,0.06);
+  position: relative;
+  overflow: hidden;
+  animation: sx-origin-breathe var(--sx-breath) ease-in-out infinite;     
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform, filter;
 }
