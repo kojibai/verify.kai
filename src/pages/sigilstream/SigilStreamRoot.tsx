@@ -66,7 +66,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./styles/sigilstream.css";
 
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 /* Toasts */
 import ToastsProvider from "./data/toast/Toasts";
@@ -2193,6 +2193,12 @@ function SigilStreamInner(): React.JSX.Element {
   return (
     <main className="sf" data-weekday={kaiTheme.weekday} data-chakra={kaiTheme.chakra} style={sigilTintStyle}>
       <header className="sf-head" role="region" aria-labelledby="glyph-stream-title">
+        <nav className="sf-topnav" aria-label="Back navigation">
+          <Link className="sf-back" to="/explorer">
+            ← Back to Explorer
+          </Link>
+        </nav>
+
         <h1 id="glyph-stream-title">Memory Stream</h1>
 
         <KaiStatus />

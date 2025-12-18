@@ -11,7 +11,7 @@ import {
   useCallback,
   useDeferredValue,
 } from "react";
-import { useParams, useLocation, useNavigate } from "react-router-dom";
+import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
 import html2canvas from "html2canvas";
 import { createPortal } from "react-dom";
 /* ——— Core components ——— */
@@ -2546,6 +2546,12 @@ useEffect(() => {
 
       <div className="sp-viewport" aria-hidden={false}>
         <section className="sp-shell" data-center>
+          <nav className="sp-topnav" aria-label="Back navigation">
+            <Link className="btn-ghost sp-back" to="/explorer">
+              ← Back to Explorer
+            </Link>
+          </nav>
+
           <SigilHeader
             glyphAuth={glyphAuth}
             linkStatus={linkStatus}

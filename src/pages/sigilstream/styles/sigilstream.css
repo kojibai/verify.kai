@@ -251,6 +251,30 @@ body{
 }
 
 /* ========== 5) HEADER ========================================== */
+.sf-topnav{
+  display:flex;
+  justify-content:flex-start;
+}
+
+.sf-back{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px;
+  border-radius: var(--r-pill);
+  text-decoration:none;
+  color: rgb(var(--ink));
+  background: rgba(var(--glass), .06);
+  border: 1px solid rgba(var(--glass), .16);
+  box-shadow: var(--inset-1);
+  font-weight: 700;
+}
+
+.sf-back:focus-visible{
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .sf-head{
   padding-top: 10px;
   padding-bottom: 6px;
