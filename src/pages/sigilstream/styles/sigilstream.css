@@ -260,7 +260,8 @@ body{
   display:inline-flex;
   align-items:center;
   gap:8px;
-  padding:8px 12px;
+  padding:10px 14px;
+  min-height: 46px;
   border-radius: var(--r-pill);
   text-decoration:none;
   color: rgb(var(--ink));
@@ -268,6 +269,12 @@ body{
   border: 1px solid rgba(var(--glass), .16);
   box-shadow: var(--inset-1);
   font-weight: 700;
+  font-size: 16px;
+  line-height: 1.2;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .sf-back:focus-visible{
