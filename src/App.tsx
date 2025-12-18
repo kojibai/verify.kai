@@ -31,6 +31,7 @@ import {
   DAYS_PER_MONTH,
   DAYS_PER_YEAR,
   MONTHS_PER_YEAR,
+  type ChakraDay,
 } from "./utils/kai_pulse";
 import { fmt2, formatPulse, modPos, readNum } from "./utils/kaiTimeDisplay";
 import { usePerfMode } from "./hooks/usePerfMode";
@@ -108,6 +109,36 @@ const STEPS_PER_DAY = BEATS_PER_DAY * STEPS_PER_BEAT;
 
 // Canon breath count per day (precision)
 const PULSES_PER_DAY = 17_491.270421;
+
+const ARK_COLORS: readonly string[] = [
+  "var(--chakra-ark-0)",
+  "var(--chakra-ark-1)",
+  "var(--chakra-ark-2)",
+  "var(--chakra-ark-3)",
+  "var(--chakra-ark-4)",
+  "var(--chakra-ark-5)",
+];
+
+const CHAKRA_DAY_COLORS: Record<ChakraDay, string> = {
+  Root: "var(--chakra-ink-0)",
+  Sacral: "var(--chakra-ink-1)",
+  "Solar Plexus": "var(--chakra-ink-2)",
+  Heart: "var(--chakra-ink-3)",
+  Throat: "var(--chakra-ink-4)",
+  "Third Eye": "var(--chakra-ink-5)",
+  Crown: "var(--chakra-ink-6)",
+};
+
+const MONTH_CHAKRA_COLORS: readonly string[] = [
+  "#ff7a7a",
+  "#ffbd66",
+  "#ffe25c",
+  "#86ff86",
+  "#79c2ff",
+  "#c99aff",
+  "#e29aff",
+  "#e5e5e5",
+];
 
 type BeatStepDMY = {
   beat: number; // 0..35
@@ -787,6 +818,7 @@ function LiveKaiButton({
     beatStepDMY: BeatStepDMY;
     beatStepLabel: string;
     dmyLabel: string;
+    chakraDay: ChakraDay;
   }>(() => {
     const m = momentFromUTC(new Date());
     const pulse = readNum(m, "pulse") ?? 0;
@@ -798,6 +830,7 @@ function LiveKaiButton({
       beatStepDMY: bsd,
       beatStepLabel: formatBeatStepLabel(bsd),
       dmyLabel: formatDMYLabel(bsd),
+      chakraDay: m.chakraDay,
     };
   });
 
@@ -817,6 +850,34 @@ function LiveKaiButton({
       lineHeight: 1.05,
     }),
     [],
+  );
+
+  const arcColor = useMemo(() => {
+    const pos = modPos(snap.pulse, PULSES_PER_DAY);
+    const arcSize = PULSES_PER_DAY / ARK_COLORS.length;
+    const idx = Math.min(ARK_COLORS.length - 1, Math.max(0, Math.floor(pos / arcSize)));
+    return ARK_COLORS[idx] ?? ARK_COLORS[0];
+  }, [snap.pulse]);
+
+  const chakraColor = useMemo(() => {
+    return CHAKRA_DAY_COLORS[snap.chakraDay] ?? CHAKRA_DAY_COLORS.Heart;
+  }, [snap.chakraDay]);
+
+  const monthColor = useMemo(() => {
+    const idx = Math.min(
+      MONTH_CHAKRA_COLORS.length - 1,
+      Math.max(0, snap.beatStepDMY.month - 1),
+    );
+    return MONTH_CHAKRA_COLORS[idx] ?? CHAKRA_DAY_COLORS.Heart;
+  }, [snap.beatStepDMY.month]);
+
+  const timeStyle = useMemo<CSSProperties>(
+    () => ({
+      ["--kai-ark"]: arcColor,
+      ["--kai-chakra"]: chakraColor,
+      ["--kai-month"]: monthColor,
+    }) as CSSProperties,
+    [arcColor, chakraColor, monthColor],
   );
 
   useEffect(() => {
@@ -842,7 +903,14 @@ function LiveKaiButton({
         ) {
           return prev;
         }
-        return { pulse, pulseStr, beatStepDMY: bsd, beatStepLabel, dmyLabel };
+        return {
+          pulse,
+          pulseStr,
+          beatStepDMY: bsd,
+          beatStepLabel,
+          dmyLabel,
+          chakraDay: m.chakraDay,
+        };
       });
     };
 
@@ -875,6 +943,7 @@ function LiveKaiButton({
       onClick={onOpenKlock}
       aria-label={liveAria}
       title={liveTitle}
+      style={timeStyle}
     >
       <span className="live-orb" aria-hidden="true" />
       <div className="live-text">
@@ -892,11 +961,18 @@ function LiveKaiButton({
 
         <div className="live-sub">
           <span className="mono" style={neonTextStyleHalf}>
-            {snap.beatStepLabel}{" "}
+            <span className="kai-num kai-num--ark">{snap.beatStepLabel}</span>{" "}
             <span aria-hidden="true" style={{ opacity: 0.7 }}>
               •
             </span>{" "}
-            {snap.dmyLabel}
+            <span className="kai-tag">D</span>
+            <span className="kai-num kai-num--chakra">{snap.beatStepDMY.day}</span>
+            <span className="kai-sep">/</span>
+            <span className="kai-tag">M</span>
+            <span className="kai-num kai-num--month">{snap.beatStepDMY.month}</span>
+            <span className="kai-sep">/</span>
+            <span className="kai-tag">Y</span>
+            <span className="kai-num">{snap.beatStepDMY.year}</span>
           </span>
         </div>
       </div>

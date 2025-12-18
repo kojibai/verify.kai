@@ -768,6 +768,7 @@ a:hover {
 .topbar-live{
   --kai-chakra: var(--chakra-ink-3);
   --kai-ark:    var(--chakra-ark-3);
+  --kai-month:  var(--chakra-ink-2);
 }
 
 /* Fine-grained time styling */
@@ -787,6 +788,11 @@ a:hover {
 
 .kai-num--ark{
   color: var(--kai-ark);
+  text-shadow: 0 0 16px rgba(0,0,0,0.55);
+}
+
+.kai-num--month{
+  color: var(--kai-month);
   text-shadow: 0 0 16px rgba(0,0,0,0.55);
 }
 
@@ -2195,8 +2201,8 @@ a:hover {
 }
 
 .klock-stage__inner {
-  width: min(92vmin, 980px);
-  height: min(92vmin, 980px);
+  width: min(98vmin, 1280px);
+  height: min(98vmin, 1280px);
   aspect-ratio: 1 / 1;
 
   display: grid;
@@ -2231,9 +2237,14 @@ a:hover {
       calc(12px + env(safe-area-inset-left, 0px));
   }
   .klock-stage__inner {
-    width: min(96vmin, 980px);
-    height: min(96vmin, 980px);
+    width: min(98vmin, 1280px);
+    height: min(98vmin, 1280px);
   }
+}
+
+.klock-pop .kai-klock-shell {
+  max-width: none;
+  width: clamp(360px, 88vmin, 1400px);
 }
 
 @media (prefers-reduced-motion: reduce) {
