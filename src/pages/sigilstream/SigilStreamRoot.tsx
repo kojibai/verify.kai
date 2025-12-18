@@ -2194,7 +2194,7 @@ function SigilStreamInner(): React.JSX.Element {
     <main className="sf" data-weekday={kaiTheme.weekday} data-chakra={kaiTheme.chakra} style={sigilTintStyle}>
       <header className="sf-head" role="region" aria-labelledby="glyph-stream-title">
         <nav className="sf-topnav" aria-label="Back navigation">
-          <Link className="sf-back" to="/explorer">
+          <Link className="sf-back" to="/keystream">
             ← Back to Keystream
           </Link>
         </nav>

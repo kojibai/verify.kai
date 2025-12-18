@@ -76,7 +76,7 @@ export interface SigilZkProof {
 export interface SigilProofHints {
   scheme: string; // e.g., "groth16-poseidon"
   api: string; // e.g., "/api/proof/sigil"
-  explorer: string; // e.g., "/explorer/hash/<hash>"
+  explorer: string; // e.g., "/keystream/hash/<hash>"
 }
 
 // Full canonical SigilPayload with ZK proof and biometric signature

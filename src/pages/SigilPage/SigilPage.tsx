@@ -11,7 +11,7 @@ import {
   useCallback,
   useDeferredValue,
 } from "react";
-import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
+import {useParams, useLocation, useNavigate } from "react-router-dom";
 import html2canvas from "html2canvas";
 import { createPortal } from "react-dom";
 /* ——— Core components ——— */

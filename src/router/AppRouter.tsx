@@ -39,6 +39,7 @@ export default function AppRouter(): React.JSX.Element {
           <Route path="mint" element={<SigilMintRoute />} />
           <Route path="voh" element={<KaiVohRoute />} />
           <Route path="explorer" element={<ExplorerRoute />} />
+          <Route path="keystream" element={<ExplorerRoute />} />
           <Route path="klock" element={<KlockRoute />} />
           <Route path="klok" element={<KlockRoute />} />
           <Route path="*" element={<NotFound />} />

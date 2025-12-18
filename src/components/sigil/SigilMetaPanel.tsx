@@ -165,7 +165,7 @@ export default function SigilMetaPanel({
           <button className="btn-ghost" {...sharePress} aria-label="Share">
             Share
           </button>
-          <a className="btn-ghost" href="/explorer">
+          <a className="btn-ghost" href="/keystream">
             Keystream
           </a>
         </div>

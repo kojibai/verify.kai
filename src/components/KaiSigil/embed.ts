@@ -185,7 +185,7 @@ export async function buildEmbeddedBundle(args: {
     proofHints: {
       scheme: "groth16-poseidon",
       api: "/api/proof/sigil",
-      explorer: `/explorer/hash/<hash>`,
+      explorer: `/keystream/hash/<hash>`,
     },
     zkPoseidonHash:
       "7110303097080024260800444665787206606103183587082596139871399733998958991511",
