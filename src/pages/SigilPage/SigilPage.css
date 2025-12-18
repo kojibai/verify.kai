@@ -343,9 +343,14 @@ body.bp-open :where(.sigilpage, .sp-viewport, .sp-shell, .sp-veil, .sp-veil-star
   cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent; touch-action:manipulation;
   transition: transform .04s ease, box-shadow .18s ease, outline-color .18s ease, background .18s ease, opacity .12s ease;
 }
-.btn-primary{ --btn-bg: rgba(55,230,212,.10); box-shadow: 0 0 0 1px color-mix(in oklab, var(--crystal-accent), transparent 75%); }
-.btn-secondary{ --btn-bg: rgba(92,225,255,.10); }
-.btn-ghost:hover,.btn-primary:hover,.btn-secondary:hover{ outline:2px solid var(--sp-ring); box-shadow:0 6px 28px rgba(55,230,212,.08); }
+ .btn-primary{ --btn-bg: rgba(55,230,212,.10); box-shadow: 0 0 0 1px color-mix(in oklab, var(--crystal-accent), transparent 75%); }
+ .btn-secondary{ --btn-bg: rgba(92,225,255,.10); }
+ .btn-ghost[data-remembered]{
+   --btn-bg: rgba(55,230,212,.12);
+   border-color: color-mix(in oklab, var(--crystal-accent), transparent 55%);
+   box-shadow: 0 10px 30px rgba(55,230,212,.18);
+ }
+ .btn-ghost:hover,.btn-primary:hover,.btn-secondary:hover{ outline:2px solid var(--sp-ring); box-shadow:0 6px 28px rgba(55,230,212,.08); }
 .btn-ghost:active,.btn-primary:active,.btn-secondary:active{ transform: scale(var(--tap-scale)); }
 
 /* Ripple feedback */

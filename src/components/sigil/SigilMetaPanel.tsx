@@ -1,7 +1,8 @@
 // src/components/sigil/SigilMetaPanel.tsx
 import type * as React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { chakraDayToLabel, type SigilPayload } from "../../types/sigil";
+import { useFastPress } from "../../hooks/useFastPress";
 
 type PressHandlers = {
   onPointerUp: (e: React.PointerEvent<HTMLButtonElement>) => void;
@@ -22,6 +23,7 @@ type Props = {
   nextPulseSeconds: string;
   hash: string | undefined;
   shortHash: string;
+  remembered: boolean;
   copyLinkPress: PressHandlers;
   sharePress: PressHandlers;
   verified: "checking" | "ok" | "mismatch" | "notfound" | "error";
@@ -128,10 +130,17 @@ export default function SigilMetaPanel({
   nextPulseSeconds,
   hash,
   shortHash,
+  remembered,
   copyLinkPress,
   sharePress,
   stage,
 }: Props) {
+  const navigate = useNavigate();
+  const keystreamPress = useFastPress<HTMLAnchorElement>((e) => {
+    e.preventDefault();
+    navigate("/keystream");
+  });
+
   // ✅ derive step index + percent from pulse to guarantee exactness
   const derivedStepIndex =
     payload ? exactStepIndexFromPulse(payload.pulse, steps) : 0;
@@ -160,13 +169,24 @@ export default function SigilMetaPanel({
         </div>
 
         <div className="sp-actions">
-          <button className="btn-ghost" {...copyLinkPress} aria-label="Copy link">
-            Remember
+          <button
+            className="btn-ghost"
+            {...copyLinkPress}
+            aria-label="Copy link"
+            aria-pressed={remembered}
+            data-remembered={remembered || undefined}
+          >
+            {remembered ? "Remembered" : "Remember"}
           </button>
           <button className="btn-ghost" {...sharePress} aria-label="Share">
             Share
           </button>
-          <Link className="btn-ghost" to="/keystream" role="button">
+          <Link
+            className="btn-ghost"
+            to="/keystream"
+            role="button"
+            {...keystreamPress}
+          >
             Keystream
           </Link>
         </div>

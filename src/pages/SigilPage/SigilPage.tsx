@@ -724,8 +724,10 @@ useEffect(() => {
     try {
       await navigator.clipboard.writeText(txt);
       signal(setToast, label);
+      return true;
     } catch {
       signal(setToast, "Copy failed");
+      return false;
     }
   }, []);
 
@@ -2433,11 +2435,18 @@ return () => document.body.classList.remove(cls);
 
 
   /* fast-press wrappers */
+  const [remembered, setRemembered] = useState(false);
+  const markRemembered = useCallback(() => {
+    setRemembered(true);
+    window.setTimeout(() => setRemembered(false), 2000);
+  }, []);
+
   const copyHashPress = useFastPress<HTMLButtonElement>(() => {
     void copy(localHash || "", "Hash copied");
   });
-  const copyLinkPress = useFastPress<HTMLButtonElement>(() => {
-    void copy(absUrl, "Link copied");
+  const copyLinkPress = useFastPress<HTMLButtonElement>(async () => {
+    const ok = await copy(absUrl, "Link copied");
+    if (ok) markRemembered();
   });
   const sharePress = useFastPress<HTMLButtonElement>(() => {
     void share();
@@ -2927,6 +2936,7 @@ useEffect(() => {
             nextPulseSeconds={nextPulseSeconds}
             hash={hash}
             shortHash={shortHash}
+            remembered={remembered}
             copyLinkPress={copyLinkPress}
             sharePress={sharePress}
             verified={toMetaVerifyState(verified)}
