@@ -1283,10 +1283,10 @@ export function AppChrome(): React.JSX.Element {
                       href="https://github.com/phinetwork/phi.network"
                       target="_blank"
                       rel="noreferrer"
-                      aria-label="Version 29.3 (opens GitHub)"
+                      aria-label="Version 29.3.1 (opens GitHub)"
                       title="Open GitHub"
                     >
-                      29.3
+                      29.3.1
                     </a>
                   </div>
                 </footer>

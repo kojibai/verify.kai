@@ -26,6 +26,10 @@
 // ✅ Sync work is SKIPPED while scrolling (prevents heavy mid-scroll diff + Chrome/iOS jank)
 // ✅ Toggle anchor preserved (opening nested replies never snaps / jumps the scroll container)
 // ✅ Pull-to-refresh / overscroll bounce guarded inside the scroll container (best-effort, mobile-safe)
+//
+// EXTRA (requested):
+// ✅ Always-hydrated hardening: cross-tab registry hydration listens to BOTH localStorage keys
+// ✅ m.kai soft-failure: backup is auto-suppressed after failures (cooldown), never breaks primary flow
 
 import React, {
   startTransition,
@@ -217,7 +221,7 @@ function cssEscape(v: string): string {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
- *  LAH-MAH-TOR API (Primary + IKANN Failover)
+ *  LAH-MAH-TOR API (Primary + IKANN Failover, soft-fail backup)
  *  ───────────────────────────────────────────────────────────────────── */
 const API_BASE_PRIMARY = LIVE_BASE_URL;
 const API_BASE_FALLBACK = LIVE_BACKUP_URL;
@@ -228,13 +232,63 @@ const API_INHALE_PATH = "/sigils/inhale";
 
 const API_BASE_HINT_LS_KEY = "kai:lahmahtorBase:v1";
 
+/** Backup suppression: if m.kai fails, suppress it for a cooldown window (no issues, no spam). */
+const API_BACKUP_DEAD_UNTIL_LS_KEY = "kai:lahmahtorBackupDeadUntil:v1";
+const API_BACKUP_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes (tight, safe)
+
+let apiBackupDeadUntil = 0;
+
+function loadApiBackupDeadUntil(): void {
+  if (!canStorage) return;
+  const raw = localStorage.getItem(API_BACKUP_DEAD_UNTIL_LS_KEY);
+  if (!raw) return;
+  const n = Number(raw);
+  if (Number.isFinite(n) && n > 0) apiBackupDeadUntil = n;
+}
+
+function saveApiBackupDeadUntil(): void {
+  if (!canStorage) return;
+  try {
+    localStorage.setItem(API_BACKUP_DEAD_UNTIL_LS_KEY, String(apiBackupDeadUntil));
+  } catch {
+    // ignore
+  }
+}
+
+function isBackupSuppressed(): boolean {
+  return nowMs() < apiBackupDeadUntil;
+}
+
+function clearBackupSuppression(): void {
+  if (apiBackupDeadUntil === 0) return;
+  apiBackupDeadUntil = 0;
+  saveApiBackupDeadUntil();
+}
+
+function markBackupDead(): void {
+  apiBackupDeadUntil = nowMs() + API_BACKUP_COOLDOWN_MS;
+  saveApiBackupDeadUntil();
+  // never “stick” to fallback if it’s failing
+  if (apiBaseHint === API_BASE_FALLBACK) {
+    apiBaseHint = API_BASE_PRIMARY;
+    saveApiBaseHint();
+  }
+}
+
 /** Sticky base: whichever succeeded last is attempted first. */
 let apiBaseHint: string = API_BASE_PRIMARY;
 
 function loadApiBaseHint(): void {
   if (!canStorage) return;
   const raw = localStorage.getItem(API_BASE_HINT_LS_KEY);
-  if (raw === API_BASE_PRIMARY || raw === API_BASE_FALLBACK) apiBaseHint = raw;
+  if (raw === API_BASE_PRIMARY) {
+    apiBaseHint = raw;
+    return;
+  }
+  if (raw === API_BASE_FALLBACK) {
+    // if backup is currently suppressed, never load it as the preferred base
+    apiBaseHint = isBackupSuppressed() ? API_BASE_PRIMARY : raw;
+  }
 }
 
 function saveApiBaseHint(): void {
@@ -247,16 +301,22 @@ function saveApiBaseHint(): void {
 }
 
 function apiBases(): string[] {
-  const list =
-    apiBaseHint === API_BASE_FALLBACK
-      ? [API_BASE_FALLBACK, API_BASE_PRIMARY]
-      : [API_BASE_PRIMARY, API_BASE_FALLBACK];
+  const wantFallbackFirst = apiBaseHint === API_BASE_FALLBACK && !isBackupSuppressed();
+  const list = wantFallbackFirst
+    ? [API_BASE_FALLBACK, API_BASE_PRIMARY]
+    : [API_BASE_PRIMARY, API_BASE_FALLBACK];
 
-  if (!hasWindow) return list;
+  if (!hasWindow) {
+    // SSR: keep both, but still respect suppression in case it was set via storage read before render.
+    return isBackupSuppressed() ? list.filter((b) => b !== API_BASE_FALLBACK) : list;
+  }
 
   const isHttpsPage = window.location.protocol === "https:";
   // Never try http fallback from an https page (browser will block + log loudly)
-  return isHttpsPage ? list.filter((b) => b.startsWith("https://")) : list;
+  const protocolFiltered = isHttpsPage ? list.filter((b) => b.startsWith("https://")) : list;
+
+  // Soft-fail: suppress backup if marked dead
+  return isBackupSuppressed() ? protocolFiltered.filter((b) => b !== API_BASE_FALLBACK) : protocolFiltered;
 }
 
 function shouldFailoverStatus(status: number): boolean {
@@ -285,15 +345,22 @@ async function apiFetchWithFailover(
 
       // 304 is a valid success for seal checks.
       if (res.ok || res.status === 304) {
+        // if backup works again, clear suppression
+        if (base === API_BASE_FALLBACK) clearBackupSuppression();
+
         apiBaseHint = base;
         saveApiBaseHint();
         return res;
       }
 
+      // If backup is failing (404/5xx/etc), suppress it so it never “causes issues”.
+      if (base === API_BASE_FALLBACK && shouldFailoverStatus(res.status)) markBackupDead();
+
       // If this status is “final”, stop here; otherwise try the other base.
       if (!shouldFailoverStatus(res.status)) return res;
     } catch {
       // network failure → try next base
+      if (base === API_BASE_FALLBACK) markBackupDead();
       continue;
     }
   }
@@ -2311,6 +2378,9 @@ const SigilExplorer: React.FC = () => {
   // Toggle anchor preservation (prevents mobile “snap/refresh” feel when opening nested)
   const lastToggleAnchorRef = useRef<{ id: string; scrollTop: number; rectTop: number } | null>(null);
 
+  // Stable expand/collapse state (prevents “random refresh” feel)
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+
   const toggle = useCallback(
     (id: string) => {
       markInteracting(UI_TOGGLE_INTERACT_MS);
@@ -2338,9 +2408,6 @@ const SigilExplorer: React.FC = () => {
     },
     [markInteracting, scheduleUiFlush],
   );
-
-  // Stable expand/collapse state (prevents “random refresh” feel)
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   // Prevent browser-level pull-to-refresh / overscroll refresh while explorer is open.
   // Hardened: apply to html/body AND keep container guarded too.
@@ -2391,8 +2458,8 @@ const SigilExplorer: React.FC = () => {
     };
   }, []);
 
-  // Guard the scroll container against pull-to-refresh on mobile (top/bottom overdrag)
-  // without blocking normal scrolling.
+  // Single unified guard: prevent top/bottom overdrag from triggering pull-to-refresh,
+  // while preserving normal scroll in the container.
   useEffect(() => {
     if (!hasWindow) return;
 
@@ -2400,9 +2467,12 @@ const SigilExplorer: React.FC = () => {
     if (!el) return;
 
     let lastY = 0;
+    let lastX = 0;
 
     const onTouchStart = (ev: TouchEvent) => {
+      if (ev.touches.length !== 1) return;
       lastY = ev.touches[0]?.clientY ?? 0;
+      lastX = ev.touches[0]?.clientX ?? 0;
     };
 
     const onTouchMove = (ev: TouchEvent) => {
@@ -2410,30 +2480,33 @@ const SigilExplorer: React.FC = () => {
       if (ev.touches.length !== 1) return;
 
       const y = ev.touches[0]?.clientY ?? 0;
-      const deltaY = y - lastY;
-      lastY = y;
+      const x = ev.touches[0]?.clientX ?? 0;
 
-      // Only engage when the container actually has overflow to scroll.
+      const dy = y - lastY;
+      const dx = x - lastX;
+
+      lastY = y;
+      lastX = x;
+
+      // Only care about vertical intent
+      if (Math.abs(dy) <= Math.abs(dx)) return;
+
       const maxScroll = el.scrollHeight - el.clientHeight;
       if (maxScroll <= 0) return;
 
       const atTop = el.scrollTop <= 0;
-      const atBottom = el.scrollTop >= maxScroll;
+      const atBottom = el.scrollTop >= maxScroll - 1;
 
-      const pullingDown = deltaY > 0;
-      const pushingUp = deltaY < 0;
+      const pullingDown = dy > 0;
+      const pushingUp = dy < 0;
 
-      // Allow normal scroll while mid-stream; only stop edge overdrags that would
-      // trigger browser refresh.
       if ((atTop && pullingDown && window.scrollY <= 0) || (atBottom && pushingUp)) {
         ev.preventDefault();
       }
     };
 
-    const opts: AddEventListenerOptions & EventListenerOptions = { passive: false };
-
-    el.addEventListener("touchstart", onTouchStart, opts);
-    el.addEventListener("touchmove", onTouchMove, opts);
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
 
     return () => {
       el.removeEventListener("touchstart", onTouchStart);
@@ -2480,51 +2553,6 @@ const SigilExplorer: React.FC = () => {
     };
   }, [markInteracting, scheduleUiFlush]);
 
-  // Best-effort overscroll bounce guard inside the scroll container (mobile)
-  useEffect(() => {
-    if (!hasWindow) return;
-
-    const el = scrollElRef.current;
-    if (!el) return;
-
-    let startY = 0;
-    let startX = 0;
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      startY = e.touches[0].clientY;
-      startX = e.touches[0].clientX;
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-
-      const y = e.touches[0].clientY;
-      const x = e.touches[0].clientX;
-      const dy = y - startY;
-      const dx = x - startX;
-
-      // Only care about vertical intent
-      if (Math.abs(dy) <= Math.abs(dx)) return;
-
-      const atTop = el.scrollTop <= 0;
-      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
-
-      // Prevent bounce at extremes (helps avoid “refresh” gestures/jank on mobile)
-      if ((atTop && dy > 0) || (atBottom && dy < 0)) {
-        e.preventDefault();
-      }
-    };
-
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-    };
-  }, []);
-
   // Apply toggle anchor preservation AFTER expanded changes commit to DOM
   useLayoutEffect(() => {
     const anchor = lastToggleAnchorRef.current;
@@ -2550,7 +2578,10 @@ const SigilExplorer: React.FC = () => {
   useEffect(() => {
     unmounted.current = false;
 
+    // Load backup suppression + base hint first (so failover never “causes issues”)
+    loadApiBackupDeadUntil();
     loadApiBaseHint();
+
     loadUrlHealthFromStorage();
     loadInhaleQueueFromStorage();
 
@@ -2647,36 +2678,41 @@ const SigilExplorer: React.FC = () => {
       channel.addEventListener("message", onMsg);
     }
 
+    // Always-hydrated: respond to BOTH storage keys (registry + modal fallback)
     const onStorage = (ev: StorageEvent) => {
-      if (ev.key === MODAL_FALLBACK_LS_KEY && ev.newValue) {
-        try {
-          const urls: unknown = JSON.parse(ev.newValue);
-          if (!Array.isArray(urls)) return;
+      if (!ev.key) return;
+      const isRegistryKey = ev.key === REGISTRY_LS_KEY;
+      const isModalKey = ev.key === MODAL_FALLBACK_LS_KEY;
+      if (!isRegistryKey && !isModalKey) return;
+      if (!ev.newValue) return;
 
-          let changed = false;
-          for (const u of urls) {
-            if (typeof u !== "string") continue;
-            if (
-              addUrl(u, {
-                includeAncestry: true,
-                broadcast: false,
-                persist: false,
-                source: "local",
-                enqueueToApi: true,
-              })
-            ) {
-              changed = true;
-            }
-          }
+      try {
+        const urls: unknown = JSON.parse(ev.newValue);
+        if (!Array.isArray(urls)) return;
 
-          setLastAddedSafe(undefined);
-          if (changed) {
-            persistRegistryToStorage();
-            bump();
+        let changed = false;
+        for (const u of urls) {
+          if (typeof u !== "string") continue;
+          if (
+            addUrl(u, {
+              includeAncestry: true,
+              broadcast: false,
+              persist: false,
+              source: "local",
+              enqueueToApi: true,
+            })
+          ) {
+            changed = true;
           }
-        } catch {
-          // ignore
         }
+
+        setLastAddedSafe(undefined);
+        if (changed) {
+          persistRegistryToStorage();
+          bump();
+        }
+      } catch {
+        // ignore
       }
     };
     window.addEventListener("storage", onStorage);
@@ -2754,8 +2790,14 @@ const SigilExplorer: React.FC = () => {
         if (res.status === 304) return;
         if (!res.ok) return;
 
-        const body = (await res.json()) as ApiSealResponse;
-        const nextSeal = typeof body?.seal === "string" ? body.seal : "";
+        let nextSeal = "";
+        try {
+          const body = (await res.json()) as ApiSealResponse;
+          nextSeal = typeof body?.seal === "string" ? body.seal : "";
+        } catch {
+          // Soft-fail: if seal payload is weird, just stop this cycle.
+          return;
+        }
 
         if (prevSeal && nextSeal && prevSeal === nextSeal) {
           remoteSealRef.current = nextSeal;
@@ -3004,7 +3046,13 @@ const SigilExplorer: React.FC = () => {
     <div className="sigil-explorer">
       <Styles />
 
-      <ExplorerToolbar onAdd={handleAdd} onImport={handleImport} onExport={handleExport} total={memoryRegistry.size} lastAdded={lastAdded} />
+      <ExplorerToolbar
+        onAdd={handleAdd}
+        onImport={handleImport}
+        onExport={handleExport}
+        total={memoryRegistry.size}
+        lastAdded={lastAdded}
+      />
 
       <div
         className="explorer-scroll"
