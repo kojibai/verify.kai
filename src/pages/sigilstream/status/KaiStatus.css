@@ -836,6 +836,7 @@
     calc(12px + env(safe-area-inset-right, 0px))
     calc(12px + env(safe-area-inset-bottom, 0px))
     calc(12px + env(safe-area-inset-left, 0px));
+  transform: translate(-10px, -6px);
 }
 
 .kk-pop__dial .klock-stage__inner{
