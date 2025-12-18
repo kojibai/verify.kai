@@ -28,6 +28,7 @@
 .sigil-explorer{
   /* HARD viewport lock (prevents page scroll on mobile) */
   position: fixed;
+  
   inset: 0;
   width: 100%;
   height: 100vh;   /* fallback */
@@ -483,29 +484,28 @@
    ───────────────────────────────────────────────────────────── */
 .forest{ display: grid; gap: 14px; }
 
+/* ─────────────────────────────────────────────────────────────
+   ORIGIN CONTAINER (chakra-tinted, etched, breathing)
+   ───────────────────────────────────────────────────────────── */
 .origin{
-  /* Prevent massive offscreen trees from triggering mobile tab reloads. */
-  content-visibility: auto;
-  contain: layout paint style;
-  contain-intrinsic-size: 1200px auto;
-
+  border-radius: var(--sx-radius-md);
   border: 1px solid rgba(255,255,255,0.16);
-  border-radius: var(--sx-radius);
   background:
     radial-gradient(120% 180% at 0% 0%, color-mix(in oklab, var(--sx-chakra) 18%, transparent), transparent 60%),
-    radial-gradient(120% 180% at 100% 100%, color-mix(in oklab, var(--sx-chakra) 10%, transparent), transparent 62%),
+    radial-gradient(120% 180% at 100% 100%, color-mix(in oklab, var(--sx-chakra) 12%, transparent), transparent 62%),
     linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-  -webkit-backdrop-filter: blur(18px) saturate(170%);
-  backdrop-filter: blur(18px) saturate(170%);
-  box-shadow: var(--sx-shadow-card);
-  overflow: clip;
+  box-shadow:
+    0 16px 42px rgba(0,0,0,0.58),
+    inset 0 1px 0 rgba(255,255,255,0  
+,0.06);
   position: relative;
-  animation: sx-card-breathe var(--sx-breath) ease-in-out infinite;
-
+  overflow: hidden;
+  animation: sx-origin-breathe var(--sx-breath) ease-in-out infinite;     
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  will-change: transform, filter;
 }
 
 @supports not (overflow: clip){
@@ -1332,24 +1332,7 @@
     outline: 1px solid transparent; /* prevents 1px seam flashes */
   }
 }
-.sigil-explorer{
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  font-family: var(--sx-sans);
-  font-size: 13px;
-  color: var(--sx-text);
-  line-height: 1.4;
-  user-select: none;
-  position: relative;
-  perspective: 1000px;
-  -webkit-perspective: 1000px;
-  transform-style: preserve-3d;
-  -webkit-transform-style: preserve-3d;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;  
-  will-change: transform, filter;
-} 
+
 
 
 /* ─────────────────────────────────────────────────────────────
@@ -1464,27 +1447,4 @@
 .kx-toolbar :where(button[aria-label="Close"], button[title="Close"], button[aria-label="close"], button[title="close"]){
   transform: translate3d(0, -2px, 0);
   will-change: transform;
-}
-/* ─────────────────────────────────────────────────────────────
-   ORIGIN CONTAINER (chakra-tinted, etched, breathing)
-   ───────────────────────────────────────────────────────────── */
-.origin{
-  border-radius: var(--sx-radius-md);
-  border: 1px solid rgba(255,255,255,0.16);
-  background:
-    radial-gradient(120% 180% at 0% 0%, color-mix(in oklab, var(--sx-chakra) 18%, transparent), transparent 60%),
-    radial-gradient(120% 180% at 100% 100%, color-mix(in oklab, var(--sx-chakra) 12%, transparent), transparent 62%),
-    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-  box-shadow:
-    0 16px 42px rgba(0,0,0,0.58),
-    inset 0 1px 0 rgba(255,255,255,0  
-,0.06);
-  position: relative;
-  overflow: hidden;
-  animation: sx-origin-breathe var(--sx-breath) ease-in-out infinite;     
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  will-change: transform, filter;
 }
