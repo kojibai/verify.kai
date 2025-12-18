@@ -831,6 +831,11 @@
   margin: 0 auto;
   align-items: center;
   justify-items: center;
+  padding:
+    calc(12px + env(safe-area-inset-top, 0px))
+    calc(12px + env(safe-area-inset-right, 0px))
+    calc(12px + env(safe-area-inset-bottom, 0px))
+    calc(12px + env(safe-area-inset-left, 0px));
 }
 
 .kk-pop__dial .klock-stage__inner{
