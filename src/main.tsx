@@ -8,7 +8,6 @@ import "./App.css";
 import AppRouter from "./router/AppRouter";
 
 const isProduction = import.meta.env.MODE === "production";
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "dev";
 
 function rewriteLegacyHash(): void {
   const h = window.location.hash || "";
@@ -48,7 +47,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 if ("serviceWorker" in navigator && isProduction) {
   const registerKairosSW = async () => {
     try {
-      const reg = await navigator.serviceWorker.register(`/sw.js?v=${APP_VERSION}`, { scope: "/" });
+      const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
 
       // Force refresh when a new worker takes control
       let refreshing = false;
@@ -76,12 +75,6 @@ if ("serviceWorker" in navigator && isProduction) {
       };
 
       watchForUpdates(reg);
-
-      navigator.serviceWorker.addEventListener("message", (event) => {
-        if (event.data?.type === "SW_ACTIVATED") {
-          console.log("Kairos service worker active", event.data.version);
-        }
-      });
 
       // Periodically ask the browser to re-check the SW script to reduce staleness on mobile
       const ONE_HOUR = 60 * 60 * 1000;

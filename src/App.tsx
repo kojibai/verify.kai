@@ -43,7 +43,8 @@ import EternalKlock from "./components/EternalKlock";
 
 import "./App.css";
 
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "dev";
+// Manually set app version (keep in sync with public/sw.js)
+const APP_VERSION = "0.0.0";
 
 type NavItem = {
   to: string;
@@ -992,6 +993,8 @@ export function AppChrome(): React.JSX.Element {
   useDisableZoom();
   usePerfMode();
 
+  const appVersion = APP_VERSION;
+
   const BREATH_S = useMemo(() => 3 + Math.sqrt(5), []);
   const BREATH_MS = useMemo(() => BREATH_S * 1000, [BREATH_S]);
   const BREATHS_PER_DAY = useMemo(() => 17_491.270421, []);
@@ -1361,10 +1364,10 @@ export function AppChrome(): React.JSX.Element {
                       href="https://github.com/phinetwork/phi.network"
                       target="_blank"
                       rel="noreferrer"
-                      aria-label={`Version ${APP_VERSION} (opens GitHub)`}
+                      aria-label={`Version ${appVersion} (opens GitHub)`}
                       title="Open GitHub"
                     >
-                      {APP_VERSION}
+                      {appVersion}
                     </a>
                   </div>
                 </footer>
