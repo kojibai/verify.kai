@@ -549,7 +549,7 @@ export function KaiStatus(): React.JSX.Element {
               </div>
 
               <div className="kk-pop__foot">
-                <span className="kk-pop__hint">Tap outside or press ESC to return.</span>
+                <span className="kk-pop__hint">Tap the Klok for more details or press x to return.</span>
               </div>
             </div>
           </div>,
