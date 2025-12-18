@@ -43,6 +43,8 @@ import EternalKlock from "./components/EternalKlock";
 
 import "./App.css";
 
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "dev";
+
 type NavItem = {
   to: string;
   label: string;
@@ -1359,10 +1361,10 @@ export function AppChrome(): React.JSX.Element {
                       href="https://github.com/phinetwork/phi.network"
                       target="_blank"
                       rel="noreferrer"
-                      aria-label="Version 29.3.5 (opens GitHub)"
+                      aria-label={`Version ${APP_VERSION} (opens GitHub)`}
                       title="Open GitHub"
                     >
-                      29.3.5
+                      {APP_VERSION}
                     </a>
                   </div>
                 </footer>
