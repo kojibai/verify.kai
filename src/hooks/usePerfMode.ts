@@ -8,9 +8,14 @@ function isLowPowerEnvironment(): boolean {
     hardwareConcurrency?: number;
   };
 
+  const prefersReducedMotion =
+    window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+  const prefersReducedTransparency =
+    window.matchMedia?.("(prefers-reduced-transparency: reduce)")?.matches ?? false;
+
   return (
-    window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false ||
-    window.matchMedia?.("(prefers-reduced-transparency: reduce)")?.matches ?? false ||
+    prefersReducedMotion ||
+    prefersReducedTransparency ||
     (typeof nav.deviceMemory === "number" && nav.deviceMemory <= 4) ||
     (typeof nav.hardwareConcurrency === "number" && nav.hardwareConcurrency <= 4)
   );
