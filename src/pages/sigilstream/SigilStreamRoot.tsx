@@ -2195,7 +2195,7 @@ function SigilStreamInner(): React.JSX.Element {
       <header className="sf-head" role="region" aria-labelledby="glyph-stream-title">
         <nav className="sf-topnav" aria-label="Back navigation">
           <Link className="sf-back" to="/explorer">
-            ← Back to Explorer
+            ← Back to Keystream
           </Link>
         </nav>
 
