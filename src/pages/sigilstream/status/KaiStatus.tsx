@@ -526,22 +526,26 @@ export function KaiStatus(): React.JSX.Element {
               </div>
 
               <div className="kk-pop__dial" aria-label="Kai-Klok dial">
-                <KaiKlock
-                  hue={hue}
-                  pulse={pulseNum}
-                  harmonicDayPercent={harmonicDayPercent}
-                  microCyclePercent={microCyclePercent}
-                  dayLabel={dayNameFull}
-                  monthLabel={monthName}
-                  monthDay={dmy.day}
-                  kaiPulseEternal={pulseNum}
-                  glowPulse={true}
-                  pulseIntervalSec={pulseDur}
-                  rimFlash={flash}
-                  solarSpiralStepString={`${pad2(beatNum)}:${pad2(stepNum)}`}
-                  eternalBeatIndex={beatNum}
-                  eternalStepIndex={stepNum}
-                />
+                <div className="klock-stage" data-klock-stage="1">
+                  <div className="klock-stage__inner">
+                    <KaiKlock
+                      hue={hue}
+                      pulse={pulseNum}
+                      harmonicDayPercent={harmonicDayPercent}
+                      microCyclePercent={microCyclePercent}
+                      dayLabel={dayNameFull}
+                      monthLabel={monthName}
+                      monthDay={dmy.day}
+                      kaiPulseEternal={pulseNum}
+                      glowPulse={true}
+                      pulseIntervalSec={pulseDur}
+                      rimFlash={flash}
+                      solarSpiralStepString={`${pad2(beatNum)}:${pad2(stepNum)}`}
+                      eternalBeatIndex={beatNum}
+                      eternalStepIndex={stepNum}
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="kk-pop__foot">
