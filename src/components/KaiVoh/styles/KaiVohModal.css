@@ -35,12 +35,12 @@
   --kai-fg-2: #e7fdf9;
 
   /* Layout helpers */
-  --close-size: 40px;
+  --close-size: 26px;
 
   /* Orb spacing (used to push the tab bar down) */
-  --voh-orb-size: 44px;
-  --voh-orb-top: 12px;
-  --voh-orb-gap: 18px;
+  --voh-orb-size: 26px;
+  --voh-orb-top: 6px;
+  --voh-orb-gap: 8px;
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -220,7 +220,7 @@
    Draws the X via ::before/::after (no markup changes).
    ────────────────────────────────────────────────────────────── */
 .kai-voh-close{
-  position:absolute; top:12px; right:12px;
+  position:absolute; top:8px; right:8px;
   z-index: 1000;
   pointer-events: auto;
 
@@ -290,8 +290,8 @@
   content:"";
   position:absolute;
   left:50%; top:50%;
-  width: 18px;
-  height: 2.5px;
+  width: 12px;
+  height: 2px;
   border-radius: 999px;
 
   background: linear-gradient(
@@ -408,20 +408,20 @@
    Tabs + Breath meter
    ────────────────────────────────────────────────────────────── */
 .kai-voh-tabbar{
-  display:flex; gap:10px;
-  padding: calc(var(--voh-orb-size) + var(--voh-orb-top) + var(--voh-orb-gap)) 12px 0;
+  display:flex; gap:8px;
+  padding: calc(var(--voh-orb-size) + var(--voh-orb-top) + 6px) 10px 0;
   align-items:center; justify-content:center;
   position: relative;
 }
 
 .kai-voh-tab{
-  padding: 8px 14px;
+  padding: 5px 10px;
   border-radius: 9999px;
   border: 1px solid var(--kai-border);
   background: rgba(255,255,255,.05);
   color: var(--kai-fg-2);
   font-weight: 700; letter-spacing:.02em;
-  font-size: .92rem;
+  font-size: .82rem;
   transition: transform .14s ease, background .14s ease, border-color .14s ease, box-shadow .14s ease;
   backdrop-filter: blur(4px);
 }
@@ -440,7 +440,7 @@
 .breath-meter{
   position:absolute;
   right: 12px;
-  top: 12px;
+  top: 8px;
   z-index: 850;
   width: 120px; height: 6px; border-radius: 9999px;
   background: linear-gradient(90deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
