@@ -13,7 +13,12 @@ export async function loadLinksJson(): Promise<Source[]> {
   try {
     const res = await fetch("/links.json", { cache: "no-store" });
     if (!res.ok) return [];
-    const data: unknown = await res.json();
+
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!contentType.toLowerCase().includes("application/json")) return [];
+
+    const body = await res.text();
+    const data: unknown = JSON.parse(body);
 
     if (!Array.isArray(data)) return [];
 

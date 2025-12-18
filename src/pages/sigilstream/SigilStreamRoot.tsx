@@ -1496,27 +1496,48 @@ function SigilStreamInner(): React.JSX.Element {
   );
 
   useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const mergeSources = (incoming: Source[]): void => {
+      setSources((prev) => {
+        const seen = new Set(prev.map(({ url }) => url));
+        const merged = [...prev];
+        const additions: string[] = [];
+
+        for (const { url } of incoming) {
+          const normalized = url.trim();
+          if (!normalized || seen.has(normalized)) continue;
+          seen.add(normalized);
+          merged.push({ url: normalized });
+          additions.push(normalized);
+        }
+
+        if (additions.length > 0) {
+          for (const url of additions) registerSigilUrl(url);
+          ms2IngestMany(additions);
+          rehydrateUsernameClaimsFromHistory(additions);
+        }
+
+        return merged;
+      });
+    };
+
+    const stored = parseStringArray(localStorage.getItem(LS_KEY));
+    if (stored.length) mergeSources(stored.map((u) => ({ url: u })));
+
+    let cancelled = false;
     (async () => {
       try {
         const seed = await loadLinksJson();
-        const stored = parseStringArray(typeof window !== "undefined" ? localStorage.getItem(LS_KEY) : null);
-
-        const merged: Source[] = [...stored.map((u) => ({ url: u })), ...seed];
-        const seen = new Set<string>();
-        const unique = merged.filter(({ url }) => (seen.has(url) ? false : (seen.add(url), true)));
-
-        setSources(unique);
-        for (const { url } of unique) registerSigilUrl(url);
-
-        // Learn thread edges from anything we already know
-        ms2IngestMany(unique.map((s) => s.url));
-
-        // Rehydrate username-claim registry from historical payloads
-        rehydrateUsernameClaimsFromHistory(unique.map((s) => s.url));
+        if (!cancelled && seed.length) mergeSources(seed);
       } catch (e) {
         report("initial seed load", e);
       }
     })().catch((e) => report("initial seed load outer", e));
+
+    return () => {
+      cancelled = true;
+    };
   }, [ms2IngestMany, rehydrateUsernameClaimsFromHistory]);
 
   /**
