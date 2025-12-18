@@ -105,17 +105,17 @@
   --glow-blur: 32px;
     /* ── Chakra ink + chakra ark (arc) colors ───────────────────── */
 
-  /* 0 Root (glacial cyan) */
-  --chakra-ink-0: #33f6ff;
-  --chakra-ark-0: #b8fdff;
+  /* 0 Root */
+  --chakra-ink-0: #ff3b6b;
+  --chakra-ark-0: #ff6aa6;
 
-  /* 1 Sacral (aurora teal) */
-  --chakra-ink-1: #26ffc4;
-  --chakra-ark-1: #b6ffe9;
+  /* 1 Sacral */
+  --chakra-ink-1: #ff8a3d;
+  --chakra-ark-1: #ffc07a;
 
-  /* 2 Solar (ice halo) */
-  --chakra-ink-2: #7be2ff;
-  --chakra-ark-2: #d6f4ff;
+  /* 2 Solar */
+  --chakra-ink-2: #ffd24a;
+  --chakra-ark-2: #fff2a6;
 
   /* 3 Heart */
   --chakra-ink-3: #26ffc4;
