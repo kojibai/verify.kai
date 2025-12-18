@@ -710,12 +710,20 @@
   inset: 0;
   z-index: 9999;
   display: grid;
-  place-items: center;
-  padding:
-    max(14px, env(safe-area-inset-top))
-    max(12px, env(safe-area-inset-right))
-    max(14px, env(safe-area-inset-bottom))
-    max(12px, env(safe-area-inset-left));
+  place-items: stretch;
+  padding: 0;
+  background: radial-gradient(1400px 900px at 18% 8%,
+      rgba(255, 220, 140, 0.18),
+      transparent 64%),
+    radial-gradient(1200px 820px at 82% 16%,
+      rgba(120, 220, 255, 0.16),
+      transparent 62%),
+    radial-gradient(900px 700px at 50% 110%,
+      rgba(190, 130, 255, 0.1),
+      transparent 60%),
+    rgba(2, 4, 8, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .kk-pop__backdrop{
@@ -731,8 +739,11 @@
 
 .kk-pop__panel{
   position: relative;
-  width: min(520px, 92vw);
-  border-radius: 26px;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
   border: 1px solid rgba(255,255,255,0.14);
   background:
     linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03)) padding-box,
@@ -741,10 +752,10 @@
       rgba(120, 220, 255, 0.12),
       transparent 70%) border-box;
   box-shadow:
-    0 22px 80px rgba(0,0,0,0.55),
-    0 0 0 1px rgba(255,255,255,0.06) inset;
+    inset 0 0 0 1px rgba(255,255,255,0.06),
+    0 40px 120px rgba(0,0,0,0.55);
   overflow: hidden;
-  transform-origin: 50% 0%;
+  transform-origin: 50% 50%;
   animation: kk-pop-in 180ms cubic-bezier(.22,.61,.36,1) both;
 }
 
@@ -757,7 +768,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px 8px;
+  padding: 16px 18px 10px;
 }
 
 .kk-pop__title{
@@ -783,7 +794,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 0 14px 10px;
+  padding: 0 18px 14px;
 }
 
 .kk-pop__pill{
@@ -796,14 +807,28 @@
 }
 
 .kk-pop__dial{
-  padding: 10px 14px 14px;
+  position: relative;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding:
+    calc(10px + env(safe-area-inset-top, 0px))
+    calc(12px + env(safe-area-inset-right, 0px))
+    calc(14px + env(safe-area-inset-bottom, 0px))
+    calc(12px + env(safe-area-inset-left, 0px));
+}
+
+.kk-pop__dial > *{
+  width: 100%;
+  height: 100%;
   display: grid;
   place-items: center;
 }
 
-.kk-pop__dial > *{
-  width: min(360px, 70vw);
-  max-width: 360px;
+.kk-pop__dial .kai-klock-shell{
+  max-width: none !important;
+  width: clamp(260px, 82vmin, 1200px) !important;
+  aspect-ratio: 1 / 1;
 }
 
 .kk-pop__foot{
