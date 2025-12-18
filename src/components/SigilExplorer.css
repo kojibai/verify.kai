@@ -1347,3 +1347,138 @@
 } 
 
 
+/* ─────────────────────────────────────────────────────────────
+   TOOLBAR — ULTRA COMPACT HEIGHT PATCH (same layout, tighter)
+   Paste at END of file (replaces previous compact patch)
+   ───────────────────────────────────────────────────────────── */
+
+.kx-toolbar-inner{
+  padding: clamp(6px, 1.9vw, 11px);
+  gap: 8px;
+}
+
+.kx-brand{ gap: 8px; }
+
+.kx-glyph{
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+}
+
+.kx-title{ gap: 3px; }
+.kx-title h1{
+  line-height: 1.04;
+  margin: 0;
+}
+
+.kx-tagline{
+  font-size: 11px;
+  opacity: 0.88;
+}
+
+.kx-controls{ gap: 7px; }
+.kx-add-form{ gap: 5px; }
+
+.kx-input{
+  padding: 8px 10px;
+  border-radius: 11px;
+  font-size: 12.5px;
+}
+
+.kx-button{
+  padding: 8px 12px;
+  border-radius: 11px;
+  font-size: 12px;
+}
+
+.kx-import,
+.kx-export{
+  padding: 7px 10px;
+  border-radius: 11px;
+  font-size: 11.5px;
+}
+
+.kx-stats{ gap: 5px; }
+.kx-pill{
+  padding: 4px 8px;
+  font-size: 10.5px;
+}
+
+/* Ultra-tight on very small phones */
+@media (max-width: 420px){
+  .kx-toolbar-inner{ padding: 6px; gap: 7px; }
+  .kx-glyph{ width: 28px; height: 28px; }
+  .kx-input{ padding: 7px 9px; }
+  .kx-button{ padding: 7px 11px; }
+  .kx-import,
+  .kx-export{ padding: 6px 9px; }
+}
+/* ─────────────────────────────────────────────────────────────
+   ORIGIN CONTAINER (chakra-tinted, etched, breathing)
+   ───────────────────────────────────────────────────────────── */
+.origin{
+  border-radius: var(--sx-radius-md);
+  border: 1px solid rgba(255,255,255,0.16);
+  background:
+    radial-gradient(120% 180% at 0% 0%, color-mix(in oklab, var(--sx-chakra) 18%, transparent), transparent 60%),
+    radial-gradient(120% 180% at 100% 100%, color-mix(in oklab, var(--sx-chakra) 12%, transparent), transparent 62%),
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  box-shadow:
+    0 16px 42px rgba(0,0,0,0.58),
+    inset 0 1px 0 rgba(255,255,255,0  
+,0.06);
+  position: relative;
+  overflow: hidden;
+  animation: sx-origin-breathe var(--sx-breath) ease-in-out infinite;     
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform, filter;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   TOOLBAR — KEYS INLINE + CLOSE BUTTON NUDGE
+   Paste at END of file (after the ultra-compact patch)
+   ───────────────────────────────────────────────────────────── */
+
+/* On phones: put KEYS pill on the SAME row as Inhale/Exhale */
+@media (max-width: 679px){
+  .kx-controls{
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 7px;
+  }
+
+  /* keep the input + big INHALE spanning full width */
+  .kx-add-form{
+    grid-column: 1 / -1;
+  }
+
+  /* inhale/exhale (import/export) on left */
+  .kx-io{
+    grid-column: 1;
+    justify-content: start;
+  }
+
+  /* KEYS pill on right, vertically centered */
+  .kx-stats{
+    grid-column: 2;
+    justify-content: flex-end;
+    align-self: center;
+    margin: 0;
+  }
+}
+
+/* Nudge the X (close) button up slightly (safe multi-selector) */
+.kx-toolbar :where(.kx-close, .kx-dismiss, .kx-x, .close, .close-btn, .toolbar-close){
+  transform: translate3d(0, -2px, 0);
+  will-change: transform;
+}
+
+/* If it’s just a button with an aria-label/title, catch that too */
+.kx-toolbar :where(button[aria-label="Close"], button[title="Close"], button[aria-label="close"], button[title="close"]){
+  transform: translate3d(0, -2px, 0);
+  will-change: transform;
+}
