@@ -134,10 +134,18 @@ export default function KaiVohModal({ open, onClose }: KaiVohModalProps) {
     if (!open) return;
 
     const prevOverflow = document.body.style.overflow;
+    const prevDocOverscroll = document.documentElement.style.getPropertyValue(
+      "overscroll-behavior"
+    );
+    const prevBodyOverscroll = document.body.style.getPropertyValue(
+      "overscroll-behavior"
+    );
     const prevBreath = document.documentElement.style.getPropertyValue("--kai-breath");
     const prevPhi = document.documentElement.style.getPropertyValue("--kai-phi");
 
     document.body.style.overflow = "hidden";
+    document.documentElement.style.setProperty("overscroll-behavior", "contain");
+    document.body.style.setProperty("overscroll-behavior", "contain");
 
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === "Escape") onClose();
@@ -156,6 +164,13 @@ export default function KaiVohModal({ open, onClose }: KaiVohModalProps) {
       document.removeEventListener("keydown", onKey);
 
       // restore prior values (avoid leaking globals across app)
+      if (prevDocOverscroll)
+        document.documentElement.style.setProperty("overscroll-behavior", prevDocOverscroll);
+      else document.documentElement.style.removeProperty("overscroll-behavior");
+
+      if (prevBodyOverscroll) document.body.style.setProperty("overscroll-behavior", prevBodyOverscroll);
+      else document.body.style.removeProperty("overscroll-behavior");
+
       if (prevBreath) document.documentElement.style.setProperty("--kai-breath", prevBreath);
       else document.documentElement.style.removeProperty("--kai-breath");
 

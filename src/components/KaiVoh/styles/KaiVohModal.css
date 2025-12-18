@@ -54,12 +54,19 @@
   align-items: center;
   justify-content: center;
   padding: clamp(16px, 4vw, 28px);
+  min-height: 100vh;
   background:
     radial-gradient(1200px 800px at 50% 0%, rgba(0,180,255,0.08), transparent 70%),
     radial-gradient(900px 700px at 50% 100%, rgba(0,255,208,0.06), transparent 70%),
     rgba(3,6,23,0.66);
   backdrop-filter: blur(6px) saturate(1.08);
   animation: portal-fade .42s ease-out both;
+  overscroll-behavior: contain;
+  touch-action: pan-y pinch-zoom;
+}
+
+@supports (height: 100dvh){
+  .kai-voh-modal-backdrop{ min-height: 100dvh; }
 }
 
 .atlantean-veil::before,
@@ -193,6 +200,8 @@
   background:
     radial-gradient(80% 60% at 50% 0%, rgba(0,255,208,.05), transparent 65%),
     radial-gradient(70% 50% at 50% 100%, rgba(138,43,226,.05), transparent 65%);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Ensure decorations never steal clicks */
