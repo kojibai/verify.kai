@@ -43,7 +43,7 @@ import EternalKlock from "./components/EternalKlock";
 
 import "./App.css";
 
-export const DEFAULT_APP_VERSION = "29.3.8";
+export const DEFAULT_APP_VERSION = "29.3.9";  // sync with public/sw.js
 const SW_VERSION_EVENT = "kairos:sw-version";
 
 type NavItem = {
