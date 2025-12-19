@@ -48,6 +48,7 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
   const hasCompletedFirstPaint = useRef<boolean>(false);
   const exitTimerRef = useRef<number | null>(null);
   const fadeTimerRef = useRef<number | null>(null);
+  const firstLoadRef = useRef<boolean>(true);
 
   const fadeDurationMs = useMemo(() => (prefersReducedMotion ? 180 : 420), [prefersReducedMotion]);
   const navHoldMs = useMemo(() => (prefersReducedMotion ? 180 : 520), [prefersReducedMotion]);
@@ -77,7 +78,8 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
       "/verify/*",
     ];
 
-    return allowed.some((pattern) => Boolean(matchPath({ path: pattern, end: false }, p)));
+    const matchesRoute = allowed.some((pattern) => Boolean(matchPath({ path: pattern, end: false }, p)));
+    return firstLoadRef.current || matchesRoute;
   }, [location.pathname]);
 
   const hideSplash = useCallback(
@@ -88,6 +90,7 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
         fadeTimerRef.current = window.setTimeout(() => {
           setPhase("hidden");
           setMounted(false);
+          firstLoadRef.current = false;
         }, fadeDurationMs);
       }, Math.max(0, delayMs));
     },
