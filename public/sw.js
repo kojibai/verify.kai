@@ -9,7 +9,7 @@
 
 // Update this version string manually to keep the app + cache versions in sync.
 // The value is forwarded to the UI via the service worker "SW_ACTIVATED" message.
-const APP_VERSION = "29.3.9";
+const APP_VERSION = "29.4.0";
 const VERSION = new URL(self.location.href).searchParams.get("v") || APP_VERSION; // derived from build
 const PREFIX  = "PHINETWORK";
 const PRECACHE = `${PREFIX}-precache-${VERSION}`;
@@ -39,9 +39,38 @@ const CORE_SHELL = [
   OFFLINE_FALLBACK,
 ];
 
-const SHORTCUT_ROUTES = ["/klok", "/sigil/new", "/pulse", "/verifier.html"];
+const SHORTCUT_ROUTES = [
+  "/",
+  "/mint",
+  "/voh",
+  "/keystream",
+  "/klock",
+  "/klok",
+  "/sigil/new",
+  "/pulse",
+  "/verify",
+  "/verifier.html",
+];
 
-const PRECACHE_URLS = [...CORE_SHELL, ...SHORTCUT_ROUTES, ...MANIFEST_ASSETS];
+// Assets required to keep verification + sigil flows alive while offline
+const CRITICAL_OFFLINE_ASSETS = [
+  "/sigil.wasm",
+  "/sigil.zkey",
+  "/sigil.artifacts.json",
+  "/sigil.vkey.json",
+  "/verification_key.json",
+  "/verifier-core.js",
+  "/verifier.inline.html",
+  "/verifier.html",
+  "/pdf-lib.min.js",
+];
+
+const PRECACHE_URLS = [
+  ...CORE_SHELL,
+  ...SHORTCUT_ROUTES,
+  ...CRITICAL_OFFLINE_ASSETS,
+  ...MANIFEST_ASSETS,
+];
 
 const sameOrigin = (url) => new URL(url, self.location.href).origin === self.location.origin;
 
@@ -199,6 +228,8 @@ self.addEventListener("install", (event) => {
     // Fetch a fresh shell to map (ensure correct headers)
     const shell = await cache.match(OFFLINE_URL, { ignoreSearch: true }) || await fetch(OFFLINE_URL);
     if (shell) {
+      // Pre-map shell to known shortcuts so they are instant + offline
+      await Promise.all(SHORTCUT_ROUTES.map((route) => mapShellToRoute(route, shell)));
       // Seed popular /s/... routes if you provide /sigils-index.json
       await seedSigilRoutes(shell);
     }

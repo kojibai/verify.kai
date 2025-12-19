@@ -43,8 +43,31 @@ import EternalKlock from "./components/EternalKlock";
 
 import "./App.css";
 
-export const DEFAULT_APP_VERSION = "29.3.9";  // sync with public/sw.js
+export const DEFAULT_APP_VERSION = "29.4.0";  // sync with public/sw.js
 const SW_VERSION_EVENT = "kairos:sw-version";
+const OFFLINE_ASSETS_TO_WARM: readonly string[] = [
+  "/sigil.wasm",
+  "/sigil.zkey",
+  "/sigil.artifacts.json",
+  "/sigil.vkey.json",
+  "/verification_key.json",
+  "/verifier-core.js",
+  "/verifier.inline.html",
+  "/verifier.html",
+  "/pdf-lib.min.js",
+];
+
+const SHELL_ROUTES_TO_WARM: readonly string[] = [
+  "/",
+  "/mint",
+  "/voh",
+  "/keystream",
+  "/klock",
+  "/klok",
+  "/sigil/new",
+  "/pulse",
+  "/verify",
+];
 
 type NavItem = {
   to: string;
@@ -1010,6 +1033,50 @@ export function AppChrome(): React.JSX.Element {
     window.addEventListener(SW_VERSION_EVENT, onVersion);
 
     return () => window.removeEventListener(SW_VERSION_EVENT, onVersion);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return undefined;
+
+    const aborter = new AbortController();
+
+    const warmOffline = async (): Promise<void> => {
+      try {
+        await navigator.serviceWorker.ready;
+      } catch {
+        return;
+      }
+
+      const targets = [...OFFLINE_ASSETS_TO_WARM, ...SHELL_ROUTES_TO_WARM];
+      await Promise.all(
+        targets.map(async (url) => {
+          try {
+            await fetch(url, { cache: "no-cache", signal: aborter.signal });
+          } catch {
+            /* non-blocking warm-up */
+          }
+        }),
+      );
+    };
+
+    const idleWin = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+
+    const idleHandle =
+      typeof idleWin.requestIdleCallback === "function"
+        ? idleWin.requestIdleCallback(() => void warmOffline(), { timeout: 1200 })
+        : window.setTimeout(() => void warmOffline(), 360);
+
+    return () => {
+      aborter.abort();
+      if (typeof idleWin.cancelIdleCallback === "function") {
+        idleWin.cancelIdleCallback(idleHandle as number);
+      } else {
+        window.clearTimeout(idleHandle as number);
+      }
+    };
   }, []);
 
   const BREATH_S = useMemo(() => 3 + Math.sqrt(5), []);
