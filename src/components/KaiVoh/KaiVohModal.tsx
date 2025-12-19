@@ -134,23 +134,14 @@ export default function KaiVohModal({ open, onClose }: KaiVohModalProps) {
     if (!open) return;
 
     const prevOverflow = document.body.style.overflow;
-    const prevDocOverscroll = document.documentElement.style.getPropertyValue(
-      "overscroll-behavior"
-    );
-    const prevBodyOverscroll = document.body.style.getPropertyValue(
-      "overscroll-behavior"
-    );
+    const prevDocOverscroll = document.documentElement.style.getPropertyValue("overscroll-behavior");
+    const prevBodyOverscroll = document.body.style.getPropertyValue("overscroll-behavior");
     const prevBreath = document.documentElement.style.getPropertyValue("--kai-breath");
     const prevPhi = document.documentElement.style.getPropertyValue("--kai-phi");
 
     document.body.style.overflow = "hidden";
     document.documentElement.style.setProperty("overscroll-behavior", "contain");
     document.body.style.setProperty("overscroll-behavior", "contain");
-
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
 
     // set CSS custom props globally for timing/phi
     document.documentElement.style.setProperty("--kai-breath", `${BREATH_SEC}s`);
@@ -161,7 +152,6 @@ export default function KaiVohModal({ open, onClose }: KaiVohModalProps) {
 
     return () => {
       document.body.style.overflow = prevOverflow;
-      document.removeEventListener("keydown", onKey);
 
       // restore prior values (avoid leaking globals across app)
       if (prevDocOverscroll)
@@ -178,15 +168,6 @@ export default function KaiVohModal({ open, onClose }: KaiVohModalProps) {
       else document.documentElement.style.removeProperty("--kai-phi");
     };
   }, [open, onClose]);
-
-  // Backdrop close (only if pointer down on backdrop itself)
-  const onBackdropPointerDown = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>): void => {
-      if (e.target !== e.currentTarget) return;
-      onClose();
-    },
-    [onClose]
-  );
 
   // Close button handlers
   const handleClosePointerDown = useCallback(
@@ -217,7 +198,6 @@ export default function KaiVohModal({ open, onClose }: KaiVohModalProps) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="kaivoh-title"
-      onPointerDown={onBackdropPointerDown}
       data-view={view}
     >
       {/* Dim stars + parallax halos */}
