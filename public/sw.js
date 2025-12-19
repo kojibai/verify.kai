@@ -39,6 +39,16 @@ const CORE_SHELL = [
   OFFLINE_FALLBACK,
 ];
 
+const SIGIL_STREAM_ROUTES = [
+  "/stream",
+  "/stream/p",
+  "/stream/c",
+  "/feed",
+  "/feed/p",
+  "/p",
+  "/p~",
+];
+
 const SHORTCUT_ROUTES = [
   "/",
   "/mint",
@@ -50,6 +60,7 @@ const SHORTCUT_ROUTES = [
   "/pulse",
   "/verify",
   "/verifier.html",
+  ...SIGIL_STREAM_ROUTES,
 ];
 
 // Assets required to keep verification + sigil flows alive while offline

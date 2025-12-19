@@ -123,6 +123,16 @@ const OFFLINE_ASSETS_TO_WARM: readonly string[] = [
   "/pdf-lib.min.js",
 ];
 
+const SIGIL_STREAM_ROUTES: readonly string[] = [
+  "/stream",
+  "/stream/p",
+  "/stream/c",
+  "/feed",
+  "/feed/p",
+  "/p",
+  "/p~",
+];
+
 const SHELL_ROUTES_TO_WARM: readonly string[] = [
   "/",
   "/mint",
@@ -133,6 +143,7 @@ const SHELL_ROUTES_TO_WARM: readonly string[] = [
   "/sigil/new",
   "/pulse",
   "/verify",
+  ...SIGIL_STREAM_ROUTES,
 ];
 
 const APP_SHELL_HINTS: readonly string[] = [
@@ -1154,6 +1165,7 @@ export function AppChrome(): React.JSX.Element {
     void import("./components/SigilModal");
     void import("./components/SigilExplorer");
     void import("./components/EternalKlock");
+    void import("./pages/sigilstream/SigilStreamRoot");
   }, [heavyUiReady]);
 
   // SW warm-up (idle-only + focus cadence, abort-safe, respects Save-Data/2G)
