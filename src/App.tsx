@@ -58,6 +58,8 @@ const SigilModal = lazy(
   React.ComponentType<{ initialPulse: number; onClose: () => void }>
 >;
 
+
+
 const HomePriceChartCard = lazy(
   () => import("./components/HomePriceChartCard"),
 ) as React.LazyExoticComponent<
@@ -108,7 +110,7 @@ const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : use
 /* ──────────────────────────────────────────────────────────────────────────────
    App constants
 ────────────────────────────────────────────────────────────────────────────── */
-export const DEFAULT_APP_VERSION = "29.4.7"; // sync with public/sw.js
+export const DEFAULT_APP_VERSION = "29.4.8"; // sync with public/sw.js
 const SW_VERSION_EVENT = "kairos:sw-version";
 
 const OFFLINE_ASSETS_TO_WARM: readonly string[] = [
