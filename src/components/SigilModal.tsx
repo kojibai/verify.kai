@@ -32,6 +32,8 @@ import KaiSigil, {
 import SealMomentModal from "./SealMomentModal";
 import { makeSigilUrl, type SigilSharePayload } from "../utils/sigilUrl";
 import "./SigilModal.css";
+import { useBreathTicker } from "../hooks/useBreathTicker";
+import { msUntilNextPulseBoundary } from "../utils/kai_pulse";
 
 /* ────────────────────────────────────────────────────────────────
    Strict browser timer handle types (FIX)
@@ -40,7 +42,6 @@ import "./SigilModal.css";
    overload (often `Timeout`) while window.setTimeout returns `number`.
 ────────────────────────────────────────────────────────────────── */
 type TimeoutHandle = number; // window.setTimeout(...) -> number (browser)
-type IntervalHandle = number; // window.setInterval(...) -> number (browser)
 
 /* html2canvas typing compatibility (no `any`, extra-props allowed) */
 type H2COptions = NonNullable<Parameters<typeof html2canvas>[1]>;
@@ -542,12 +543,7 @@ const epochNow = (): number => {
   }
   return Date.now();
 };
-
-const computeNextBoundary = (nowMs: number): number => {
-  const elapsed = nowMs - GENESIS_TS;
-  const periods = Math.ceil(elapsed / PULSE_MS);
-  return GENESIS_TS + periods * PULSE_MS;
-};
+const nextBoundaryFromNow = (nowMs: number): number => nowMs + msUntilNextPulseBoundary();
 
 /* ═════════════ deterministic datetime-local parsing ═════════════ */
 function parseDateTimeLocal(value: string): Date | null {
@@ -571,90 +567,6 @@ function parseDateTimeLocal(value: string): Date | null {
 function addBreathOffset(baseLocal: Date, breathIndex: number): Date {
   const idx = Number.isFinite(breathIndex) ? Math.max(1, Math.min(11, breathIndex)) : 1;
   return new Date(baseLocal.getTime() + (idx - 1) * PULSE_MS);
-}
-
-/* ═════════════ High-precision φ-pulse countdown (6 decimals) ═════════════ */
-function useKaiPulseCountdown(active: boolean) {
-  const [secsLeft, setSecsLeft] = useState<number>(KAI_PULSE_SEC);
-  const nextRef = useRef<number>(0);
-  const rafRef = useRef<number | null>(null);
-  const intRef = useRef<IntervalHandle | null>(null);
-
-  useEffect(() => {
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-    if (intRef.current !== null) {
-      window.clearInterval(intRef.current);
-      intRef.current = null;
-    }
-
-    if (!active) return;
-
-    if (typeof document !== "undefined" && document.documentElement) {
-      document.documentElement.style.setProperty("--kai-pulse", `${PULSE_MS}ms`);
-    }
-
-    nextRef.current = computeNextBoundary(epochNow());
-
-    const tick = () => {
-      const now = epochNow();
-
-      if (now >= nextRef.current) {
-        const missed = Math.floor((now - nextRef.current) / PULSE_MS) + 1;
-        nextRef.current += missed * PULSE_MS;
-      }
-
-      const diffMs = Math.max(0, nextRef.current - now);
-      setSecsLeft(diffMs / 1000);
-      rafRef.current = requestAnimationFrame(tick);
-    };
-
-    rafRef.current = requestAnimationFrame(tick);
-
-    const onVis = () => {
-      if (document.visibilityState === "hidden") {
-        if (rafRef.current !== null) {
-          cancelAnimationFrame(rafRef.current);
-          rafRef.current = null;
-        }
-        if (intRef.current === null) {
-          intRef.current = window.setInterval(() => {
-            const now = epochNow();
-            if (now >= nextRef.current) {
-              const missed = Math.floor((now - nextRef.current) / PULSE_MS) + 1;
-              nextRef.current += missed * PULSE_MS;
-            }
-            setSecsLeft(Math.max(0, (nextRef.current - now) / 1000));
-          }, 33);
-        }
-      } else {
-        if (intRef.current !== null) {
-          window.clearInterval(intRef.current);
-          intRef.current = null;
-        }
-        if (rafRef.current !== null) {
-          cancelAnimationFrame(rafRef.current);
-          rafRef.current = null;
-        }
-        nextRef.current = computeNextBoundary(epochNow());
-        rafRef.current = requestAnimationFrame(tick);
-      }
-    };
-
-    document.addEventListener("visibilitychange", onVis);
-
-    return () => {
-      document.removeEventListener("visibilitychange", onVis);
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-      if (intRef.current !== null) window.clearInterval(intRef.current);
-      rafRef.current = null;
-      intRef.current = null;
-    };
-  }, [active]);
-
-  return active ? secsLeft : null;
 }
 
 /* ═════════════ hash helpers ═════════════ */
@@ -1042,7 +954,7 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
     clearAlignedTimer();
 
     const startNow = epochNow();
-    targetBoundaryRef.current = computeNextBoundary(startNow);
+    targetBoundaryRef.current = nextBoundaryFromNow(startNow);
 
     const fire = () => {
       const nowMs = epochNow();
@@ -1137,7 +1049,13 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
     applyKaiFromDate(new Date(now), now);
   };
 
-  const secsLeft = useKaiPulseCountdown(!dateISO);
+  const { msToNext } = useBreathTicker(!dateISO);
+  useEffect(() => {
+    if (!dateISO && typeof document !== "undefined" && document.documentElement) {
+      document.documentElement.style.setProperty("--kai-pulse", `${PULSE_MS}ms`);
+    }
+  }, [dateISO]);
+  const secsLeft = !dateISO && typeof msToNext === "number" ? msToNext / 1000 : null;
 
   const copy = (txt: string) => fireAndForget(copyText(txt));
   const copyJSON = (obj: unknown) => copy(JSON.stringify(obj, null, 2));

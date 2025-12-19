@@ -20,6 +20,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 import "./styles/KaiVohApp.css";
+import { useBreathTicker } from "../../hooks/useBreathTicker";
 
 /* UI flow */
 import SigilLogin from "./SigilLogin";
@@ -50,7 +51,7 @@ import {
 import { derivePhiKeyFromSig } from "../VerifierStamper/sigilUtils";
 
 /* Kai-Klok φ-engine (KKS v1) */
-import { fetchKaiOrLocal, epochMsFromPulse, type ChakraDay } from "../../utils/kai_pulse";
+import type { ChakraDay } from "../../utils/kai_pulse";
 
 /* Types */
 import type { PostEntry, SessionData } from "../session/sessionTypes";
@@ -432,35 +433,7 @@ function KaiVohFlow(): ReactElement {
   const [flowError, setFlowError] = useState<string | null>(null);
 
   /* Live Kai pulse + countdown (KKS v1) */
-  const [livePulse, setLivePulse] = useState<number | null>(null);
-  const [msToNextPulse, setMsToNextPulse] = useState<number | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const tick = async (): Promise<void> => {
-      const now = new Date();
-      const kai = await fetchKaiOrLocal(undefined, now);
-      if (cancelled) return;
-
-      const pulseNow = kai.pulse;
-      const nextPulseMsBI = epochMsFromPulse(pulseNow + 1);
-
-      let remaining = Number(nextPulseMsBI - BigInt(now.getTime()));
-      if (!Number.isFinite(remaining) || remaining < 0) remaining = 0;
-
-      setLivePulse(pulseNow);
-      setMsToNextPulse(remaining);
-    };
-
-    void tick();
-    const timer = window.setInterval(() => void tick(), 250);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, []);
+  const { pulse: livePulse, msToNext: msToNextPulse } = useBreathTicker(true);
 
   const hasConnectedAccounts = useMemo(() => {
     if (!session || !session.connectedAccounts) return false;
