@@ -3408,6 +3408,28 @@ html[data-perf="low"] .kk-pop__panel {
     height: 100%;
   }
 }
+.route-loader__phi{
+  width: clamp(54px, 8vw, 88px);
+  height: clamp(54px, 8vw, 88px);
+  filter: drop-shadow(0 0 18px rgba(180, 220, 255, 0.25));
+  animation: routePhiBreath 1.8s ease-in-out infinite;
+  opacity: 0.96;
+  user-select: none;
+}
+
+.route-loader__label{
+  margin-top: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 12px;
+  opacity: 0.88;
+}
+
+@keyframes routePhiBreath{
+  0%, 100%{ transform: translateY(0) scale(1); opacity: 0.92; }
+  50%{ transform: translateY(-1px) scale(1.03); opacity: 1; }
+}
+
 /* ──────────────────────────────────────────────────────────────────────────────
    v28.7.x — FINISH: Nav Writ Slot parity + no double borders + desktop anchor
    - Keeps your mobile caps/behavior exactly
