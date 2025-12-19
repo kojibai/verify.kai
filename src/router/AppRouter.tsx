@@ -14,10 +14,12 @@ import {
   SigilMintRoute,
 } from "../App";
 import VerifierStamper from "../components/VerifierStamper/VerifierStamper";
+import KaiSplashScreen from "../components/KaiSplashScreen";
 
 export default function AppRouter(): React.JSX.Element {
   return (
     <BrowserRouter>
+      <KaiSplashScreen />
       <Routes>
         <Route path="s" element={<SigilPage />} />
         <Route path="s/:hash" element={<SigilPage />} />
@@ -48,4 +50,3 @@ export default function AppRouter(): React.JSX.Element {
     </BrowserRouter>
   );
 }
-
