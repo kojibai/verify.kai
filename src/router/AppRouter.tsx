@@ -43,6 +43,10 @@ function withSuspense(node: React.ReactElement): React.JSX.Element {
   return <Suspense fallback={<RouteLoader />}>{node}</Suspense>;
 }
 
+function withInstantSuspense(node: React.ReactElement): React.JSX.Element {
+  return <Suspense fallback={null}>{node}</Suspense>;
+}
+
 export default function AppRouter(): React.JSX.Element {
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -94,7 +98,7 @@ export default function AppRouter(): React.JSX.Element {
         <Route path="verify/*" element={withSuspense(<VerifyPage />)} />
 
         <Route element={<AppChrome />}>
-          <Route index element={withSuspense(<VerifierStamper />)} />
+          <Route index element={withInstantSuspense(<VerifierStamper />)} />
           <Route path="mint" element={<SigilMintRoute />} />
           <Route path="voh" element={<KaiVohRoute />} />
           <Route path="explorer" element={<ExplorerRoute />} />

@@ -57,15 +57,7 @@ if ("serviceWorker" in navigator && isProduction) {
     try {
       const reg = await navigator.serviceWorker.register(`/sw.js?v=${APP_VERSION}`, { scope: "/" });
 
-      // Force refresh when a new worker takes control
-      let refreshing = false;
-      navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (refreshing) return;
-        refreshing = true;
-        window.location.reload();
-      });
-
-      // Auto-skip waiting once the new worker finishes installing
+      // Auto-skip waiting once the new worker finishes installing (no forced reload)
       const triggerSkipWaiting = (worker: ServiceWorker | null) => {
         worker?.postMessage({ type: "SKIP_WAITING" });
       };
