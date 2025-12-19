@@ -627,6 +627,16 @@ function ExplorerPopover({
       if (e.target === e.currentTarget) {
         e.preventDefault();
         e.stopPropagation();
+      }
+    },
+    [],
+  );
+
+  const onBackdropClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>): void => {
+      if (e.target === e.currentTarget) {
+        e.preventDefault();
+        e.stopPropagation();
         onClose();
       }
     },
@@ -637,9 +647,8 @@ function ExplorerPopover({
     (e: React.PointerEvent<HTMLButtonElement>): void => {
       e.preventDefault();
       e.stopPropagation();
-      onClose();
     },
-    [onClose],
+    [],
   );
 
   if (!open || !isClient || !portalHost) return null;
@@ -652,7 +661,7 @@ function ExplorerPopover({
       aria-modal="true"
       aria-label="PhiStream Explorer"
       onPointerDown={onBackdropPointerDown}
-      onClick={(e) => e.stopPropagation()}
+      onClick={onBackdropClick}
     >
       <div className="explorer-pop__panel" role="document">
         <button
@@ -737,6 +746,16 @@ function KlockPopover({ open, onClose, children }: KlockPopoverProps): React.JSX
       if (e.target === e.currentTarget) {
         e.preventDefault();
         e.stopPropagation();
+      }
+    },
+    [],
+  );
+
+  const onBackdropClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>): void => {
+      if (e.target === e.currentTarget) {
+        e.preventDefault();
+        e.stopPropagation();
         onClose();
       }
     },
@@ -747,9 +766,8 @@ function KlockPopover({ open, onClose, children }: KlockPopoverProps): React.JSX
     (e: React.PointerEvent<HTMLButtonElement>): void => {
       e.preventDefault();
       e.stopPropagation();
-      onClose();
     },
-    [onClose],
+    [],
   );
 
   if (!open || !isClient || !portalHost) return null;
@@ -762,7 +780,7 @@ function KlockPopover({ open, onClose, children }: KlockPopoverProps): React.JSX
       aria-modal="true"
       aria-label="Eternal KaiKlok"
       onPointerDown={onBackdropPointerDown}
-      onClick={(e) => e.stopPropagation()}
+      onClick={onBackdropClick}
     >
       <div className="klock-pop__panel" role="document" data-klock-size="xl">
         <button
