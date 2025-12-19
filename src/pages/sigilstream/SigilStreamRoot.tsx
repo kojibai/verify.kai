@@ -235,6 +235,29 @@ const KKS_MONTH_NAMES: readonly string[] = [
   "Liora",
 ] as const;
 
+type IdleDeadlineLike = { timeRemaining(): number };
+type IdleInvoker = (cb: (deadline: IdleDeadlineLike) => void) => number;
+
+/**
+ * Schedule non-critical work after the first paint.
+ * Falls back to setTimeout(0) when requestIdleCallback isn’t available.
+ */
+function runWhenIdle(fn: () => void): void {
+  if (typeof window === "undefined") return;
+  const ric = (window as typeof window & { requestIdleCallback?: IdleInvoker }).requestIdleCallback;
+  if (typeof ric === "function") {
+    ric((deadline) => {
+      if (deadline.timeRemaining() <= 0) {
+        fn();
+        return;
+      }
+      fn();
+    });
+    return;
+  }
+  window.setTimeout(fn, 0);
+}
+
 function pulseToMonthName(pulse: number): string {
   const day = pulseToDayIndex(pulse);
   const dayOfYear = safeModulo(day, KKS_DAYS_PER_YEAR);
@@ -1410,22 +1433,24 @@ function SigilStreamInner(): React.JSX.Element {
   const claimsHydratedRef = useRef(false);
 
   const ms2IngestMany = useCallback((urls: readonly string[], pulseHint?: number) => {
-    const g = ms2Ref.current;
-    let changed = false;
+    runWhenIdle(() => {
+      const g = ms2Ref.current;
+      let changed = false;
 
-    for (const u of urls) {
-      if (!u || !u.trim().length) continue;
-      changed = ms2IngestUrl(g, u) || changed;
-    }
+      for (const u of urls) {
+        if (!u || !u.trim().length) continue;
+        changed = ms2IngestUrl(g, u) || changed;
+      }
 
-    // If we have a pulse hint for the *current* token, apply it where we can.
-    // (We don’t guess token from pulseHint; we apply pulse in refreshPayloadFromLocation where token is known.)
-    if (pulseHint !== undefined) void pulseHint;
+      // If we have a pulse hint for the *current* token, apply it where we can.
+      // (We don’t guess token from pulseHint; we apply pulse in refreshPayloadFromLocation where token is known.)
+      if (pulseHint !== undefined) void pulseHint;
 
-    if (changed) {
-      ms2Save(g);
-      setMs2Tick((x) => x + 1);
-    }
+      if (changed) {
+        ms2Save(g);
+        setMs2Tick((x) => x + 1);
+      }
+    });
   }, []);
 
   const rehydrateUsernameClaimsFromHistory = useCallback(
@@ -1522,18 +1547,22 @@ function SigilStreamInner(): React.JSX.Element {
       });
     };
 
-    const stored = parseStringArray(localStorage.getItem(LS_KEY));
-    if (stored.length) mergeSources(stored.map((u) => ({ url: u })));
+    runWhenIdle(() => {
+      const stored = parseStringArray(localStorage.getItem(LS_KEY));
+      if (stored.length) mergeSources(stored.map((u) => ({ url: u })));
+    });
 
     let cancelled = false;
-    (async () => {
-      try {
-        const seed = await loadLinksJson();
-        if (!cancelled && seed.length) mergeSources(seed);
-      } catch (e) {
-        report("initial seed load", e);
-      }
-    })().catch((e) => report("initial seed load outer", e));
+    runWhenIdle(() => {
+      (async () => {
+        try {
+          const seed = await loadLinksJson();
+          if (!cancelled && seed.length) mergeSources(seed);
+        } catch (e) {
+          report("initial seed load", e);
+        }
+      })().catch((e) => report("initial seed load outer", e));
+    });
 
     return () => {
       cancelled = true;
@@ -1586,60 +1615,62 @@ function SigilStreamInner(): React.JSX.Element {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const scanned = scannedForAddsRef.current;
-    const newlyDiscovered: string[] = [];
+    runWhenIdle(() => {
+      const scanned = scannedForAddsRef.current;
+      const newlyDiscovered: string[] = [];
 
-    const pushNew = (u: string) => {
-      if (!u.trim().length) return;
-      if (!newlyDiscovered.includes(u)) newlyDiscovered.push(u);
-    };
+      const pushNew = (u: string) => {
+        if (!u.trim().length) return;
+        if (!newlyDiscovered.includes(u)) newlyDiscovered.push(u);
+      };
 
-    for (const s of sources) {
-      const url = s.url;
-      if (!url || scanned.has(url)) continue;
-      scanned.add(url);
+      for (const s of sources) {
+        const url = s.url;
+        if (!url || scanned.has(url)) continue;
+        scanned.add(url);
 
-      const parsed = tryParseUrlLike(url);
-      if (!parsed) continue;
+        const parsed = tryParseUrlLike(url);
+        if (!parsed) continue;
 
-      const hashStr = parsed.hash && parsed.hash.startsWith("#") ? parsed.hash.slice(1) : "";
-      const hash = new URLSearchParams(hashStr);
-      const search = parsed.searchParams;
+        const hashStr = parsed.hash && parsed.hash.startsWith("#") ? parsed.hash.slice(1) : "";
+        const hash = new URLSearchParams(hashStr);
+        const search = parsed.searchParams;
 
-      const addsRaw = [...search.getAll("add"), ...hash.getAll("add")];
-      if (addsRaw.length === 0) continue;
+        const addsRaw = [...search.getAll("add"), ...hash.getAll("add")];
+        if (addsRaw.length === 0) continue;
 
-      const adds = addsRaw
-        .map(normalizeAddParam)
-        .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
-        .map(normalizeStreamishUrlForBrowser);
+        const adds = addsRaw
+          .map(normalizeAddParam)
+          .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+          .map(normalizeStreamishUrlForBrowser);
 
-      for (const a of adds) pushNew(a);
-    }
-
-    if (newlyDiscovered.length === 0) return;
-
-    // Learn edges for newly discovered URLs
-    ms2IngestMany(newlyDiscovered);
-
-    setSources((prev) => {
-      const seen = new Set(prev.map((p) => p.url));
-      const fresh = newlyDiscovered.filter((u) => !seen.has(u));
-      if (!fresh.length) return prev;
-
-      try {
-        prependUniqueToStorage(fresh);
-      } catch (e) {
-        report("prependUniqueToStorage (infinite replies)", e);
+        for (const a of adds) pushNew(a);
       }
-      for (const u of fresh) {
+
+      if (newlyDiscovered.length === 0) return;
+
+      // Learn edges for newly discovered URLs
+      ms2IngestMany(newlyDiscovered);
+
+      setSources((prev) => {
+        const seen = new Set(prev.map((p) => p.url));
+        const fresh = newlyDiscovered.filter((u) => !seen.has(u));
+        if (!fresh.length) return prev;
+
         try {
-          registerSigilUrl(u);
+          prependUniqueToStorage(fresh);
         } catch (e) {
-          report("registerSigilUrl (infinite replies)", e);
+          report("prependUniqueToStorage (infinite replies)", e);
         }
-      }
-      return [...fresh.map((u) => ({ url: u })), ...prev];
+        for (const u of fresh) {
+          try {
+            registerSigilUrl(u);
+          } catch (e) {
+            report("registerSigilUrl (infinite replies)", e);
+          }
+        }
+        return [...fresh.map((u) => ({ url: u })), ...prev];
+      });
     });
   }, [sources, ms2IngestMany]);
 
@@ -1650,18 +1681,20 @@ function SigilStreamInner(): React.JSX.Element {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const scanned = ms2ScannedUrlRef.current;
-    const batch: string[] = [];
+    runWhenIdle(() => {
+      const scanned = ms2ScannedUrlRef.current;
+      const batch: string[] = [];
 
-    for (const s of sources) {
-      const u = s.url;
-      if (!u || scanned.has(u)) continue;
-      scanned.add(u);
-      batch.push(u);
-      if (batch.length >= 256) break;
-    }
+      for (const s of sources) {
+        const u = s.url;
+        if (!u || scanned.has(u)) continue;
+        scanned.add(u);
+        batch.push(u);
+        if (batch.length >= 256) break;
+      }
 
-    if (batch.length) ms2IngestMany(batch);
+      if (batch.length) ms2IngestMany(batch);
+    });
   }, [sources, ms2IngestMany]);
 
   /** ---------- Payload (decoded from token) ---------- */
