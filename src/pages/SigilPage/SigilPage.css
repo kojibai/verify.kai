@@ -65,6 +65,8 @@ html.sigil-scroll, body{
   background:var(--sp-bg);
   color:var(--sp-text);
   font-family:var(--font-sans);
+  -webkit-text-size-adjust:100%;
+  text-size-adjust:100%;
   -webkit-font-smoothing:antialiased;
   -moz-osx-font-smoothing:grayscale;
 }

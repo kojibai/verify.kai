@@ -10,6 +10,7 @@ import {
   useRef,
   useCallback,
   useDeferredValue,
+  useLayoutEffect,
 } from "react";
 import {useParams, useLocation, useNavigate } from "react-router-dom";
 import html2canvas from "html2canvas";
@@ -648,7 +649,7 @@ useEffect(() => {
     return Array.from(new Set(vals));
   }, [payload?.canonicalHash, localHash, uploadedMeta?.canonicalHash, legacyInfo]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     injectSigilPageStyles();
   }, []);
 
@@ -892,7 +893,7 @@ useEffect(() => {
   }, [payload, localHash, sigilSize, seoStrings.title, seoStrings.desc]);
 
   /* allow page scroll */
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.classList.add("sigil-scroll");
     return () => document.documentElement.classList.remove("sigil-scroll");
   }, []);
