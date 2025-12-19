@@ -13,20 +13,7 @@ type SplashPhase = "show" | "fade" | "hidden";
 
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
-const SPLASH_ROUTES: readonly string[] = [
-  "/s",
-  "/s/:hash",
-  "/stream",
-  "/stream/*",
-  "/feed",
-  "/feed/*",
-  "/p~:token",
-  "/p~:token/*",
-  "/token",
-  "/p~token",
-  "/p",
-  "/verify/*",
-];
+const SPLASH_ROUTES: readonly string[] = ["/s", "/s/:hash", "/stream", "/stream/*", "/feed", "/feed/*"];
 
 function usePrefersReducedMotion(): boolean {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(() => {

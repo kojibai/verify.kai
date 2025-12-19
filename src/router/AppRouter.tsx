@@ -39,8 +39,11 @@ function RouteLoader(): React.JSX.Element {
   );
 }
 
-function withSuspense(node: React.ReactElement): React.JSX.Element {
-  return <Suspense fallback={<RouteLoader />}>{node}</Suspense>;
+function withSuspense(
+  node: React.ReactElement,
+  fallback: React.ReactElement | null = <RouteLoader />,
+): React.JSX.Element {
+  return <Suspense fallback={fallback}>{node}</Suspense>;
 }
 
 export default function AppRouter(): React.JSX.Element {
@@ -78,19 +81,19 @@ export default function AppRouter(): React.JSX.Element {
     <BrowserRouter>
       <KaiSplashScreen />
       <Routes>
-        <Route path="s" element={withSuspense(<SigilPage />)} />
-        <Route path="s/:hash" element={withSuspense(<SigilPage />)} />
+        <Route path="s" element={withSuspense(<SigilPage />, null)} />
+        <Route path="s/:hash" element={withSuspense(<SigilPage />, null)} />
 
-        <Route path="stream" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="stream/p/:token" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="stream/c/:token" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="feed" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="feed/p/:token" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="p~:token" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="p~:token/*" element={withSuspense(<PShort />)} />
-        <Route path="token" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="p~token" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="p" element={withSuspense(<PShort />)} />
+        <Route path="stream" element={withSuspense(<SigilFeedPage />, null)} />
+        <Route path="stream/p/:token" element={withSuspense(<SigilFeedPage />, null)} />
+        <Route path="stream/c/:token" element={withSuspense(<SigilFeedPage />, null)} />
+        <Route path="feed" element={withSuspense(<SigilFeedPage />, null)} />
+        <Route path="feed/p/:token" element={withSuspense(<SigilFeedPage />, null)} />
+        <Route path="p~:token" element={withSuspense(<SigilFeedPage />, null)} />
+        <Route path="p~:token/*" element={withSuspense(<PShort />, null)} />
+        <Route path="token" element={withSuspense(<SigilFeedPage />, null)} />
+        <Route path="p~token" element={withSuspense(<SigilFeedPage />, null)} />
+        <Route path="p" element={withSuspense(<PShort />, null)} />
         <Route path="verify/*" element={withSuspense(<VerifyPage />)} />
 
         <Route element={<AppChrome />}>
