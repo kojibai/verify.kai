@@ -49,16 +49,22 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
   const exitTimerRef = useRef<number | null>(null);
   const fadeTimerRef = useRef<number | null>(null);
   const firstLoadRef = useRef<boolean>(true);
+  const rafRef = useRef<number | null>(null);
 
-  const fadeDurationMs = useMemo(() => (prefersReducedMotion ? 180 : 420), [prefersReducedMotion]);
-  const navHoldMs = useMemo(() => (prefersReducedMotion ? 180 : 520), [prefersReducedMotion]);
-  const initialFallbackMs = useMemo(() => (prefersReducedMotion ? 840 : 1500), [prefersReducedMotion]);
+  const fadeDurationMs = useMemo(() => (prefersReducedMotion ? 140 : 260), [prefersReducedMotion]);
+  const navHoldMs = useMemo(() => (prefersReducedMotion ? 40 : 120), [prefersReducedMotion]);
+  const initialFallbackMs = useMemo(() => (prefersReducedMotion ? 800 : 1200), [prefersReducedMotion]);
 
   const clearTimers = useCallback((): void => {
     if (exitTimerRef.current !== null) window.clearTimeout(exitTimerRef.current);
     if (fadeTimerRef.current !== null) window.clearTimeout(fadeTimerRef.current);
     exitTimerRef.current = null;
     fadeTimerRef.current = null;
+  }, []);
+
+  const clearRaf = useCallback((): void => {
+    if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
   }, []);
 
   const splashEnabled = useMemo(() => {
@@ -97,29 +103,40 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
     [clearTimers, fadeDurationMs],
   );
 
+  const hideOnNextFrame = useCallback(
+    (delayMs: number) => {
+      clearRaf();
+      if (typeof window === "undefined") return;
+      rafRef.current = window.requestAnimationFrame(() => hideSplash(delayMs));
+    },
+    [clearRaf, hideSplash],
+  );
+
   const showSplash = useCallback((): void => {
     clearTimers();
+    clearRaf();
     setMounted(true);
     setPhase("show");
-  }, [clearTimers]);
+  }, [clearTimers, clearRaf]);
 
   useEffect(() => {
     if (splashEnabled) return undefined;
     clearTimers();
+    clearRaf();
     setPhase("hidden");
     setMounted(false);
     return undefined;
-  }, [clearTimers, splashEnabled]);
+  }, [clearRaf, clearTimers, splashEnabled]);
 
   useEffect(() => {
     if (!splashEnabled) return undefined;
 
     let readyTimer: number | null = null;
 
-    const finishInitial = (): void => hideSplash(prefersReducedMotion ? 60 : 180);
+    const finishInitial = (): void => hideOnNextFrame(prefersReducedMotion ? 30 : 80);
 
     if (document.readyState === "complete" || document.readyState === "interactive") {
-      readyTimer = window.setTimeout(finishInitial, prefersReducedMotion ? 60 : 180);
+      readyTimer = window.setTimeout(finishInitial, prefersReducedMotion ? 30 : 60);
     } else {
       window.addEventListener("load", finishInitial, { once: true });
     }
@@ -131,8 +148,9 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
       window.removeEventListener("load", finishInitial);
       window.clearTimeout(fallbackTimer);
       clearTimers();
+      clearRaf();
     };
-  }, [clearTimers, hideSplash, initialFallbackMs, prefersReducedMotion, splashEnabled]);
+  }, [clearRaf, clearTimers, hideOnNextFrame, hideSplash, initialFallbackMs, prefersReducedMotion, splashEnabled]);
 
   useEffect(() => {
     if (!hasCompletedFirstPaint.current) {
@@ -141,13 +159,13 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
     }
 
     showSplash();
-    const navTimer = window.setTimeout(() => hideSplash(prefersReducedMotion ? 80 : 220), navHoldMs);
+    hideOnNextFrame(prefersReducedMotion ? 40 : navHoldMs);
 
     return () => {
-      window.clearTimeout(navTimer);
       clearTimers();
+      clearRaf();
     };
-  }, [clearTimers, hideSplash, navHoldMs, prefersReducedMotion, showSplash, splashEnabled, location.pathname, location.search, location.hash]);
+  }, [clearRaf, clearTimers, hideOnNextFrame, navHoldMs, prefersReducedMotion, showSplash, splashEnabled, location.pathname, location.search, location.hash]);
 
   useEffect(() => () => clearTimers(), [clearTimers]);
 
