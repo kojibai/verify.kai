@@ -811,6 +811,7 @@
   flex: 1;
   display: grid;
   place-items: center;
+  justify-items: center;
   padding:
     calc(10px + env(safe-area-inset-top, 0px))
     calc(12px + env(safe-area-inset-right, 0px))
@@ -826,17 +827,22 @@
 }
 
 .kk-pop__dial .klock-stage{
-  width: min(92vmin, 1200px);
-  height: min(92vmin, 1200px);
+  width: min(
+    88vmin,
+    calc(100% - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 28px),
+    1200px
+  );
+  height: auto;
+  aspect-ratio: 1 / 1;
   margin: 0 auto;
   align-items: center;
   justify-items: center;
   padding:
-    calc(12px + env(safe-area-inset-top, 0px))
-    calc(12px + env(safe-area-inset-right, 0px))
-    calc(12px + env(safe-area-inset-bottom, 0px))
-    calc(12px + env(safe-area-inset-left, 0px));
-  transform: translate(-10px, -6px);
+    calc(10px + env(safe-area-inset-top, 0px))
+    calc(10px + env(safe-area-inset-right, 0px))
+    calc(10px + env(safe-area-inset-bottom, 0px))
+    calc(10px + env(safe-area-inset-left, 0px));
+  transform: none;
 }
 
 .kk-pop__dial .klock-stage__inner{
@@ -848,7 +854,7 @@
 
 .kk-pop__dial .kai-klock-shell{
   max-width: none !important;
-  width: clamp(260px, 82vmin, 1200px) !important;
+  width: min(100%, clamp(260px, 82vmin, 1200px)) !important;
   aspect-ratio: 1 / 1;
 }
 
