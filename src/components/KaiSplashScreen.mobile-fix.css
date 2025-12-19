@@ -1,0 +1,43 @@
+/* KaiSplashScreen.mobile-fix.css
+   Fix: iOS/WebKit "square notch" artifacts on circular blur / conic-gradient layers.
+*/
+
+@media (hover: none) and (pointer: coarse) {
+  /* Ensure every “circle” is truly circular at the compositor level */
+  .kai-splash__badge,
+  .kai-splash__badge-halo,
+  .kai-splash__badge-glow,
+  .kai-splash__badge-core,
+  .kai-splash__badge-orb,
+  .kai-splash__badge-core-shine,
+  .kai-splash__ring,
+  .kai-splash__ring--inner,
+  .kai-splash__flare,
+  .kai-splash__rays {
+    border-radius: 9999px !important;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+  }
+
+  /* HARD CLIP: kills the “tiny square” that appears at the top on iOS */
+  .kai-splash__badge-halo,
+  .kai-splash__badge-glow,
+  .kai-splash__ring,
+  .kai-splash__ring--inner,
+  .kai-splash__flare,
+  .kai-splash__rays {
+    overflow: hidden;
+    -webkit-mask-image: radial-gradient(circle, #000 99.35%, transparent 100%);
+    mask-image: radial-gradient(circle, #000 99.35%, transparent 100%);
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+  }
+
+  /* Optional: if the artifact is a conic-gradient seam at 0deg, this nudges it off “12 o’clock” */
+  .kai-splash__ring,
+  .kai-splash__ring--inner {
+    transform: translateZ(0) rotate(0.25deg);
+  }
+}

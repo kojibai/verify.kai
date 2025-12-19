@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import { matchPath, useLocation } from "react-router-dom";
+import "./KaiSplashScreen.mobile-fix.css";
 
 type SplashPhase = "show" | "fade" | "hidden";
 
