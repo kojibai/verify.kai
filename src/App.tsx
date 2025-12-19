@@ -71,6 +71,12 @@ const SHELL_ROUTES_TO_WARM: readonly string[] = [
   "/verify",
 ];
 
+const APP_SHELL_HINTS: readonly string[] = [
+  "/", // canonical shell
+  "/?source=pwa",
+  "/index.html",
+];
+
 type NavItem = {
   to: string;
   label: string;
@@ -1041,24 +1047,33 @@ export function AppChrome(): React.JSX.Element {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return undefined;
 
     const aborter = new AbortController();
+    let warmTimer: number | null = null;
 
     const warmOffline = async (): Promise<void> => {
       try {
-        await navigator.serviceWorker.ready;
-      } catch {
-        return;
-      }
+        const registration = await navigator.serviceWorker.ready;
+        const controller = registration.active || registration.waiting || registration.installing;
 
-      const targets = [...OFFLINE_ASSETS_TO_WARM, ...SHELL_ROUTES_TO_WARM];
-      await Promise.all(
-        targets.map(async (url) => {
-          try {
-            await fetch(url, { cache: "no-cache", signal: aborter.signal });
-          } catch {
-            /* non-blocking warm-up */
-          }
-        }),
-      );
+        // Prefer SW-driven warming for better cache targeting
+        controller?.postMessage({
+          type: "WARM_URLS",
+          urls: [...OFFLINE_ASSETS_TO_WARM, ...SHELL_ROUTES_TO_WARM, ...APP_SHELL_HINTS],
+          mapShell: true,
+        });
+
+        // Network preflight as a fallback (in case postMessage fails)
+        await Promise.all(
+          [...OFFLINE_ASSETS_TO_WARM, ...SHELL_ROUTES_TO_WARM].map(async (url) => {
+            try {
+              await fetch(url, { cache: "no-cache", signal: aborter.signal });
+            } catch {
+              /* non-blocking warm-up */
+            }
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
     };
 
     const idleWin = window as Window & {
@@ -1071,13 +1086,22 @@ export function AppChrome(): React.JSX.Element {
         ? idleWin.requestIdleCallback(() => void warmOffline(), { timeout: 1200 })
         : window.setTimeout(() => void warmOffline(), 360);
 
+    // Secondary cadence: re-warm after focus regain to keep offline current
+    const onFocus = (): void => {
+      if (warmTimer) window.clearTimeout(warmTimer);
+      warmTimer = window.setTimeout(() => void warmOffline(), 220);
+    };
+    window.addEventListener("focus", onFocus);
+
     return () => {
       aborter.abort();
+      if (warmTimer) window.clearTimeout(warmTimer);
       if (typeof idleWin.cancelIdleCallback === "function") {
         idleWin.cancelIdleCallback(idleHandle as number);
       } else {
         window.clearTimeout(idleHandle as number);
       }
+      window.removeEventListener("focus", onFocus);
     };
   }, []);
 

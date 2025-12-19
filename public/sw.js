@@ -72,6 +72,9 @@ const PRECACHE_URLS = [
   ...MANIFEST_ASSETS,
 ];
 
+const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".avif"];
+const ASSET_EXTENSIONS = [".js", ".mjs", ".cjs", ".css", ".wasm", ".json", ".map"];
+
 const sameOrigin = (url) => new URL(url, self.location.href).origin === self.location.origin;
 
 const withTimeout = (ms, promise) =>
@@ -125,6 +128,53 @@ async function updateFromNetwork(req, cacheName) {
     const res = await fetch(req);
     if (res && (res.ok || res.type === "opaque")) await safePut(cacheName, req, res);
   } catch {}
+}
+
+function normalizeWarmUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl, self.location.origin);
+    if (url.origin !== self.location.origin) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+function cacheBucketFor(url) {
+  const path = url.pathname.toLowerCase();
+
+  if (IMAGE_EXTENSIONS.some((ext) => path.endsWith(ext))) return IMAGECACHE;
+  if (ASSET_EXTENSIONS.some((ext) => path.endsWith(ext))) return ASSETCACHE;
+  if (url.pathname === "/" || !path.split("/").pop()?.includes(".")) return PRECACHE;
+  return RUNTIME;
+}
+
+async function warmUrls(urls, { mapShell = false } = {}) {
+  const unique = Array.from(new Set(urls || []));
+  if (!unique.length) return;
+
+  const shell = mapShell
+    ? await caches.match(OFFLINE_URL, { ignoreSearch: true }).catch(() => null)
+    : null;
+
+  await Promise.all(
+    unique.map(async (raw) => {
+      const url = normalizeWarmUrl(raw);
+      if (!url) return;
+
+      const cacheName = cacheBucketFor(url);
+      const req = new Request(url.href, { cache: "reload" });
+
+      try {
+        const res = await fetch(req);
+        if (!res || (!res.ok && res.type !== "opaque")) return;
+        await safePut(cacheName, req, res);
+        if (mapShell && shell && !url.pathname.split("/").pop()?.includes(".")) {
+          await mapShellToRoute(url.href, shell);
+        }
+      } catch {}
+    }),
+  );
 }
 
 async function precacheDiscoveredAssets() {
@@ -264,6 +314,10 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("message", (event) => {
   const { data } = event;
   if (data === "SKIP_WAITING" || data?.type === "SKIP_WAITING") self.skipWaiting();
+
+  if (data?.type === "WARM_URLS" && Array.isArray(data.urls)) {
+    event.waitUntil(warmUrls(data.urls, { mapShell: Boolean(data.mapShell) }));
+  }
 });
 
 // --- Fetch routing ---
