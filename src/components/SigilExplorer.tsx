@@ -199,6 +199,8 @@ const URL_HEALTH_LS_KEY = "kai:urlHealth:v1";
 /** Avoid probe storms. */
 const URL_PROBE_MAX_PER_REFRESH = 18;
 const URL_PROBE_TIMEOUT_MS = 2200;
+const EXPLORER_PREFETCH_CACHE = "sigil-explorer-prefetch-v1";
+const EXPLORER_PREFETCH_TIMEOUT_MS = 4200;
 
 /** SSR fallback only (no host rewriting). */
 const VIEW_BASE_FALLBACK = "https://phi.network";
@@ -599,6 +601,30 @@ function readStringField(obj: unknown, key: string): string | undefined {
   if (typeof v !== "string") return undefined;
   const t = v.trim();
   return t ? t : undefined;
+}
+
+async function prefetchViewUrl(url: string): Promise<void> {
+  if (!hasWindow) return;
+  if (!isOnline()) return;
+
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), EXPLORER_PREFETCH_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, { method: "GET", cache: "force-cache", signal: controller.signal });
+    if (res && res.ok && "caches" in window && typeof caches.open === "function") {
+      try {
+        const cache = await caches.open(EXPLORER_PREFETCH_CACHE);
+        await cache.put(new Request(url), res.clone());
+      } catch {
+        // ignore cache failures
+      }
+    }
+  } catch {
+    // ignore fetch failures
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -2239,6 +2265,7 @@ const SigilExplorer: React.FC = () => {
   const [usernameClaims, setUsernameClaims] = useState<UsernameClaimRegistry>(() => getUsernameClaimRegistry());
 
   const unmounted = useRef(false);
+  const prefetchedRef = useRef<Set<string>>(new Set());
 
   // Scroll safety guards (prevents “refresh feel” on mobile while reading)
   const scrollElRef = useRef<HTMLDivElement | null>(null);
@@ -2897,6 +2924,57 @@ const SigilExplorer: React.FC = () => {
 
     return totals;
   }, [registryRev]);
+
+  const prefetchTargets = useMemo((): string[] => {
+    const urls: string[] = [];
+
+    for (const [rawUrl] of memoryRegistry) {
+      const viewUrl = explorerOpenUrl(rawUrl);
+      const canon = canonicalizeUrl(viewUrl);
+      if (!urls.includes(canon)) urls.push(canon);
+    }
+
+    return urls;
+  }, [registryRev]);
+
+  // Warm the shell for every explorer URL so navigations are instant.
+  useEffect(() => {
+    if (!hasWindow) return;
+    if (prefetchTargets.length === 0) return;
+
+    const pending = prefetchTargets.filter((u) => !prefetchedRef.current.has(u));
+    if (pending.length === 0) return;
+
+    let cancelled = false;
+
+    const runPrefetch = async () => {
+      for (const u of pending) {
+        if (cancelled) break;
+        prefetchedRef.current.add(u);
+        await prefetchViewUrl(u);
+      }
+    };
+
+    const w = window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+
+    let cancel: (() => void) | null = null;
+
+    if (typeof w.requestIdleCallback === "function") {
+      const id = w.requestIdleCallback(() => void runPrefetch(), { timeout: 1000 });
+      cancel = () => w.cancelIdleCallback?.(id);
+    } else {
+      const id = window.setTimeout(() => void runPrefetch(), 120);
+      cancel = () => window.clearTimeout(id);
+    }
+
+    return () => {
+      cancelled = true;
+      cancel?.();
+    };
+  }, [prefetchTargets]);
 
   /** Opportunistically probe URL variants so “the one that loads” becomes primary. */
   const probePrimaryCandidates = useCallback(async () => {
