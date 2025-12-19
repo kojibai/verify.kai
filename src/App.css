@@ -3429,6 +3429,217 @@ html[data-perf="low"] .kk-pop__panel {
   0%, 100%{ transform: translateY(0) scale(1); opacity: 0.92; }
   50%{ transform: translateY(-1px) scale(1.03); opacity: 1; }
 }
+.kai-splash{
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  display: grid;
+  place-items: center;
+
+  width: 100dvw;
+  height: 100dvh;
+
+  padding:
+    env(safe-area-inset-top)
+    env(safe-area-inset-right)
+    env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+
+  overflow: clip;
+  background:
+    radial-gradient(900px circle at 50% 42%, rgba(120, 210, 255, 0.12), rgba(0,0,0,0) 62%),
+    radial-gradient(1200px circle at 50% 55%, rgba(170, 120, 255, 0.10), rgba(0,0,0,0) 70%),
+    var(--bg-0, #040f24);
+
+  -webkit-font-smoothing: antialiased;
+  isolation: isolate;
+}
+
+.kai-splash[data-state="show"]{ opacity: 1; }
+.kai-splash[data-state="fade"]{
+  opacity: 0;
+  transition: opacity 260ms ease;
+  pointer-events: none;
+}
+.kai-splash[data-state="hidden"]{
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce){
+  .kai-splash[data-state="fade"]{ transition-duration: 140ms; }
+}
+
+/* subtle background grid (safe, no blur boxes) */
+.kai-splash__grid{
+  position: absolute;
+  inset: 0;
+  opacity: 0.18;
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.055) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: radial-gradient(circle at 50% 45%, #000 0 55%, transparent 72%);
+  pointer-events: none;
+}
+
+.kai-splash__content{
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(84vw, 320px);
+  aspect-ratio: 1;
+}
+
+.kai-splash__badge{
+  position: relative;
+  width: clamp(160px, 44vw, 240px);
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+
+/* ✅ ALWAYS CIRCULAR — no rectangles, no blur bounding boxes */
+.kai-splash__badge-halo,
+.kai-splash__badge-glow{
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 9999px;
+  transform: translate(-50%, -50%) translateZ(0);
+  pointer-events: none;
+}
+
+/* outer halo */
+.kai-splash__badge-halo{
+  width: 138%;
+  height: 138%;
+  opacity: 0.85;
+  background: radial-gradient(circle,
+    rgba(120, 210, 255, 0.26) 0%,
+    rgba(120, 210, 255, 0.10) 34%,
+    rgba(0,0,0,0) 68%);
+}
+
+/* tighter inner glow (still circular) */
+.kai-splash__badge-glow{
+  width: 110%;
+  height: 110%;
+  opacity: 0.65;
+  background: radial-gradient(circle,
+    rgba(170, 120, 255, 0.22) 0%,
+    rgba(170, 120, 255, 0.08) 38%,
+    rgba(0,0,0,0) 70%);
+  mix-blend-mode: screen;
+}
+
+/* rays ring */
+.kai-splash__rays{
+  position: absolute;
+  inset: -12%;
+  border-radius: 9999px;
+  opacity: 0.35;
+  background:
+    conic-gradient(
+      from 0deg,
+      rgba(255,255,255,0.18),
+      rgba(255,255,255,0) 14%,
+      rgba(255,255,255,0.12) 28%,
+      rgba(255,255,255,0) 42%,
+      rgba(255,255,255,0.16) 56%,
+      rgba(255,255,255,0) 70%,
+      rgba(255,255,255,0.12) 84%,
+      rgba(255,255,255,0) 100%
+    );
+  mask-image: radial-gradient(circle, transparent 0 55%, #000 60% 72%, transparent 78%);
+}
+
+/* core is a perfect circle (no box glow here) */
+.kai-splash__badge-core{
+  position: relative;
+  width: 56%;
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255,255,255,0.12), rgba(255,255,255,0.03) 50%, rgba(0,0,0,0.20) 100%);
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.28);
+}
+
+/* ✅ THIS is the key: glow hugs the SVG alpha, not its box */
+.kai-splash__phi{
+  width: 62%;
+  height: auto;
+  display: block;
+  transform: translateZ(0);
+  filter:
+    drop-shadow(0 0 10px rgba(120, 210, 255, 0.55))
+    drop-shadow(0 0 22px rgba(170, 120, 255, 0.22));
+}
+
+/* tiny orb + shine (both circular) */
+.kai-splash__badge-orb{
+  position: absolute;
+  width: 22%;
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  left: 62%;
+  top: 26%;
+  background: radial-gradient(circle, rgba(255,255,255,0.22), rgba(255,255,255,0) 62%);
+  opacity: 0.9;
+}
+
+.kai-splash__badge-core-shine{
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 30% 22%, rgba(255,255,255,0.22), rgba(255,255,255,0) 58%);
+  pointer-events: none;
+}
+
+/* rings */
+.kai-splash__ring{
+  position: absolute;
+  inset: -6%;
+  border-radius: 9999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  opacity: 0.55;
+}
+.kai-splash__ring--inner{
+  inset: 6%;
+  opacity: 0.45;
+  border-color: rgba(255,255,255,0.10);
+}
+
+/* flare (circular + masked so it can’t square out) */
+.kai-splash__flare{
+  position: absolute;
+  inset: -18%;
+  border-radius: 9999px;
+  opacity: 0.35;
+  background: radial-gradient(circle at 50% 45%, rgba(255,255,255,0.16), rgba(0,0,0,0) 62%);
+  mask-image: radial-gradient(circle, #000 0 62%, transparent 78%);
+}
+
+@media (prefers-reduced-motion: no-preference){
+  .kai-splash__rays{
+    animation: kai-splash-spin 3.6s linear infinite;
+  }
+  .kai-splash__badge-glow{
+    animation: kai-splash-breathe 2.2s ease-in-out infinite;
+  }
+}
+@keyframes kai-splash-spin{
+  to{ transform: translateZ(0) rotate(360deg); }
+}
+@keyframes kai-splash-breathe{
+  0%,100%{ opacity: 0.55; }
+  50%{ opacity: 0.78; }
+}
 
 /* ──────────────────────────────────────────────────────────────────────────────
    v28.7.x — FINISH: Nav Writ Slot parity + no double borders + desktop anchor

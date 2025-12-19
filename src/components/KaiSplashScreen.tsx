@@ -11,7 +11,8 @@ import { matchPath, useLocation } from "react-router-dom";
 
 type SplashPhase = "show" | "fade" | "hidden";
 
-const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 const SPLASH_ROUTES: readonly string[] = [
   "/s",
@@ -93,14 +94,14 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
   }, []);
 
   const matchesSplashRoute = useMemo(
-    () => SPLASH_ROUTES.some((pattern) => Boolean(matchPath({ path: pattern, end: false }, location.pathname))),
+    () =>
+      SPLASH_ROUTES.some((pattern) =>
+        Boolean(matchPath({ path: pattern, end: false }, location.pathname)),
+      ),
     [location.pathname],
   );
 
-  const splashEnabled = useMemo(
-    () => isFirstLoad || matchesSplashRoute,
-    [isFirstLoad, matchesSplashRoute],
-  );
+  const splashEnabled = useMemo(() => isFirstLoad || matchesSplashRoute, [isFirstLoad, matchesSplashRoute]);
 
   const hideSplash = useCallback(
     (delayMs: number) => {
@@ -111,6 +112,7 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
         fadeTimerRef.current = window.setTimeout(() => {
           setPhase("hidden");
           setIsFirstLoad(false);
+          setMounted(false); // ✅ fully unmount after fade (no invisible overlay, no tap blocking)
         }, fadeDurationMs);
       }, Math.max(0, delayMs));
     },
@@ -148,7 +150,6 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
     if (!splashEnabled) return undefined;
 
     let readyTimer: number | null = null;
-
     const finishInitial = (): void => hideOnNextFrame(prefersReducedMotion ? 30 : 80);
 
     if (document.readyState === "complete" || document.readyState === "interactive") {
@@ -225,20 +226,31 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
   return createPortal(
     <div className="kai-splash" data-state={phase} aria-live="polite" role="status">
       <div className="kai-splash__grid" aria-hidden="true" />
-      <div className="kai-splash__halo" aria-hidden="true" />
-      <div className="kai-splash__glow" aria-hidden="true" />
 
       <div className="kai-splash__content" aria-hidden="true">
         <div className="kai-splash__badge">
-          <div className="kai-splash__rays" />
+          {/* ✅ glow is now physically bound to the badge + svg (all circles) */}
+          <span className="kai-splash__badge-halo" aria-hidden="true" />
+          <span className="kai-splash__badge-glow" aria-hidden="true" />
+
+          <div className="kai-splash__rays" aria-hidden="true" />
+
           <div className="kai-splash__badge-core">
-            <img src="/phi.svg" alt="" loading="eager" decoding="sync" />
-            <span className="kai-splash__badge-orb" />
-            <span className="kai-splash__badge-core-shine" />
+            <img
+              className="kai-splash__phi"
+              src="/phi.svg"
+              alt=""
+              loading="eager"
+              decoding="sync"
+              draggable={false}
+            />
+            <span className="kai-splash__badge-orb" aria-hidden="true" />
+            <span className="kai-splash__badge-core-shine" aria-hidden="true" />
           </div>
-          <div className="kai-splash__ring" />
-          <div className="kai-splash__ring kai-splash__ring--inner" />
-          <div className="kai-splash__flare" />
+
+          <div className="kai-splash__ring" aria-hidden="true" />
+          <div className="kai-splash__ring kai-splash__ring--inner" aria-hidden="true" />
+          <div className="kai-splash__flare" aria-hidden="true" />
         </div>
       </div>
 
