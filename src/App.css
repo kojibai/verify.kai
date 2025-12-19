@@ -436,6 +436,17 @@ a:hover {
     drop-shadow(0 0 50px rgba(38, 255, 196, 0.45));
 }
 
+.kai-splash__badge-core::after {
+  content: "";
+  position: absolute;
+  inset: -8%;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.25), transparent 45%);
+  mix-blend-mode: screen;
+  filter: blur(18px);
+  opacity: 0.7;
+  animation: kai-splash-surge 4.6s ease-in-out infinite;
+}
+
 .kai-splash__badge-orb {
   position: absolute;
   inset: 18%;
@@ -472,6 +483,18 @@ a:hover {
   animation: kai-splash-rotate 18s linear infinite;
 }
 
+.kai-splash__flare {
+  position: absolute;
+  inset: 22% 6% auto 6%;
+  height: 4px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+  filter: blur(3px);
+  opacity: 0.65;
+  transform: translateY(-60px) scaleX(0.4);
+  transform-origin: center;
+  animation: kai-splash-flare 2.6s ease-in-out infinite;
+}
+
 .kai-splash__text {
   display: grid;
   gap: 0.3rem;
@@ -504,6 +527,36 @@ a:hover {
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes kai-splash-surge {
+  0% {
+    opacity: 0.35;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 0.35;
+    transform: scale(0.92);
+  }
+}
+
+@keyframes kai-splash-flare {
+  0% {
+    opacity: 0.15;
+    transform: translateY(-70px) scaleX(0.2);
+  }
+  50% {
+    opacity: 0.82;
+    transform: translateY(0) scaleX(1.04);
+  }
+  100% {
+    opacity: 0.12;
+    transform: translateY(-70px) scaleX(0.2);
   }
 }
 
@@ -546,6 +599,11 @@ a:hover {
 
   .kai-splash__rays,
   .kai-splash__ring {
+    animation: none;
+  }
+
+  .kai-splash__badge-core::after,
+  .kai-splash__flare {
     animation: none;
   }
 }
