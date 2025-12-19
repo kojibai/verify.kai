@@ -3518,7 +3518,8 @@ html[data-perf="low"] .kk-pop__panel {
     env(safe-area-inset-bottom)
     env(safe-area-inset-left);
 
-  overflow: clip;
+overflow: hidden; /* iOS/WebKit: prevents square tile artifacts */
+
   background:
     radial-gradient(900px circle at 50% 42%, rgba(120, 210, 255, 0.12), rgba(0,0,0,0) 62%),
     radial-gradient(1200px circle at 50% 55%, rgba(170, 120, 255, 0.10), rgba(0,0,0,0) 70%),
@@ -3712,4 +3713,61 @@ html[data-perf="low"] .kk-pop__panel {
 @keyframes kai-splash-breathe{
   0%,100%{ opacity: 0.55; }
   50%{ opacity: 0.78; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MOBILE SAFARI HARDENING — removes square compositing artifacts
+   (paste at end of file)
+────────────────────────────────────────────────────────────── */
+
+/* Make masks behave correctly on WebKit + prevent any tiling edges */
+.kai-splash__grid{
+  -webkit-mask-image: radial-gradient(circle at 50% 45%, #000 0 55%, transparent 72%);
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+          mask-repeat: no-repeat;
+          mask-size: 100% 100%;
+}
+
+.kai-splash__rays{
+  overflow: hidden;                 /* conic-gradient must be hard clipped */
+  -webkit-mask-image: radial-gradient(circle, transparent 0 55%, #000 60% 72%, transparent 78%);
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+          mask-repeat: no-repeat;
+          mask-size: 100% 100%;
+
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+.kai-splash__flare{
+  overflow: hidden;                 /* radial flare must be hard clipped */
+  -webkit-mask-image: radial-gradient(circle, #000 0 62%, transparent 78%);
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+          mask-repeat: no-repeat;
+          mask-size: 100% 100%;
+
+  transform: translateZ(0);
+}
+
+/* iOS/WebKit specific: blend-mode + svg filters are the #1 source of square tiles */
+@supports (-webkit-touch-callout: none){
+  .kai-splash__badge-glow{
+    mix-blend-mode: normal;         /* kills the square “screen blend” tile */
+  }
+
+  .kai-splash__phi{
+    -webkit-filter: none !important; /* kills square filter backing surface */
+            filter: none !important;
+  }
+
+  /* replace lost svg glow with safe circular core glow */
+  .kai-splash__badge-core{
+    box-shadow:
+      0 10px 30px rgba(0,0,0,0.28),
+      0 0 18px rgba(120, 210, 255, 0.34),
+      0 0 44px rgba(170, 120, 255, 0.18);
+  }
 }
