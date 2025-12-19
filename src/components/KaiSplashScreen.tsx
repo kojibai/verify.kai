@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -9,6 +10,23 @@ import { createPortal } from "react-dom";
 import { matchPath, useLocation } from "react-router-dom";
 
 type SplashPhase = "show" | "fade" | "hidden";
+
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+const SPLASH_ROUTES: readonly string[] = [
+  "/s",
+  "/s/:hash",
+  "/stream",
+  "/stream/*",
+  "/feed",
+  "/feed/*",
+  "/p~:token",
+  "/p~:token/*",
+  "/token",
+  "/p~token",
+  "/p",
+  "/verify/*",
+];
 
 function usePrefersReducedMotion(): boolean {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(() => {
@@ -44,16 +62,18 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
 
   const [phase, setPhase] = useState<SplashPhase>("show");
   const [mounted, setMounted] = useState<boolean>(true);
+  const [isFirstLoad, setIsFirstLoad] = useState<boolean>(true);
 
   const hasCompletedFirstPaint = useRef<boolean>(false);
   const exitTimerRef = useRef<number | null>(null);
   const fadeTimerRef = useRef<number | null>(null);
-  const firstLoadRef = useRef<boolean>(true);
+  const navShowTimerRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
 
   const fadeDurationMs = useMemo(() => (prefersReducedMotion ? 140 : 260), [prefersReducedMotion]);
-  const navHoldMs = useMemo(() => (prefersReducedMotion ? 40 : 120), [prefersReducedMotion]);
+  const navHoldMs = useMemo(() => (prefersReducedMotion ? 220 : 420), [prefersReducedMotion]);
   const initialFallbackMs = useMemo(() => (prefersReducedMotion ? 800 : 1200), [prefersReducedMotion]);
+  const navShowDelayMs = useMemo(() => (prefersReducedMotion ? 70 : 120), [prefersReducedMotion]);
 
   const clearTimers = useCallback((): void => {
     if (exitTimerRef.current !== null) window.clearTimeout(exitTimerRef.current);
@@ -67,40 +87,34 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
     rafRef.current = null;
   }, []);
 
-  const splashEnabled = useMemo(() => {
-    const p = location.pathname;
-    const allowed = [
-      "/s",
-      "/s/:hash",
-      "/stream",
-      "/stream/*",
-      "/feed",
-      "/feed/*",
-      "/p~:token",
-      "/p~:token/*",
-      "/token",
-      "/p~token",
-      "/p",
-      "/verify/*",
-    ];
+  const clearNavShowTimer = useCallback((): void => {
+    if (navShowTimerRef.current !== null) window.clearTimeout(navShowTimerRef.current);
+    navShowTimerRef.current = null;
+  }, []);
 
-    const matchesRoute = allowed.some((pattern) => Boolean(matchPath({ path: pattern, end: false }, p)));
-    return firstLoadRef.current || matchesRoute;
-  }, [location.pathname]);
+  const matchesSplashRoute = useMemo(
+    () => SPLASH_ROUTES.some((pattern) => Boolean(matchPath({ path: pattern, end: false }, location.pathname))),
+    [location.pathname],
+  );
+
+  const splashEnabled = useMemo(
+    () => isFirstLoad || matchesSplashRoute,
+    [isFirstLoad, matchesSplashRoute],
+  );
 
   const hideSplash = useCallback(
     (delayMs: number) => {
       clearTimers();
+      clearNavShowTimer();
       exitTimerRef.current = window.setTimeout(() => {
         setPhase("fade");
         fadeTimerRef.current = window.setTimeout(() => {
           setPhase("hidden");
-          setMounted(false);
-          firstLoadRef.current = false;
+          setIsFirstLoad(false);
         }, fadeDurationMs);
       }, Math.max(0, delayMs));
     },
-    [clearTimers, fadeDurationMs],
+    [clearNavShowTimer, clearTimers, fadeDurationMs],
   );
 
   const hideOnNextFrame = useCallback(
@@ -115,18 +129,20 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
   const showSplash = useCallback((): void => {
     clearTimers();
     clearRaf();
+    clearNavShowTimer();
     setMounted(true);
     setPhase("show");
-  }, [clearTimers, clearRaf]);
+  }, [clearNavShowTimer, clearRaf, clearTimers]);
 
-  useEffect(() => {
-    if (splashEnabled) return undefined;
-    clearTimers();
-    clearRaf();
-    setPhase("hidden");
-    setMounted(false);
-    return undefined;
-  }, [clearRaf, clearTimers, splashEnabled]);
+  useIsomorphicLayoutEffect(() => {
+    if (typeof document === "undefined") return undefined;
+    const body = document.body;
+    const prevBg = body.style.backgroundColor;
+    if (!prevBg) body.style.backgroundColor = "var(--bg-0, #040f24)";
+    return () => {
+      body.style.backgroundColor = prevBg;
+    };
+  }, []);
 
   useEffect(() => {
     if (!splashEnabled) return undefined;
@@ -148,9 +164,19 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
       window.removeEventListener("load", finishInitial);
       window.clearTimeout(fallbackTimer);
       clearTimers();
+      clearNavShowTimer();
       clearRaf();
     };
-  }, [clearRaf, clearTimers, hideOnNextFrame, hideSplash, initialFallbackMs, prefersReducedMotion, splashEnabled]);
+  }, [
+    clearNavShowTimer,
+    clearRaf,
+    clearTimers,
+    hideOnNextFrame,
+    hideSplash,
+    initialFallbackMs,
+    prefersReducedMotion,
+    splashEnabled,
+  ]);
 
   useEffect(() => {
     if (!hasCompletedFirstPaint.current) {
@@ -158,18 +184,43 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
       return undefined;
     }
 
-    showSplash();
-    hideOnNextFrame(prefersReducedMotion ? 40 : navHoldMs);
+    if (!matchesSplashRoute) return undefined;
+
+    navShowTimerRef.current = window.setTimeout(() => {
+      showSplash();
+      hideOnNextFrame(prefersReducedMotion ? 60 : navHoldMs);
+    }, navShowDelayMs);
 
     return () => {
+      clearNavShowTimer();
       clearTimers();
       clearRaf();
     };
-  }, [clearRaf, clearTimers, hideOnNextFrame, navHoldMs, prefersReducedMotion, showSplash, splashEnabled, location.pathname, location.search, location.hash]);
+  }, [
+    clearNavShowTimer,
+    clearRaf,
+    clearTimers,
+    hideOnNextFrame,
+    matchesSplashRoute,
+    navHoldMs,
+    navShowDelayMs,
+    prefersReducedMotion,
+    showSplash,
+    location.pathname,
+    location.search,
+    location.hash,
+  ]);
 
-  useEffect(() => () => clearTimers(), [clearTimers]);
+  useEffect(
+    () => () => {
+      clearTimers();
+      clearNavShowTimer();
+      clearRaf();
+    },
+    [clearNavShowTimer, clearRaf, clearTimers],
+  );
 
-  if (!mounted || !splashEnabled) return null;
+  if (!mounted) return null;
 
   return createPortal(
     <div className="kai-splash" data-state={phase} aria-live="polite" role="status">
