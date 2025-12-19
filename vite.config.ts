@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import react from "@vitejs/plugin-react";
-import type { ManifestOptions, PluginOption } from "vite";
+import type { PluginOption } from "vite";
 import { defineConfig } from "vite";
 import manifest from "./public/manifest.json" assert { type: "json" };
 import { version as packageVersion } from "./package.json";
@@ -79,7 +79,8 @@ const createPwaAssetInjector = (): PluginOption => {
   };
 };
 
-const pwaManifest = manifest as ManifestOptions;
+type AppManifest = typeof manifest;
+const pwaManifest: AppManifest = manifest;
 
 // https://vite.dev/config/
 export default defineConfig({
