@@ -43,7 +43,7 @@ import EternalKlock from "./components/EternalKlock";
 
 import "./App.css";
 
-export const DEFAULT_APP_VERSION = "29.4.2";  // sync with public/sw.js
+export const DEFAULT_APP_VERSION = "29.4";  // sync with public/sw.js
 const SW_VERSION_EVENT = "kairos:sw-version";
 const OFFLINE_ASSETS_TO_WARM: readonly string[] = [
   "/sigil.wasm",
