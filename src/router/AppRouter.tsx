@@ -10,22 +10,13 @@ import {
   SigilMintRoute,
 } from "../App";
 import KaiSplashScreen from "../components/KaiSplashScreen";
+import SigilFeedPage from "../pages/SigilFeedPage";
+import SigilPage from "../pages/SigilPage/SigilPage";
+import PShort from "../pages/PShort";
+import VerifyPage from "../pages/VerifyPage";
+import VerifierStamper from "../components/VerifierStamper/VerifierStamper";
 
-const SigilFeedPage = React.lazy(() => import("../pages/SigilFeedPage"));
-const SigilPage = React.lazy(() => import("../pages/SigilPage/SigilPage"));
-const PShort = React.lazy(() => import("../pages/PShort"));
-const VerifyPage = React.lazy(() => import("../pages/VerifyPage"));
-const VerifierStamper = React.lazy(
-  () => import("../components/VerifierStamper/VerifierStamper"),
-);
-
-const PREFETCH_LAZY_ROUTES: Array<() => Promise<unknown>> = [
-  () => import("../pages/SigilFeedPage"),
-  () => import("../pages/SigilPage/SigilPage"),
-  () => import("../pages/PShort"),
-  () => import("../pages/VerifyPage"),
-  () => import("../components/VerifierStamper/VerifierStamper"),
-];
+const PREFETCH_LAZY_ROUTES: Array<() => Promise<unknown>> = [];
 
 function RouteLoader(): React.JSX.Element {
   return (
@@ -39,12 +30,16 @@ function RouteLoader(): React.JSX.Element {
   );
 }
 
-function withSuspense(node: React.ReactElement): React.JSX.Element {
-  return <Suspense fallback={<RouteLoader />}>{node}</Suspense>;
+function withSuspense(
+  node: React.ReactElement,
+  fallback: React.ReactNode = null,
+): React.JSX.Element {
+  return <Suspense fallback={fallback}>{node}</Suspense>;
 }
 
 export default function AppRouter(): React.JSX.Element {
   useEffect(() => {
+    if (!PREFETCH_LAZY_ROUTES.length) return undefined;
     if (typeof window === "undefined") return;
 
     const idleWin = window as Window & {
@@ -78,19 +73,28 @@ export default function AppRouter(): React.JSX.Element {
     <BrowserRouter>
       <KaiSplashScreen />
       <Routes>
-        <Route path="s" element={withSuspense(<SigilPage />)} />
-        <Route path="s/:hash" element={withSuspense(<SigilPage />)} />
+        <Route path="s" element={withSuspense(<SigilPage />, <RouteLoader />)} />
+        <Route path="s/:hash" element={withSuspense(<SigilPage />, <RouteLoader />)} />
 
-        <Route path="stream" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="stream/p/:token" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="stream/c/:token" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="feed" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="feed/p/:token" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="p~:token" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="p~:token/*" element={withSuspense(<PShort />)} />
-        <Route path="token" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="p~token" element={withSuspense(<SigilFeedPage />)} />
-        <Route path="p" element={withSuspense(<PShort />)} />
+        <Route path="stream" element={withSuspense(<SigilFeedPage />, <RouteLoader />)} />
+        <Route
+          path="stream/p/:token"
+          element={withSuspense(<SigilFeedPage />, <RouteLoader />)}
+        />
+        <Route
+          path="stream/c/:token"
+          element={withSuspense(<SigilFeedPage />, <RouteLoader />)}
+        />
+        <Route path="feed" element={withSuspense(<SigilFeedPage />, <RouteLoader />)} />
+        <Route
+          path="feed/p/:token"
+          element={withSuspense(<SigilFeedPage />, <RouteLoader />)}
+        />
+        <Route path="p~:token" element={withSuspense(<SigilFeedPage />, <RouteLoader />)} />
+        <Route path="p~:token/*" element={<PShort />} />
+        <Route path="token" element={withSuspense(<SigilFeedPage />, <RouteLoader />)} />
+        <Route path="p~token" element={withSuspense(<SigilFeedPage />, <RouteLoader />)} />
+        <Route path="p" element={<PShort />} />
         <Route path="verify/*" element={withSuspense(<VerifyPage />)} />
 
         <Route element={<AppChrome />}>
