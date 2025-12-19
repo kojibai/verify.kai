@@ -222,7 +222,14 @@
     0 18px 60px rgba(15, 23, 42, 0.95),
     0 0 0 1px rgba(15, 23, 42, 0.9) inset;
   overflow: hidden;
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
   backdrop-filter: blur(18px) saturate(1.15);
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform, opacity;
+  background-color: rgba(15, 23, 42, 0.94);
 }
 
 /* Phi-grid overlay inside card */
@@ -301,7 +308,14 @@
     0 18px 50px rgba(15, 23, 42, 0.9),
     0 0 0 1px rgba(15, 23, 42, 0.9) inset;
   overflow: hidden;
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
   backdrop-filter: blur(16px) saturate(1.2);
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform, opacity;
+  background-color: rgba(15, 23, 42, 0.94);
 }
 
 /* Chakra aura is layered via kv-chakra-* ::after, see below */
@@ -391,9 +405,15 @@
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.7);
   background: rgba(15, 23, 42, 0.8);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   text-transform: uppercase;
   letter-spacing: 0.14em;
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform, opacity;
 }
 
 .kv-accounts-pill--ok {
@@ -676,9 +696,84 @@
     0 14px 40px rgba(15, 23, 42, 0.9),
     0 0 0 1px rgba(15, 23, 42, 0.9) inset;
   overflow: hidden;
+  -webkit-backdrop-filter: blur(14px) saturate(1.18);
   backdrop-filter: blur(14px) saturate(1.18);
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform, opacity;
   animation: kv-activity-glow calc(var(--kv-breath) * 1.25)
     ease-in-out infinite alternate;
+}
+
+/* Stable glass on Android/WebView: keep the look without blur flashes */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .kv-main-card,
+  .kv-session-hud,
+  .kv-activity,
+  .kv-accounts-pill {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background-color: rgba(15, 23, 42, 0.96);
+  }
+
+  .kv-main-card {
+    background:
+      linear-gradient(
+        145deg,
+        rgba(15, 23, 42, 0.98),
+        rgba(15, 23, 42, 0.92)
+      )
+        padding-box;
+  }
+
+  .kv-session-hud {
+    background:
+      radial-gradient(
+        140% 160% at 0% 0%,
+        rgba(148, 163, 184, 0.16),
+        transparent 60%
+      ),
+      radial-gradient(
+        180% 200% at 100% 100%,
+        rgba(15, 23, 42, 0.9),
+        rgba(15, 23, 42, 1)
+      );
+  }
+
+  .kv-activity {
+    background:
+      radial-gradient(
+        120% 120% at 0% 0%,
+        rgba(34, 211, 238, 0.12),
+        transparent 65%
+      ),
+      radial-gradient(
+        120% 120% at 100% 100%,
+        rgba(139, 92, 246, 0.12),
+        transparent 65%
+      ),
+      rgba(15, 23, 42, 0.96);
+  }
+}
+
+/* Coarse pointers (Android) — force compositing to avoid flicker */
+@media (pointer: coarse) {
+  .kv-main-card::before,
+  .kv-main-card::after,
+  .kv-session-hud::before,
+  .kv-activity::before {
+    mix-blend-mode: normal;
+  }
+
+  .kv-main-card,
+  .kv-session-hud,
+  .kv-activity,
+  .kv-accounts-pill {
+    content-visibility: visible;
+    contain-intrinsic-size: auto;
+  }
 }
 
 .kv-activity::before {
