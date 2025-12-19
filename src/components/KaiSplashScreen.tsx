@@ -60,9 +60,13 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
   const location = useLocation();
   const prefersReducedMotion = usePrefersReducedMotion();
 
-  const [phase, setPhase] = useState<SplashPhase>("show");
-  const [mounted, setMounted] = useState<boolean>(true);
-  const [isFirstLoad, setIsFirstLoad] = useState<boolean>(true);
+  const matchesSplashRoute = useMemo(
+    () => SPLASH_ROUTES.some((pattern) => Boolean(matchPath({ path: pattern, end: false }, location.pathname))),
+    [location.pathname],
+  );
+
+  const [phase, setPhase] = useState<SplashPhase>(() => (matchesSplashRoute ? "show" : "hidden"));
+  const [mounted, setMounted] = useState<boolean>(() => matchesSplashRoute);
 
   const hasCompletedFirstPaint = useRef<boolean>(false);
   const exitTimerRef = useRef<number | null>(null);
@@ -92,15 +96,7 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
     navShowTimerRef.current = null;
   }, []);
 
-  const matchesSplashRoute = useMemo(
-    () => SPLASH_ROUTES.some((pattern) => Boolean(matchPath({ path: pattern, end: false }, location.pathname))),
-    [location.pathname],
-  );
-
-  const splashEnabled = useMemo(
-    () => isFirstLoad || matchesSplashRoute,
-    [isFirstLoad, matchesSplashRoute],
-  );
+  const splashEnabled = useMemo(() => matchesSplashRoute, [matchesSplashRoute]);
 
   const hideSplash = useCallback(
     (delayMs: number) => {
@@ -110,7 +106,6 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
         setPhase("fade");
         fadeTimerRef.current = window.setTimeout(() => {
           setPhase("hidden");
-          setIsFirstLoad(false);
         }, fadeDurationMs);
       }, Math.max(0, delayMs));
     },
@@ -133,6 +128,19 @@ export default function KaiSplashScreen(): React.JSX.Element | null {
     setMounted(true);
     setPhase("show");
   }, [clearNavShowTimer, clearRaf, clearTimers]);
+
+  useEffect(() => {
+    if (!matchesSplashRoute) {
+      clearTimers();
+      clearNavShowTimer();
+      clearRaf();
+      setPhase("hidden");
+      setMounted(false);
+      return;
+    }
+
+    setMounted(true);
+  }, [clearNavShowTimer, clearRaf, clearTimers, matchesSplashRoute]);
 
   useIsomorphicLayoutEffect(() => {
     if (typeof document === "undefined") return undefined;
