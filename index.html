@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
+
     <!-- Core -->
     <meta charset="UTF-8" />
     <meta http-equiv="x-ua-compatible" content="ie=edge" />
@@ -36,11 +37,6 @@
     <link rel="apple-touch-icon" href="/logo.jpg" />
     <link rel="manifest" href="/manifest.json" />
 
-    <!-- iOS PWA -->
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="ΦNet" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-
     <!-- Open Graph -->
     <meta property="og:site_name" content="Phi Network" />
     <meta property="og:locale" content="en_US" />
@@ -66,7 +62,7 @@
     <meta name="twitter:image" content="https://phi.network/logo.png" />
     <meta name="twitter:site" content="@phi_network" />
 
-    <!-- Fonts (keep if used) -->
+    <!-- Fonts (optional, keep if used) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -74,99 +70,11 @@
       rel="stylesheet"
     />
 
-    <!-- Preload critical assets to reduce perceived boot time -->
-    <link rel="preload" href="/phi.svg" as="image" type="image/svg+xml" fetchpriority="high" />
-    <link rel="preload" href="/favicon.svg" as="image" type="image/svg+xml" />
+    <!-- Apple Web App -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="ΦNet" />
+   <meta name="apple-mobile-web-app-status-bar-style" content="black" />
 
-    <!-- HARD NO-WHITE-FLASH BASELINE (before any CSS/JS) -->
-    <style>
-      :root { color-scheme: dark; }
-      html, body, #root {
-        height: 100%;
-        margin: 0;
-        background: #07080C;
-      }
-      body {
-        color: #EEF2FF;
-        font: 500 15px/1.5 Inter, system-ui, -apple-system, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-        text-rendering: optimizeLegibility;
-        letter-spacing: -0.01em;
-        overflow-x: hidden;
-      }
-
-      /* Critical Boot Splash (covers cold boot before React mounts)
-         - Shows ONLY for standalone routes (never "/")
-         - Fades out when React splash calls: #kai-boot-splash[data-state="fade"]
-      */
-      #kai-boot-splash{
-        position: fixed;
-        inset: 0;
-        z-index: 2147483647;
-        display: grid;
-        place-items: center;
-        background: #07080C;
-        opacity: 1;
-        transition: opacity 240ms ease;
-        overflow: hidden;
-      }
-      #kai-boot-splash[data-state="fade"]{ opacity: 0; pointer-events: none; }
-      #kai-boot-splash[hidden]{ display: none; }
-
-      #kai-boot-splash::before{
-        content:"";
-        position:absolute;
-        inset:-20%;
-        background:
-          radial-gradient(closest-side at 50% 46%, rgba(115,245,255,0.12), transparent 62%),
-          radial-gradient(closest-side at 52% 58%, rgba(180,130,255,0.10), transparent 64%),
-          radial-gradient(closest-side at 48% 50%, rgba(255,215,120,0.06), transparent 60%),
-          linear-gradient(180deg, rgba(0,0,0,0.0), rgba(0,0,0,0.22));
-        filter: blur(14px);
-        opacity: 0.95;
-        pointer-events:none;
-      }
-
-      #kai-boot-splash .orb{
-        width: min(46vmin, 220px);
-        aspect-ratio: 1;
-        border-radius: 28%;
-        display: grid;
-        place-items: center;
-        background:
-          radial-gradient(circle at 30% 26%, rgba(255,255,255,0.10), transparent 45%),
-          radial-gradient(circle at 50% 60%, rgba(115,245,255,0.10), transparent 62%),
-          linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.22));
-        border: 1px solid rgba(120,220,255,0.18);
-        box-shadow: 0 18px 90px rgba(0,0,0,0.55);
-        transform: translateZ(0);
-      }
-      #kai-boot-splash img{
-        width: 44%;
-        height: auto;
-        filter: drop-shadow(0 0 18px rgba(115,245,255,0.24));
-        transform: translateZ(0);
-      }
-
-      /* Prefer reduced motion at OS level */
-      @media (prefers-reduced-motion: reduce){
-        #kai-boot-splash{ transition: none; }
-      }
-    </style>
-
-    <!-- Decide whether boot splash shows (NO HOME, YES standalone routes) -->
-    <script>
-      (function () {
-        var p = (location.pathname || "/");
-        var isHome = (p === "/" || p === "");
-        // Keep this regex aligned with your standalone route set
-        var isStandalone =
-          /^\/(s(\/|$)|stream(\/|$)|feed(\/|$)|p~|p(\/|$)|token(\/|$)|verify(\/|$))/.test(p);
-
-        document.documentElement.dataset.kaiBootSplash = (!isHome && isStandalone) ? "1" : "0";
-      })();
-    </script>
 
     <!-- Structured Data (Schema.org) -->
     <script type="application/ld+json">
@@ -207,37 +115,26 @@
         ]
       }
     </script>
+
+    <!-- Vite Entry -->
+    <script type="module" src="/src/main.tsx"></script>
   </head>
 
-  <body>
+  <body
+    style="
+      margin:0;
+      min-height:100vh;
+      background:#07080C;
+      color:#EEF2FF;
+      font: 500 15px/1.5 Inter, system-ui, -apple-system, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      text-rendering:optimizeLegibility;
+      letter-spacing:-0.01em;
+      overflow-x:hidden;
+    "
+  >
     <noscript>Phi Network requires JavaScript enabled to run.</noscript>
-
-    <!-- Critical Boot Splash -->
-    <div id="kai-boot-splash" aria-hidden="true">
-      <div class="orb">
-        <img src="/phi.svg" alt="" />
-      </div>
-    </div>
-
-    <script>
-      (function () {
-        var el = document.getElementById("kai-boot-splash");
-        if (!el) return;
-        if (document.documentElement.dataset.kaiBootSplash !== "1") {
-          el.hidden = true;
-          return;
-        }
-        // Safety: if something goes wrong, never trap the user behind splash.
-        window.setTimeout(function(){
-          el.setAttribute("data-state", "fade");
-          window.setTimeout(function(){ el.hidden = true; }, 320);
-        }, 3000);
-      })();
-    </script>
-
     <div id="root"></div>
-
-    <!-- Vite Entry (keep at end of body for best perceived boot) -->
-    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
