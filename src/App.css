@@ -2186,6 +2186,10 @@ a:hover {
   height: 100%;
   overflow: hidden;
   padding: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .klock-stage {
@@ -2194,7 +2198,7 @@ a:hover {
   display: grid;
   place-items: center;
 
-  padding: calc(18px + env(safe-area-inset-top, 0px) + 64px)
+  padding: calc(18px + env(safe-area-inset-top, 0px))
     calc(18px + env(safe-area-inset-right, 0px))
     calc(18px + env(safe-area-inset-bottom, 0px))
     calc(18px + env(safe-area-inset-left, 0px));
@@ -2207,6 +2211,8 @@ a:hover {
 
   display: grid;
   place-items: center;
+
+  margin: 0 auto;
 
   filter: drop-shadow(0 30px 90px rgba(0, 0, 0, 0.55));
 }
@@ -2231,7 +2237,7 @@ a:hover {
 
 @media (max-width: 720px) {
   .klock-stage {
-    padding: calc(12px + env(safe-area-inset-top, 0px) + 62px)
+    padding: calc(12px + env(safe-area-inset-top, 0px))
       calc(12px + env(safe-area-inset-right, 0px))
       calc(12px + env(safe-area-inset-bottom, 0px))
       calc(12px + env(safe-area-inset-left, 0px));
