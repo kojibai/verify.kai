@@ -1,4 +1,5 @@
 import React from "react";
+import { kaiNowMs } from "../utils/kaiNow";
 
 /* ────────────────────────────────────────────────────────────
    Kai Parity Price Feed — derives USD/Φ from your real quote
@@ -23,7 +24,7 @@ const BREATH_MS = BREATH_S * 1000;
 const GENESIS_MS = 1715323541888;
 
 /** Current Kai pulse (index + float) */
-function kaiPulseNow(nowMs: number = Date.now()) {
+function kaiPulseNow(nowMs: number = kaiNowMs()) {
   const deltaMs = Math.max(0, nowMs - GENESIS_MS);
   const pulsesFloat = deltaMs / BREATH_MS;
   const index = Math.floor(pulsesFloat);

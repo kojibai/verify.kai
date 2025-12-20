@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { kaiNowMs } from "../../utils/kaiNow";
 import "./styles/StoryRecorder.css";
 
 export type CapturedStory = {
@@ -300,7 +301,7 @@ export default function StoryRecorder(props: StoryRecorderProps) {
     const mimeType = recRef.current?.mimeType || supportedMime || "video/webm";
 
     const blob = new Blob(chunks, { type: mimeType });
-    const createdAt = Date.now();
+    const createdAt = kaiNowMs();
 
     // Generate thumbnail by loading video and drawing first frame
     const { width, height, thumbnailDataUrl } = await extractThumb(blob);

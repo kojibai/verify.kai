@@ -7,6 +7,7 @@
 // - Exposes helpers for parent-spent and child-incoming base lookups
 
 import { sha256Hex } from "../components/VerifierStamper/crypto"; // adjust path if needed
+import { kaiNowMs } from "./kaiNow";
 
 /* ──────────────────────────
    Storage + Broadcast setup
@@ -60,7 +61,7 @@ function coerceBigIntString(v: unknown): string {
 }
 
 function nowMs() {
-  return Date.now();
+  return kaiNowMs();
 }
 
 /* ──────────────────────────

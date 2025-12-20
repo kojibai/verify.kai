@@ -16,6 +16,7 @@
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS (exact / integer-safe)
 // ─────────────────────────────────────────────────────────────
+import { kaiNowBigInt } from "./kaiNow";
 
 // Genesis epoch (Sun-origin anchor) in Unix ms (UTC).
 export const GENESIS_TS = 1715323541888 as const; // 2024-05-10T06:45:41.888Z
@@ -254,7 +255,7 @@ export function microPulsesSinceGenesis(utc: string | Date | bigint): bigint {
 }
 /** Bridge used by UI timers: current pulse as a fractional number (μpulse precise). */
 export function kaiPulseNowBridge(): number {
-  const pμ = microPulsesSinceGenesis(BigInt(Date.now()));
+  const pμ = microPulsesSinceGenesis(kaiNowBigInt());
 
   // Safe near “now”; clamp if someone runs this millions of years out.
   const LIM = 9_007_199_254_740_991n; // Number.MAX_SAFE_INTEGER as bigint
@@ -272,13 +273,13 @@ export function msUntilNextPulseBoundary(pulseNow?: number): number {
       ? (() => {
           // pulseNow is (μpulses / 1e6) from kaiPulseNowBridge() → recover μpulses safely.
           const approx = Math.round(pulseNow * 1_000_000);
-          if (!Number.isFinite(approx)) return microPulsesSinceGenesis(BigInt(Date.now()));
+          if (!Number.isFinite(approx)) return microPulsesSinceGenesis(kaiNowBigInt());
           // Clamp to safe BigInt range if someone hands insane values.
           const LIM = Number.MAX_SAFE_INTEGER;
           const clamped = Math.max(-LIM, Math.min(LIM, approx));
           return BigInt(clamped);
         })()
-      : microPulsesSinceGenesis(BigInt(Date.now()));
+      : microPulsesSinceGenesis(kaiNowBigInt());
 
   const next = (floorDivE(pμNow, 1_000_000n) + 1n) * 1_000_000n; // next whole pulse
   const deltaμ = next - pμNow;                                   // 0..1_000_000
@@ -824,7 +825,7 @@ function epochMsFromUTCInput(utc: string | Date | bigint): bigint {
 
 export async function buildKaiKlockResponse(utc?: string | Date | bigint) {
   // 1) Real UTC instant (no pulse snapping) and exact lattice & μpulses
-  const msUTC = (typeof utc === "undefined") ? BigInt(Date.now()) : epochMsFromUTCInput(utc);
+  const msUTC = (typeof utc === "undefined") ? kaiNowBigInt() : epochMsFromUTCInput(utc);
   const pμ = microPulsesSinceGenesis(msUTC);
 
   const pulse = toSafeNumber(floorDivE(pμ, 1_000_000n));

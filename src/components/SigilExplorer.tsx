@@ -52,6 +52,7 @@ import {
 } from "../utils/usernameClaimRegistry";
 import { USERNAME_CLAIM_KIND, type UsernameClaimPayload } from "../types/usernameClaim";
 import "./SigilExplorer.css";
+import { kaiNowMs } from "../utils/kaiNow";
 
 /* ─────────────────────────────────────────────────────────────────────
    Live base (API + canonical sync target)
@@ -211,7 +212,7 @@ const UI_TOGGLE_INTERACT_MS = 900; // “reading” window after expanding/colla
 const UI_FLUSH_PAD_MS = 80; // padding before applying deferred bumps
 
 function nowMs(): number {
-  return Date.now();
+  return kaiNowMs();
 }
 
 function cssEscape(v: string): string {

@@ -1,6 +1,7 @@
 // kopyFeedback.ts — Sacred Φ “Kopy” feedback: LEGIT TEMPLE GONG + φ-reverb + Fibonacci haptic
 // Side-effect module (no exports). Import once on client pages.
 /* eslint-disable @typescript-eslint/consistent-type-assertions */
+import { kaiNowMs } from "./kaiNow";
 
 type AudioCtor = new () => AudioContext;
 
@@ -399,7 +400,7 @@ function playSacredGong(): void {
 /* ─────────────── Orchestration & Install ─────────────── */
 
 function fireFeedback(): void {
-  const nowMs = Date.now();
+  const nowMs = kaiNowMs();
   if (nowMs - lastFire < 120) return; // guard double-clicks
   lastFire = nowMs;
 

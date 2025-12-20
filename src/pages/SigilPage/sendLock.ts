@@ -1,4 +1,5 @@
 // v48 atomic send lock helpers (BroadcastChannel + localStorage)
+import { kaiNowMs } from "../../utils/kaiNow";
 
 export const SEND_LOCK_CH = "sigil-sendlock-v1";
 export const SEND_LOCK_EVENT = "sigil:sendlock";
@@ -33,7 +34,7 @@ type SendLockErrorDetail = {
   error: Record<string, unknown>;
 };
 
-const nowMs = (): number => Date.now();
+const nowMs = (): number => kaiNowMs();
 
 const sendLockKey = (canonical: string, token: string) =>
   `sigil:sendlock:${canonical}:t:${token}`;
@@ -77,7 +78,7 @@ const generateId = (): string => {
   } catch {
     // fall through to Math.random
   }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${kaiNowMs().toString(36)}-${Math.random().toString(36).slice(2)}`;
 };
 
 export function acquireSendLock(

@@ -32,6 +32,7 @@ import KaiSigil, {
 import SealMomentModal from "./SealMomentModal";
 import { makeSigilUrl, type SigilSharePayload } from "../utils/sigilUrl";
 import "./SigilModal.css";
+import { kaiNowMs } from "../utils/kaiNow";
 
 /* ────────────────────────────────────────────────────────────────
    Strict browser timer handle types (FIX)
@@ -537,10 +538,7 @@ function buildLocalKairosLike(now: Date): KaiApiResponseLike {
 
 /* ═════════════ aligned time helpers ═════════════ */
 const epochNow = (): number => {
-  if (typeof performance !== "undefined" && typeof performance.now === "function") {
-    return performance.timeOrigin + performance.now();
-  }
-  return Date.now();
+  return kaiNowMs();
 };
 
 const computeNextBoundary = (nowMs: number): number => {

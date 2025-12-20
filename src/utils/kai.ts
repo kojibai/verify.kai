@@ -13,6 +13,7 @@
 
 import { blake3 } from "@noble/hashes/blake3";
 import { bytesToHex } from "@noble/hashes/utils";
+import { kaiNowMs } from "./kaiNow";
 
 ////////////////////////////////////////////////////////////////////////////////
 // ░░  CONSTANTS  ░░
@@ -32,7 +33,7 @@ export const SYSTEM_INTENTION = "Enter my portal";
 ////////////////////////////////////////////////////////////////////////////////
 
 /** Returns the current Kai-Pulse number since Genesis. */
-export const getCurrentKaiPulse = (now: number = Date.now()): number =>
+export const getCurrentKaiPulse = (now: number = kaiNowMs()): number =>
   Math.floor((now - GENESIS_TS) / PULSE_MS);
 
 ////////////////////////////////////////////////////////////////////////////////

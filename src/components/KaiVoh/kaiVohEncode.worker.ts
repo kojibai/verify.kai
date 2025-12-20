@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import { encodeTokenWithBudgets, type FeedPostPayload } from "../../utils/feedPayload";
+import { kaiNowMs } from "../../utils/kaiNow";
 
 type EncodeWorkerRequest = { id: string; payload: FeedPostPayload };
 
@@ -8,8 +9,7 @@ type EncodeWorkerResponse =
   | { id: string; ok: true; token: string; withinHard: boolean; ms: number }
   | { id: string; ok: false; error: string; ms: number };
 
-const nowMs = (): number =>
-  self.performance && typeof self.performance.now === "function" ? self.performance.now() : Date.now();
+const nowMs = (): number => kaiNowMs();
 
 self.onmessage = async (ev: MessageEvent<EncodeWorkerRequest>) => {
   const t0 = nowMs();

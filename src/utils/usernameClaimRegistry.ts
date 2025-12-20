@@ -7,6 +7,7 @@ import {
   type UsernameClaimGlyphEvidence,
 } from "../types/usernameClaim";
 import { normalizeClaimGlyphRef, normalizeUsername } from "./usernameClaim";
+import { kaiNowMs } from "./kaiNow";
 
 export type UsernameClaimRegistry = Record<string, UsernameClaimRegistryEntry>;
 
@@ -157,7 +158,7 @@ function upsertEntry(
     claimUrl,
     originHash: payload.originHash,
     ownerHint,
-    updatedAt: Date.now(),
+    updatedAt: kaiNowMs(),
   };
 
   const unchanged =
@@ -248,4 +249,3 @@ export function subscribeUsernameClaimRegistry(
     window.removeEventListener("storage", onStorage);
   };
 }
-

@@ -1,4 +1,5 @@
 // Local lineage storage + cross-tab sync for minted children
+import { kaiNowMs } from "../../utils/kaiNow";
 
 export const DESC_CH = "sigil-lineage-v1";
 export const DESC_EVENT = "sigil:descendants";
@@ -142,7 +143,7 @@ export function broadcastDescendants(
     canonical: c,
     token,
     list,
-    stamp: Date.now(),
+    stamp: kaiNowMs(),
   };
 
   // DOM event for in-page listeners (best-effort)

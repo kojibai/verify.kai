@@ -13,6 +13,7 @@
 // • Canonical messages are domain-separated to prevent cross-protocol replay.
 // • Bind pulse/beat/step/nonce/expiry in the message you sign.
 //
+import { kaiNowMs } from "../../utils/kaiNow";
 
 export type BreathKeyPair = {
   publicKeyJwk: JsonWebKey;
@@ -170,7 +171,7 @@ export async function selfTestBreathProof(): Promise<{
     const { publicKeyJwk, privateKey } = await generateKeyPair();
     const msg = encodeCanonicalMessage({
       test: true,
-      when: Date.now(),
+      when: kaiNowMs(),
       rnd: crypto.getRandomValues(new Uint32Array(4)).join(""),
     });
     const sig = await signCanonicalMessage(privateKey, msg);

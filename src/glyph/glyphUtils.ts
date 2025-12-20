@@ -3,6 +3,7 @@
 
 import type { Glyph, SentTransfer } from "./types";
 import { XMLParser } from "fast-xml-parser";
+import { kaiNowMs } from "../utils/kaiNow";
 
 // ─────────────────────────────────────────────────────────────
 // 🪞 Deep clone a glyph (safe memory separation)
@@ -85,7 +86,7 @@ export function sendGlyphFromSource(
     metadata: {
       ...(source.metadata ?? {}),
       kaiSignature: newKaiSignature,
-      timestamp: Date.now(),
+      timestamp: kaiNowMs(),
     },
   };
 
@@ -151,7 +152,7 @@ export function parseImportedGlyph(fileText: string): Glyph {
 
     const metadata = {
       ...svg.metadata,
-      timestamp: Date.now(),
+      timestamp: kaiNowMs(),
     };
 
     const glyph: Glyph = {

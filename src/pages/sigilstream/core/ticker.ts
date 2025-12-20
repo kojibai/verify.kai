@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { kaiNowDate, kaiNowMs } from "../../../utils/kaiNow";
 import { computeLocalKai, GENESIS_TS, PULSE_MS, KAI_PULSE_SEC } from "./kai_time";
 import type { LocalKai } from "./types";
 
@@ -16,7 +17,7 @@ export function useKaiPulseCountdown(active: boolean): number | null {
   const targetRef = useRef<number | null>(null);
 
   const scheduleNextBoundary = () => {
-    const now = Date.now();
+    const now = kaiNowMs();
     const periods = Math.ceil((now - GENESIS_TS) / PULSE_MS);
     targetRef.current = GENESIS_TS + periods * PULSE_MS;
   };
@@ -37,7 +38,7 @@ export function useKaiPulseCountdown(active: boolean): number | null {
       if (target == null) {
         setSecsLeft(null);
       } else {
-        const now = Date.now();
+        const now = kaiNowMs();
 
         // If we crossed the boundary, immediately align to the next one instead of sitting at 0.
         if (now >= target) {
@@ -78,13 +79,13 @@ export function useKaiPulseCountdown(active: boolean): number | null {
  * - Reschedules on visibility change to stay in lockstep after backgrounding.
  */
 export function useAlignedKaiTicker(): LocalKai {
-  const [kai, setKai] = useState<LocalKai>(() => computeLocalKai(new Date()));
+  const [kai, setKai] = useState<LocalKai>(() => computeLocalKai(kaiNowDate()));
   const timerRef = useRef<number | null>(null);
 
   const setCssPhaseVars = () => {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
-    const now = Date.now();
+    const now = kaiNowMs();
     const lag = (PULSE_MS - ((now - GENESIS_TS) % PULSE_MS)) % PULSE_MS; // ms until boundary
     root.style.setProperty("--pulse-dur", `${PULSE_MS}ms`);
     // Negative delay causes CSS animations to appear already in-progress by `lag`
@@ -94,7 +95,7 @@ export function useAlignedKaiTicker(): LocalKai {
   const schedule = () => {
     if (timerRef.current) window.clearTimeout(timerRef.current);
 
-    const now = Date.now();
+    const now = kaiNowMs();
     const elapsed = now - GENESIS_TS;
     const next = GENESIS_TS + Math.ceil(elapsed / PULSE_MS) * PULSE_MS;
     const delay = Math.max(0, next - now);
@@ -104,7 +105,7 @@ export function useAlignedKaiTicker(): LocalKai {
 
     timerRef.current = window.setTimeout(() => {
       // Update state exactly at boundary, then immediately schedule the next one
-      setKai(computeLocalKai(new Date()));
+      setKai(computeLocalKai(kaiNowDate()));
       schedule();
     }, delay) as unknown as number;
   };
@@ -115,7 +116,7 @@ export function useAlignedKaiTicker(): LocalKai {
     const onVis = () => {
       if (document.visibilityState === "visible") {
         // Recompute immediately and reschedule to avoid any drift after background throttling.
-        setKai(computeLocalKai(new Date()));
+        setKai(computeLocalKai(kaiNowDate()));
         schedule();
       }
     };

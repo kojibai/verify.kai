@@ -16,6 +16,7 @@ import { printWithTempTitle, renderIntoPrintRoot } from "./exhale-note/printer";
 import { fPhi, fUsd, fTiny } from "./exhale-note/format";
 import { fetchFromVerifierBridge } from "./exhale-note/bridge";
 import { svgStringToPngBlob, triggerDownload } from "./exhale-note/svgToPng";
+import { kaiNowBigInt, kaiNowMs } from "../utils/kaiNow";
 
 import type {
   NoteProps,
@@ -171,9 +172,9 @@ function useRafThrottle(cb: () => void, fps = 8) {
   }, []);
 
   return useCallback(() => {
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const now = kaiNowMs();
     const run = () => {
-      lastRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
+      lastRef.current = kaiNowMs();
       rafRef.current = null;
       cbRef.current();
     };
@@ -372,7 +373,7 @@ async function computeValuationStamp(u: IntrinsicUnsigned): Promise<string> {
 function msUntilNextPulseBoundaryLocal(pulseNowInt: number): number {
   try {
     const nextPulseMs = epochMsFromPulse(pulseNowInt + 1);
-    const nowMs = BigInt(Date.now());
+    const nowMs = kaiNowBigInt();
     const delta = nextPulseMs - nowMs;
     if (delta <= 0n) return 0;
     // delta is always ~0..6000ms here, safe to Number()
@@ -406,7 +407,7 @@ const ExhaleNote: React.FC<NoteProps> = ({
 
   /* Live Kai pulse (integer) + boundary timer */
   const readNowPulseInt = useCallback((): number => {
-    const local = momentFromUTC(BigInt(Date.now())).pulse;
+    const local = momentFromUTC(kaiNowBigInt()).pulse;
     const ext = getNowPulse?.();
     const extOk =
       typeof ext === "number" &&

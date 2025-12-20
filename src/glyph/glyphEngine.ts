@@ -5,6 +5,7 @@
 import type { Glyph, GlyphMetadata } from "./types";
 import { computeIntrinsicUnsigned } from "../utils/valuation";
 import type { SigilTransfer, SigilMetadataLite } from "../utils/valuation";
+import { kaiNowMs } from "../utils/kaiNow";
 
 // ─────────────────────────────────────────────────────────────
 // 🔁 Generate a new glyph based on an existing one (evolution step)
@@ -23,7 +24,7 @@ export function evolveGlyph(
     ...(parent.metadata ?? {}),
     ...(updates ?? {}),
     kaiSignature,
-    timestamp: Date.now(),
+    timestamp: kaiNowMs(),
   };
 
   // For now, use kaiSignature as the glyph hash

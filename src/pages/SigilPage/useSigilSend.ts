@@ -19,6 +19,7 @@ import {
   verifierSigmaString,
   readIntentionSigil,
 } from "./verifierCanon";
+import { kaiNowMs } from "../../utils/kaiNow";
 
 /** ─────────────────────────────────────────────────────────────
  * Local helpers — scoped to the hook so we don't fight page types
@@ -136,12 +137,12 @@ const acquireSendLock = (canonical: string | null, token: string | null): { ok: 
   try {
     const raw = localStorage.getItem(key);
     const rec: SendLockRecord | null = raw ? (JSON.parse(raw) as SendLockRecord) : null;
-    const stale = !rec || !Number.isFinite(rec.at) || Date.now() - rec.at > SEND_LOCK_TTL_MS;
+    const stale = !rec || !Number.isFinite(rec.at) || kaiNowMs() - rec.at > SEND_LOCK_TTL_MS;
     if (!rec || stale) {
-      localStorage.setItem(key, JSON.stringify({ id, at: Date.now() } satisfies SendLockRecord));
+      localStorage.setItem(key, JSON.stringify({ id, at: kaiNowMs() } satisfies SendLockRecord));
       try {
         const bc = new BroadcastChannel(SEND_LOCK_CH);
-        const msg: SendLockWire = { type: "lock", canonical: canonical.toLowerCase(), token, id, at: Date.now() };
+        const msg: SendLockWire = { type: "lock", canonical: canonical.toLowerCase(), token, id, at: kaiNowMs() };
         bc.postMessage(msg);
         bc.close();
       } catch {}
@@ -161,7 +162,7 @@ const releaseSendLock = (canonical: string | null, token: string | null, id: str
       localStorage.removeItem(key);
       try {
         const bc = new BroadcastChannel(SEND_LOCK_CH);
-        const msg: SendLockWire = { type: "unlock", canonical: canonical.toLowerCase(), token, id, at: Date.now() };
+        const msg: SendLockWire = { type: "unlock", canonical: canonical.toLowerCase(), token, id, at: kaiNowMs() };
         bc.postMessage(msg);
         bc.close();
       } catch {}

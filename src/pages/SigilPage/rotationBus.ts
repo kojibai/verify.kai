@@ -1,6 +1,7 @@
 // src/pages/SigilPage/rotationBus.ts
 import { useEffect, useState } from "react";
 import { ROTATE_CH, rotationKey } from "./constants";
+import { kaiNowMs } from "../../utils/kaiNow";
 import type { RotationMsg } from "./constants";
 
 /** Publish rotation token to LS + BroadcastChannel + DOM event */
@@ -8,7 +9,7 @@ export function publishRotation(keys: string[], token: string) {
   const uniq = Array.from(new Set(keys.map((k) => k.toLowerCase()).filter(Boolean)));
   uniq.forEach((canonical) => {
     try {
-      localStorage.setItem(rotationKey(canonical), `${token}@${Date.now()}`);
+      localStorage.setItem(rotationKey(canonical), `${token}@${kaiNowMs()}`);
     } catch { /* noop */ }
     try {
       const bc = new BroadcastChannel(ROTATE_CH);

@@ -52,6 +52,7 @@ import { getOriginUrl } from "../../utils/sigilUrl";
 import { sealEnvelopeV1, makeSealSaltB64Url, type GlyphCredential, type SealedEnvelopeV1 } from "../../utils/postSeal";
 import { extractSigilAuthFromSvg } from "../../utils/sigilAuthExtract";
 import { deriveKaiSignatureB64Url } from "../../utils/derivedGlyph";
+import { kaiNowMs } from "../../utils/kaiNow";
 
 /* ───────────────────────── Props ───────────────────────── */
 
@@ -321,8 +322,7 @@ type EncodeDiag = {
   note?: string;
 };
 
-const nowMs = (): number =>
-  typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+const nowMs = (): number => kaiNowMs();
 
 const nextPaint = async (): Promise<void> => {
   await new Promise<void>((r) => requestAnimationFrame(() => r()));
@@ -343,7 +343,7 @@ const withTimeout = async <T,>(p: Promise<T>, ms: number, label: string): Promis
 const makeId = (): string => {
   const c: Crypto | undefined = typeof crypto !== "undefined" ? crypto : undefined;
   if (c && "randomUUID" in c && typeof c.randomUUID === "function") return c.randomUUID();
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${kaiNowMs().toString(36)}-${Math.random().toString(36).slice(2)}`;
 };
 
 // Singleton worker plumbing (module-scope; not React state)
@@ -911,7 +911,7 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
         sigilId,
         phiKey: hasVerifiedSigil && phiKey ? phiKey : undefined,
         kaiSignature: hasVerifiedSigil && kaiSignature ? kaiSignature : undefined,
-        ts: Date.now(),
+        ts: kaiNowMs(),
         attachments: mergedAttachments,
         parentUrl,
         originUrl,

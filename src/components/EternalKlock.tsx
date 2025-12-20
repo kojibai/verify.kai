@@ -33,6 +33,7 @@ import KaiKlock from "./KaiKlock";
 import SigilGlyphButton from "./SigilGlyphButton";
 import WeekKalendarModal from "./WeekKalendarModal";
 import SolarAnchoredDial from "./SolarAnchoredDial";
+import { kaiNowMs } from "../utils/kaiNow";
 
 // ⬇️ Sovereign Solar imports (offline, no geolocation / suncalc)
 import useSovereignSolarClock from "../utils/useSovereignSolarClock";
@@ -698,12 +699,15 @@ function makePulseWorker(): PulseWorkerHandle | null {
     const code = `
       const GEN=${ETERNAL_GENESIS_PULSE};
       const DUR=${MS_PER_PULSE};
+      const ORIGIN=(self.performance&&typeof self.performance.timeOrigin==="number")?self.performance.timeOrigin:0;
+      const BASE=(self.performance&&typeof self.performance.now==="function")?self.performance.now():0;
+      const nowMs=()=>ORIGIN+((self.performance&&typeof self.performance.now==="function")?self.performance.now():BASE);
       function sched(){
-        const now=Date.now();
+        const now=nowMs();
         const elapsed=now-GEN;
         const next=GEN+Math.ceil(elapsed/DUR)*DUR;
         const delay=Math.max(0, next-now);
-        setTimeout(()=>{ postMessage({ t: Date.now() }); sched(); }, delay);
+        setTimeout(()=>{ postMessage({ t: nowMs() }); sched(); }, delay);
       }
       sched();
     `;
@@ -1009,7 +1013,7 @@ export const EternalKlock: React.FC = () => {
      ──────────────────────────────────────────────────────────────── */
   const fireTick = useCallback(
     (forcedSec?: number) => {
-      const now = Date.now();
+      const now = kaiNowMs();
       if (now - lastTickRef.current < 180) return; // global de-dupe window
       lastTickRef.current = now;
 
@@ -1040,7 +1044,7 @@ export const EternalKlock: React.FC = () => {
 
     const scheduleNext = () => {
       if (!runningRef.current) return;
-      const delay = msToNextPulse(Date.now());
+      const delay = msToNextPulse(kaiNowMs());
       timeoutRef.current = window.setTimeout(() => {
         fireTick();
         scheduleNext();
@@ -1190,13 +1194,13 @@ export const EternalKlock: React.FC = () => {
     const detailNode = detailRef.current;
 
     const markInteractionInside = () => {
-      suppressScrollCloseUntil.current = Date.now() + 800;
+      suppressScrollCloseUntil.current = kaiNowMs() + 800;
     };
 
     const handleScroll = () => {
       const ae = document.activeElement as HTMLElement | null;
       const focusedInside = !!ae && !!overlayNode?.contains(ae);
-      const inCooldown = Date.now() < suppressScrollCloseUntil.current;
+      const inCooldown = kaiNowMs() < suppressScrollCloseUntil.current;
       if (focusedInside || inCooldown) return;
       closeDetails();
     };
@@ -1221,7 +1225,7 @@ export const EternalKlock: React.FC = () => {
       closeDetails();
       return;
     }
-    suppressScrollCloseUntil.current = Date.now() + 800;
+    suppressScrollCloseUntil.current = kaiNowMs() + 800;
     if ("vibrate" in navigator && typeof navigator.vibrate === "function") navigator.vibrate(10);
     audioRef.current?.play().catch(() => void 0);
     setShowDetails(true);
@@ -1273,7 +1277,7 @@ export const EternalKlock: React.FC = () => {
 
   // Manual open ALWAYS works (no dismiss gate on button tap)
   const openWeekModal = useCallback(() => {
-    suppressScrollCloseUntil.current = Date.now() + 800;
+    suppressScrollCloseUntil.current = kaiNowMs() + 800;
     setShowWeekModal(true);
     if ("vibrate" in navigator && typeof navigator.vibrate === "function") navigator.vibrate(8);
   }, []);
@@ -1857,7 +1861,7 @@ export const EternalKlock: React.FC = () => {
                   setSolarOverrideSec(sec);
 
                   try {
-                    localStorage.setItem(SOLAR_BROADCAST_KEY, String(Date.now()));
+                    localStorage.setItem(SOLAR_BROADCAST_KEY, String(kaiNowMs()));
                   } catch {
                     void 0;
                   }
@@ -1867,7 +1871,7 @@ export const EternalKlock: React.FC = () => {
                     void 0;
                   }
                   try {
-                    const msg: SolarBroadcastMessage = { type: "solar:updated", t: Date.now() };
+                    const msg: SolarBroadcastMessage = { type: "solar:updated", t: kaiNowMs() };
                     solarBcRef.current?.postMessage(msg);
                   } catch {
                     void 0;

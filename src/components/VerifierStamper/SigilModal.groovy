@@ -21,6 +21,7 @@ import { createPortal } from "react-dom";
 import html2canvas from "html2canvas";
 import JSZip from "jszip";
 import "./SigilModal.css";
+import { kaiNowMs } from "../../utils/kaiNow";
 
 import KaiSigil, {
   type KaiSigilProps,
@@ -271,7 +272,7 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const sigilRef = useRef<KaiSigilHandle | null>(null);
-  const anchorRef = useRef(Date.now());
+  const anchorRef = useRef(kaiNowMs());
 
   /* responsive canvas size */
   const [canvasSize, setCanvasSize] = useState(SIGIL_SIZE);
@@ -290,7 +291,7 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
   const syncCloseBtn = () => {
     const btn = closeBtnRef.current;
     if (!btn) return;
-    const lag = LIVE_INTERVAL_MS - (Date.now() % LIVE_INTERVAL_MS);
+    const lag = LIVE_INTERVAL_MS - (kaiNowMs() % LIVE_INTERVAL_MS);
     btn.style.setProperty("--pulse-dur", `${LIVE_INTERVAL_MS}ms`);
     btn.style.setProperty("--pulse-offset", `-${lag}ms`);
   };
@@ -322,7 +323,7 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
     setStepPct(stepPctAcrossBeat);
     setChakraDay(chakra);
     setSigilCrashed(false);
-    anchorRef.current = Date.now();
+    anchorRef.current = kaiNowMs();
   };
 
   const buildLocalKlock = useCallback(
@@ -533,7 +534,7 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
   useEffect(() => {
     if (modeRef.current !== "live") return setSecsLeft(null);
     const id = setInterval(() => {
-      const rem = PULSE_MS - ((Date.now() - anchorRef.current) % PULSE_MS);
+      const rem = PULSE_MS - ((kaiNowMs() - anchorRef.current) % PULSE_MS);
       setSecsLeft(rem / 1000);
     }, 200);
     return () => clearInterval(id);

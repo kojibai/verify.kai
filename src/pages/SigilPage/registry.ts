@@ -1,6 +1,7 @@
 // src/pages/SigilPage/registry.ts
 import { putMetadata } from "../../utils/svgMeta";
 import type { SigilPayload } from "../../types/sigil";
+import { kaiNowMs } from "../../utils/kaiNow";
 
 /**
  * The attestation claim we sign & verify.
@@ -115,7 +116,7 @@ export function buildClaim(meta: SigilPayload, canonicalHash: string, token: str
     canonicalHash: canonicalHash.toLowerCase(),
     token,
     expiresAtPulse: meta.expiresAtPulse ?? null,
-    issuedAt: Math.floor(Date.now() / 1000),
+    issuedAt: Math.floor(kaiNowMs() / 1000),
     version: 1,
   };
 }

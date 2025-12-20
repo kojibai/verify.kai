@@ -10,6 +10,7 @@ import {
 } from "@react-three/drei";
 import * as THREE from "three";
 import { BREATH_SEC, GENESIS_TS } from "../../SovereignSolar";
+import { kaiNowMs } from "../../utils/kaiNow";
 
 /** Golden-breath timing (φ-exact): T = 3 + √5 seconds (imported via BREATH_SEC) */
 const BREATH_T = BREATH_SEC;
@@ -23,7 +24,7 @@ function useKaiBreath() {
   useEffect(() => {
     const periodMs = BREATH_T * 1000;
     const tick = () => {
-      const now = Date.now();
+      const now = kaiNowMs();
       const phi = ((now - GENESIS_TS) % periodMs + periodMs) % periodMs; // 0..periodMs
       const ph = phi / periodMs; // 0..1
       const a = 0.5 - 0.5 * Math.cos(ph * Math.PI * 2); // smooth inhale/exhale

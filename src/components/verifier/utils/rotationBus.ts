@@ -7,6 +7,7 @@
 ────────────────────────────────────────────────────────────────── */
 
 import { logError } from "./log";
+import { kaiNowMs } from "../../../utils/kaiNow";
 
 export const ROTATE_CH = "sigil-xfer-v1";
 
@@ -43,7 +44,7 @@ export function publishRotation(
       if (typeof localStorage !== "undefined") {
         localStorage.setItem(
           rotationKey(canonical),
-          `${token}@${Date.now()}`
+          `${token}@${kaiNowMs()}`
         );
       }
     } catch (err) {

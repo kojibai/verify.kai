@@ -1,4 +1,5 @@
 // Link rotation (burn old tokens, broadcast new)
+import { kaiNowMs } from "../../utils/kaiNow";
 
 export const ROTATE_CH = "sigil-xfer-v1";
 export const ROTATION_EVENT = "sigil:transfer-rotated";
@@ -41,7 +42,7 @@ function dispatchAsync(eventName: string, detail: unknown): void {
 }
 
 export function publishRotation(keys: readonly string[], token: string): void {
-  const now = Date.now();
+  const now = kaiNowMs();
 
   // Deduplicate, normalize, and validate keys
   const uniq = Array.from(

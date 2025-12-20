@@ -18,6 +18,7 @@ import {
 } from "react";
 import KaiSigil, { type KaiSigilProps } from "./KaiSigil";
 import "./StargateViewer.css";
+import { kaiNowMs } from "../utils/kaiNow";
 
 /* ════════════ Public Props ═════════════════════════════════════ */
 export interface StargateViewerProps {
@@ -51,7 +52,7 @@ const CHAKRA_NAMES = [
 // Cross-browser fullscreen signatures without `any`
 
 /* ════════════ Utils ════════════════════════════════════════════ */
-const nowPulse = (): number => Math.floor((Date.now() - GENESIS_TS) / PULSE_MS);
+const nowPulse = (): number => Math.floor((kaiNowMs() - GENESIS_TS) / PULSE_MS);
 
 const isIOS = (): boolean => {
   if (typeof navigator === "undefined") return false; // SSR/Node
@@ -137,7 +138,7 @@ const StargateViewer: FC<StargateViewerProps> = ({
 
     const tick = (): void => {
       /* time → sigil maths */
-      const now          = Date.now();
+      const now          = kaiNowMs();
       const msSinceGen   = now - GENESIS_TS;
       const pulsePhase   = (msSinceGen % PULSE_MS) / PULSE_MS; // 0-1
       const subPhase     = (msSinceGen % (PULSE_MS / DIVISIONS)) / (PULSE_MS / DIVISIONS);

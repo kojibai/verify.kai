@@ -1,5 +1,6 @@
 // lib/sync/ipfsAdapter.ts
 // Minimal IPFS HTTP adapter that implements: export interface IpfsLike { publish(buf: Uint8Array): Promise<{ headCid: string }> }
+import { kaiNowMs } from "../../utils/kaiNow";
 
 export type PublishResult = { headCid: string };
 
@@ -136,14 +137,14 @@ export function createIpfsHttpAdapter(opts: IpfsHttpOptions): IpfsLike {
 
   const softFail = async (buf: Uint8Array): Promise<PublishResult> => {
     fallbackActive = true;
-    lastFailureAt = Date.now();
+    lastFailureAt = kaiNowMs();
     warnOnce("[ipfsAdapter] IPFS not ready; using in-memory fallback. Will retry later.");
     return nop.publish(buf);
   };
 
   return {
     async publish(buf: Uint8Array): Promise<PublishResult> {
-      const now = Date.now();
+      const now = kaiNowMs();
 
       if (fallbackActive) {
         if (now - lastFailureAt < cooldownMs) {

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { EmbeddedAttachment, ExpiryUnit, SigilPayload } from "../../types/sigil";
+import { kaiNowMs } from "../../utils/kaiNow";
 
 type Press = {
   onPointerUp: (e: React.PointerEvent<HTMLButtonElement>) => void;
@@ -408,7 +409,7 @@ export default function SovereignControls({
   /* ─────────────── Upload orchestration ─────────────── */
   function addToQueue(files: File[]) {
     const items: UploadItem[] = files.map((f, i) => ({
-      id: `${Date.now()}-${i}-${f.name}-${f.size}`,
+      id: `${kaiNowMs()}-${i}-${f.name}-${f.size}`,
       name: f.name,
       size: f.size,
       type: f.type || "application/octet-stream",

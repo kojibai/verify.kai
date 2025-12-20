@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { kaiNowMs } from "../../utils/kaiNow";
 import "./styles/PostComposer.css";
 
 /* -------------------------------------------------------------------------- */
@@ -119,7 +120,7 @@ function generateAttachmentId(file: File): string {
     file.name,
     file.size,
     file.lastModified,
-    Date.now(),
+    kaiNowMs(),
     Math.random().toString(36).slice(2, 8),
   ].join("-");
 }

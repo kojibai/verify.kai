@@ -1,4 +1,6 @@
 // v48 send-lock utils (atomic exhale guard)
+import { kaiNowMs } from "./kaiNow";
+
 export const SEND_LOCK_CH = "sigil-sendlock-v1";
 export const SEND_LOCK_TTL_MS = 15_000;
 
@@ -14,7 +16,7 @@ export type SendLockWire = {
   at: number;
 };
 
-export const nowMs = () => Date.now();
+export const nowMs = () => kaiNowMs();
 
 const noop = () => { /* intentionally empty */ };
 

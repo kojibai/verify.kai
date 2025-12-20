@@ -53,6 +53,7 @@
  *  - Helpers:           debitsKey, isDebitsStorageKeyForCanonical, tokenFromDebitsKey
  * -----------------------------------------------------------------------------
  */
+import { kaiNowMs } from "./kaiNow";
 
 export type DebitRecord = {
     amount: number;            // > 0
@@ -293,7 +294,7 @@ export type DebitRecord = {
         type: "debits",
         canonical: h,
         qs: encodeDebitsQS(d),
-        stamp: Date.now(),
+        stamp: kaiNowMs(),
         token: token ?? null,
       };
       bc.postMessage(msg);

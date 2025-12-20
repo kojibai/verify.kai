@@ -4,6 +4,7 @@ import {
   encodeTokenWithBudgets,
   type FeedPostPayload,
 } from "../../utils/feedPayload";
+import { kaiNowMs } from "../../utils/kaiNow";
 
 type EncodeWorkerRequest = {
   id: string;
@@ -14,10 +15,7 @@ type EncodeWorkerResponse =
   | { id: string; ok: true; token: string; withinHard: boolean; ms: number }
   | { id: string; ok: false; error: string; ms: number };
 
-const now = (): number =>
-  self.performance && typeof self.performance.now === "function"
-    ? self.performance.now()
-    : Date.now();
+const now = (): number => kaiNowMs();
 
 self.onmessage = (ev: MessageEvent<EncodeWorkerRequest>) => {
   const t0 = now();

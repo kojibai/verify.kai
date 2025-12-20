@@ -3,11 +3,12 @@ import React, {
     useCallback,
     useEffect,
     useId,
-    useMemo,
-    useRef,
-    useState,
-  } from "react";
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useSigilSession } from "./session/useSigilSession";
+import { kaiNowMs } from "../utils/kaiNow";
   import { getKaiNow } from "../kai/KaiNow";
   import { withCapsuleInUrl, type Capsule } from "../utils/sigilCapsule";
   import { sha256Hex } from "../utils/hash";
@@ -123,7 +124,7 @@ import { useSigilSession } from "./session/useSigilSession";
         raf = window.setTimeout(tick, PULSE_MS);
       };
   
-      const ms = Date.now();
+      const ms = kaiNowMs();
       const msToNextPulse = PULSE_MS - (ms % PULSE_MS);
       const id = window.setTimeout(() => {
         tick();

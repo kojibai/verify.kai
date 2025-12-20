@@ -2,6 +2,7 @@
 
 
 import { useEffect, useRef } from 'react';
+import { kaiNowMs } from "../../utils/kaiNow";
 
 type PulseCallbacks = {
   onPulse?: (pulseIndex: number) => void;
@@ -44,7 +45,7 @@ export function useKaiPulse(callbacks: PulseCallbacks): void {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      const now = Date.now();
+      const now = kaiNowMs();
       const { pulseIndex, stepIndex, beatIndex } = computeKaiState(now);
 
       if (pulseIndex !== lastPulseRef.current) {

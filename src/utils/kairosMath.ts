@@ -1,3 +1,5 @@
+import { kaiNowMs } from "./kaiNow";
+
 // 📐 Harmonic Constants
 export const PHI = (1 + Math.sqrt(5)) / 2; // ≈ 1.6180339887
 export const KAI_PULSE_SECONDS = (3 + Math.sqrt(5)) * 1000;
@@ -36,7 +38,7 @@ export function getPhiEpochs(count: number = 9): number[] {
 
 // 📅 Calculate Kairos Day
 export function calculateKairosDay(): number {
-  const nowUnix = Date.now();
+  const nowUnix = kaiNowMs();
   const secondsSinceGenesis = (nowUnix - GENESIS_PULSE_UNIX) / 1000;
   const kaiPulses = Math.floor(secondsSinceGenesis / KAI_PULSE_SECONDS);
   const day = Math.floor(kaiPulses / PULSES_PER_DAY);
