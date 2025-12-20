@@ -34,6 +34,7 @@ import {
 } from "./utils/kai_pulse";
 import { fmt2, formatPulse, modPos, readNum } from "./utils/kaiTimeDisplay";
 import { usePerfMode } from "./hooks/usePerfMode";
+import { SIGIL_EXPLORER_OPEN_EVENT } from "./constants/sigilExplorer";
 
 import SovereignDeclarations from "./components/SovereignDeclarations";
 import { DEFAULT_APP_VERSION, SW_VERSION_EVENT } from "./version";
@@ -605,6 +606,11 @@ function ExplorerPopover({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose, isClient]);
+
+  useEffect(() => {
+    if (!open || !isClient) return;
+    window.dispatchEvent(new CustomEvent(SIGIL_EXPLORER_OPEN_EVENT));
+  }, [open, isClient]);
 
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {

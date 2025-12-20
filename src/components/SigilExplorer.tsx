@@ -51,6 +51,7 @@ import {
   type UsernameClaimRegistry,
 } from "../utils/usernameClaimRegistry";
 import { USERNAME_CLAIM_KIND, type UsernameClaimPayload } from "../types/usernameClaim";
+import { SIGIL_EXPLORER_OPEN_EVENT } from "../constants/sigilExplorer";
 import "./SigilExplorer.css";
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -118,6 +119,8 @@ type ApiInhaleResponse = {
   errors: string[];
   urls?: string[] | null;
 };
+
+type SyncReason = "open" | "pulse" | "visible" | "focus" | "online" | "import";
 
 /* ─────────────────────────────────────────────────────────────────────
  *  Chakra tint system (per node)
@@ -2286,6 +2289,7 @@ const SigilExplorer: React.FC = () => {
       ownerHint?: string | null;
     }>
   >([]);
+  const syncNowRef = useRef<((reason: SyncReason) => Promise<void>) | null>(null);
 
   const markInteracting = useCallback((ms: number) => {
     const until = nowMs() + ms;
@@ -2785,7 +2789,7 @@ const SigilExplorer: React.FC = () => {
     // ── BREATH LOOP: inhale (push) ⇄ exhale (pull)
     const ac = new AbortController();
 
-    const syncOnce = async (reason: "open" | "pulse" | "visible" | "focus" | "online") => {
+    const syncOnce = async (reason: SyncReason) => {
       if (unmounted.current) return;
       if (!isOnline()) return;
       if (syncInFlightRef.current) return;
@@ -2794,7 +2798,7 @@ const SigilExplorer: React.FC = () => {
       if (scrollingRef.current) return;
 
       // ✅ mobile stability: avoid heavy remote import while in interaction window
-      if (nowMs() < interactUntilRef.current && reason === "pulse") return;
+      if (nowMs() < interactUntilRef.current && (reason === "pulse" || reason === "import")) return;
 
       syncInFlightRef.current = true;
 
@@ -2846,7 +2850,7 @@ const SigilExplorer: React.FC = () => {
         const sealNow = remoteSealRef.current;
         const shouldFullSeed =
           reason === "open" ||
-          ((reason === "visible" || reason === "focus" || reason === "online") &&
+          ((reason === "visible" || reason === "focus" || reason === "online" || reason === "import") &&
             sealNow !== lastFullSeedSealRef.current);
 
         if (shouldFullSeed) {
@@ -2858,6 +2862,8 @@ const SigilExplorer: React.FC = () => {
         syncInFlightRef.current = false;
       }
     };
+
+    syncNowRef.current = syncOnce;
 
     // OPEN: do a full inhale seed immediately (guarantees repopulation power)
     seedInhaleFromRegistry();
@@ -2890,10 +2896,27 @@ const SigilExplorer: React.FC = () => {
       flushTimerRef.current = null;
       window.clearInterval(intervalId);
       ac.abort();
+      syncNowRef.current = null;
       unmounted.current = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bump, markInteracting, scheduleUiFlush, setLastAddedSafe]);
+
+  const requestImmediateSync = useCallback(
+    (reason: SyncReason) => {
+      const fn = syncNowRef.current;
+      if (fn) void fn(reason);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!hasWindow) return;
+
+    const onOpen = () => requestImmediateSync("visible");
+    window.addEventListener(SIGIL_EXPLORER_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(SIGIL_EXPLORER_OPEN_EVENT, onOpen);
+  }, [requestImmediateSync]);
 
   const forest = useMemo(() => buildForest(memoryRegistry), [registryRev]);
 
@@ -3102,11 +3125,13 @@ const SigilExplorer: React.FC = () => {
         } else if (urls.length > 0) {
           forceInhaleUrls(urls);
         }
+
+        requestImmediateSync("import");
       } catch {
         // ignore
       }
     },
-    [bump, markInteracting, setLastAddedSafe],
+    [bump, markInteracting, requestImmediateSync, setLastAddedSafe],
   );
 
   const handleExport = useCallback(() => {
