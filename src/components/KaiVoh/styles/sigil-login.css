@@ -1,109 +1,227 @@
-/* Breath/time defaults */
 :root{
   --kai-breath: 5.236s;
   --kai-phi: 1.61803398875;
-  --sigil-orb-size: clamp(88px, 18vw, 128px);
+
+  --sigil-fg: rgba(229,246,255,.95);
+  --sigil-bg: rgba(255,255,255,.05);
+  --sigil-brd: rgba(255,255,255,.15);
+
+  --sigil-accent-a: #00ffd0;
+  --sigil-accent-b: #8a2be2;
+  --sigil-accent-c: #00b4ff;
 }
 
-/* Container + decorative spiral (ALWAYS visible) */
-.sigil-login { position: relative; isolation: isolate; }
-.sigil-login__top-orb{
-  position:absolute; top: -44px; left:50%; transform: translateX(-50%);
-  width: 96px; height: 96px; z-index: 3;
-  filter: drop-shadow(0 8px 30px rgba(0,255,208,.25));
-}
-.phi-spiral{
-  position:absolute; pointer-events:none; color:#ffd86b; opacity:.45;
-  bottom: 10px; right: 10px; width: 120px; height: 120px; z-index:1;
-  filter: drop-shadow(0 0 10px rgba(255,216,107,.35));
-}
-.phi-spiral--br path{
-  stroke-dasharray: 380; stroke-dashoffset: 380;
-  animation: spiral-dash calc(var(--kai-breath) * 2) ease-in-out infinite;
+/* Wrapper */
+.sigil-login-only{
+  padding: clamp(12px, 3vw, 18px);
+  max-width: 640px;
+  margin: 0 auto;
 }
 
-/* Glass card */
-.sigil-card{
-  position: relative; z-index: 2; border-radius: 22px; padding: 2px; overflow: hidden;
-  background: linear-gradient(180deg, rgba(255,255,255,.15), rgba(255,255,255,.06));
-  box-shadow: 0 20px 60px rgba(0,0,0,.45), inset 0 0 0 1px rgba(99,102,241,.25);
-}
-.sigil-card__inner{
-  border-radius: 22px; padding: 1.5rem;
-  background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)), rgba(14,18,34,.62);
-  backdrop-filter: blur(10px) saturate(1.08);
-}
-@media (min-width: 768px){ .sigil-card__inner{ padding: 2rem; } }
-
-/* Breath meter (NEVER hidden on small screens) */
-.kai-pulse-meter{
-  position: relative; width: clamp(110px, 24vw, 160px); height: 8px;
-  border-radius: 9999px; border: 1px solid rgba(255,255,255,.1); overflow: hidden;
-  background: linear-gradient(90deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
-  box-shadow: inset 0 0 8px rgba(0,255,208,.12);
-}
-.kai-pulse-dot{
-  position:absolute; top:-6px; left:-10px; width: 18px; height:18px; border-radius:9999px;
-  background: radial-gradient(circle at 40% 40%, #fff, #00ffd0);
-  box-shadow: 0 0 16px rgba(0,255,208,.5), 0 0 26px rgba(0,180,255,.35);
-  animation: meter-move var(--kai-breath) ease-in-out infinite;
-}
-
-/* Dropzone + inner rings + phi grid */
+/* Dropzone */
 .sigil-dropzone{
-  position: relative; width: 100%; min-height: 220px; border-radius: 18px;
-  border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.05);
+  position: relative;
+  width: 100%;
+  min-height: 260px;
+  border-radius: 18px;
+  border: 1px solid var(--sigil-brd);
+  background: var(--sigil-bg);
   backdrop-filter: blur(6px) saturate(1.06);
   box-shadow: inset 0 0 0 1px rgba(0,255,208,.16);
+  overflow: hidden; /* important: prevent any peeking */
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
+
 .sigil-dropzone--over{
   box-shadow: 0 0 0 3px rgba(0,255,208,.35);
+  cursor: copy;
 }
-.sigil-ring{
-  position:absolute; inset: 0; border-radius: 18px; pointer-events:none;
+
+.sigil-dropzone--loading{
+  opacity: .86;
+  filter: saturate(.9);
+  cursor: progress;
 }
-.sigil-ring--outer{
-  box-shadow: inset 0 0 0 1px rgba(0,255,208,.22), 0 0 35px rgba(0,255,208,.18);
-  animation: ring-breathe var(--kai-breath) ease-in-out infinite;
+
+.sigil-dropzone--ok{
+  border-color: rgba(16,185,129,.45);
+  box-shadow:
+    inset 0 0 0 1px rgba(16,185,129,.35),
+    0 0 28px rgba(16,185,129,.18);
 }
-.sigil-ring--inner{
-  inset: 12px; border-radius: 14px;
-  box-shadow: inset 0 0 0 1px rgba(138,43,226,.22), inset 0 0 28px rgba(138,43,226,.18);
-  animation: ring-breathe calc(var(--kai-breath) * 1.618) ease-in-out infinite reverse;
+
+.sigil-dropzone--err{
+  border-color: rgba(239,68,68,.5);
+  box-shadow:
+    inset 0 0 0 1px rgba(239,68,68,.35),
+    0 0 28px rgba(239,68,68,.18);
 }
+
+.sigil-dropzone:focus-visible{
+  outline: none;
+  box-shadow:
+    0 0 0 4px rgba(0,180,255,.35),
+    0 0 0 6px rgba(0,255,208,.25);
+}
+
+/* Decorative */
 .sigil-grid{
-  position:absolute; inset:0; pointer-events:none; opacity:.18; mix-blend-mode:screen;
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  opacity:.22;
+  mix-blend-mode: screen;
   background-image:
     linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px),
     linear-gradient(0deg, rgba(255,255,255,.06) 1px, transparent 1px);
   background-size: calc(100% / var(--kai-phi)) 100%, 100% calc(100% / var(--kai-phi));
 }
 
-/* Center orb sizing */
+.sigil-ring{
+  position:absolute;
+  inset:0;
+  border-radius: 18px;
+  pointer-events:none;
+}
+
+.sigil-ring--outer{
+  box-shadow:
+    inset 0 0 0 1px rgba(0,255,208,.24),
+    0 0 36px rgba(0,255,208,.22);
+  animation: ring-breathe var(--kai-breath) ease-in-out infinite;
+}
+
+.sigil-ring--inner{
+  inset: 12px;
+  border-radius: 14px;
+  box-shadow:
+    inset 0 0 0 1px rgba(138,43,226,.26),
+    inset 0 0 30px rgba(138,43,226,.22);
+  animation: ring-breathe calc(var(--kai-breath) * 1.618) ease-in-out infinite reverse;
+}
+
+/* Center content */
+.sigil-center{
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: clamp(22px, 4vw, 28px);
+  min-height: clamp(260px, 34vh, 360px);
+}
+
+.sigil-instructions{
+  font-size: clamp(14px, 1.1vw, 16px);
+  font-weight: 800;
+  letter-spacing: .02em;
+  color: var(--sigil-fg);
+  opacity:.95;
+  text-wrap: balance;
+}
+
+.sigil-accent{
+  background: linear-gradient(90deg,var(--sigil-accent-a),var(--sigil-accent-b));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 18px rgba(0,255,208,.18);
+}
+
+/* Orb */
 .sigil-orb{
-  width: var(--sigil-orb-size); height: var(--sigil-orb-size);
-  border-radius: 9999px; display: grid; place-items: center;
-  cursor: pointer; transition: transform .18s ease;
-  box-shadow: 0 0 0 2px rgba(255,255,255,.14) inset, 0 8px 28px rgba(0,0,0,.35);
-  background: radial-gradient(55% 55% at 50% 50%, rgba(255,255,255,.12), rgba(255,255,255,.04));
+  width: clamp(88px, 18vw, 128px);
+  height: clamp(88px, 18vw, 128px);
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  box-shadow:
+    0 0 0 2px rgba(255,255,255,.14) inset,
+    0 8px 28px rgba(0,0,0,.35);
+  background:
+    radial-gradient(55% 55% at 50% 50%, rgba(255,255,255,.12), rgba(255,255,255,.04));
   backdrop-filter: blur(4px);
 }
-.sigil-orb:hover{ transform: scale(1.03) }
-.sigil-orb:active{ transform: scale(.99) }
 
-/* Orb SVG animations */
-.kai-orb-svg{ width:100%; height:100%; }
-.kai-orb-svg .orb-breathe{
-  transform-origin: 44px 44px;
+.sigil-orb__core{
+  width: 48%;
+  height: 48%;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 40% 40%, #fff, var(--sigil-accent-a));
+  box-shadow:
+    0 0 18px rgba(0,255,208,.45),
+    0 0 28px rgba(0,180,255,.28);
   animation: orb-breathe var(--kai-breath) ease-in-out infinite;
 }
-.kai-orb-svg .orb-breathe.alt{
-  animation-direction: reverse;
-  animation-duration: calc(var(--kai-breath) * 1.618);
+
+/* Status */
+.sigil-status{
+  margin-top: 6px;
+  min-height: 26px;
+  color: rgba(255,255,255,.78);
 }
-.kai-orb-svg .orb-spin{
-  transform-origin: 44px 44px;
-  animation: orb-rotate calc(var(--kai-breath) * 2.618) linear infinite;
+
+.sigil-status__hint{
+  opacity: .7;
+}
+
+.sigil-status__row,
+.sigil-status__ok{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sigil-spinner{
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  border: 2px solid rgba(255,255,255,.35);
+  border-top-color: transparent;
+  animation: sigil-spin 1s linear infinite;
+}
+
+.sigil-status__ok{ color: #34d399; }
+
+.ok-dot{
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #34d399;
+  box-shadow: 0 0 12px rgba(16,185,129,.4);
+  animation: okpulse var(--kai-breath) ease-in-out infinite;
+}
+
+.sigil-status__err{
+  display: inline-block;
+  color: #fecaca;
+  background: rgba(239,68,68,.12);
+  border: 1px solid rgba(239,68,68,.35);
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+
+/* ✅✅✅ HARD HIDE FILE INPUT (Safari/iOS-proof, Tailwind-proof, reset-proof) */
+.sigil-file-input{
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+
+  clip: rect(0,0,0,0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+
+  /* Defensive: prevent native control painting quirks */
+  -webkit-appearance: none !important;
+  appearance: none !important;
 }
 
 /* Animations */
@@ -112,150 +230,38 @@
   50%{ opacity:1; transform: scale(1.012) }
   100%{ opacity:.7; transform: scale(1) }
 }
-@keyframes meter-move{
-  0%{ transform: translateX(0) scale(.9) }
-  50%{ transform: translateX(152px) scale(1.05) }
-  100%{ transform: translateX(0) scale(.9) }
-}
-@keyframes orb-breathe{
-  0%{ transform: scale(1); opacity:.75 }
-  50%{ transform: scale(1.035); opacity:1 }
-  100%{ transform: scale(1); opacity:.75 }
-}
-@keyframes orb-rotate{ to{ transform: rotate(360deg) } }
-@keyframes spiral-dash{
-  0%{ stroke-dashoffset: 380; opacity:.3 }
-  50%{ opacity:.65 }
-  100%{ stroke-dashoffset: 0; opacity:.3 }
-}
 
-/* Motion safety */
-@media (prefers-reduced-motion: reduce){
-  *{ animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition: none !important; }
-}
-/* ──────────────────────────────────────────────────────────────
-   Sigil Login — Dropzone-only refinements
-   (append below your existing stylesheet)
-   ────────────────────────────────────────────────────────────── */
-
-/* Layout + centering */
-.sigil-login-only { padding: clamp(12px, 3vw, 18px); }
-.sigil-center{
-  display: grid;
-  place-items: center;
-  text-align: center;
-  gap: 8px;
-  padding: clamp(22px, 4vw, 28px);
-  min-height: clamp(260px, 34vh, 360px);
-}
-
-/* Instruction + trust line */
-.sigil-instructions{
-  font-size: clamp(14px, 1.1vw, 16px);
-  font-weight: 800;
-  letter-spacing: .02em;
-  color: var(--kai-fg, #e5f6ff);
-  opacity:.95;
-  text-wrap: balance;
-}
-.sigil-accent{
-  background: linear-gradient(90deg,#00ffd0,#8a2be2);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  text-shadow: 0 0 18px rgba(0,255,208,.18);
-}
-.sigil-sub{
-  margin-top: 2px;
-  font-size: clamp(12px, .95vw, 13px);
-  color: rgba(255,255,255,.72);
-}
-
-/* Status area inside the zone */
-.sigil-status{ margin-top: 10px; min-height: 26px; }
-.sigil-status__row,
-.sigil-status__ok{
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.sigil-spinner{
-  width: 16px; height: 16px; border-radius: 9999px;
-  border: 2px solid rgba(255,255,255,.35);
-  border-top-color: transparent;
-  animation: sigil-spin 1s linear infinite;
-}
 @keyframes sigil-spin{ to { transform: rotate(360deg) } }
 
-.sigil-status__ok{ color: #34d399; }
-.ok-dot{
-  width: 8px; height: 8px; border-radius: 9999px;
-  background: #34d399;
-  box-shadow: 0 0 12px rgba(16,185,129,.4);
-  animation: okpulse var(--kai-breath,5.236s) ease-in-out infinite;
+@keyframes orb-breathe{
+  0%{ transform: scale(1); opacity:.82 }
+  50%{ transform: scale(1.05); opacity:1 }
+  100%{ transform: scale(1); opacity:.82 }
 }
+
 @keyframes okpulse{
   0%{ transform: scale(.96) }
   50%{ transform: scale(1.06) }
   100%{ transform: scale(.96) }
 }
-.sigil-status__err{
-  display: inline-block;
-  color: #fecaca; /* red-200 */
-  background: rgba(239,68,68,.12);
-  border: 1px solid rgba(239,68,68,.35);
-  border-radius: 10px;
-  padding: 6px 10px;
-}
 
-/* Dropzone states you referenced in TSX */
-.sigil-dropzone--loading{
-  opacity: .8;
-  filter: saturate(.9);
-}
-.sigil-dropzone--ok{
-  border-color: rgba(16,185,129,.45);
-  box-shadow:
-    inset 0 0 0 1px rgba(16,185,129,.35),
-    0 0 28px rgba(16,185,129,.18);
-}
-.sigil-dropzone--err{
-  border-color: rgba(239,68,68,.5);
-  box-shadow:
-    inset 0 0 0 1px rgba(239,68,68,.35),
-    0 0 28px rgba(239,68,68,.18);
-}
-
-/* Better keyboard focus & drag affordance */
-.sigil-dropzone:focus-visible{
-  outline: none;
-  box-shadow:
-    0 0 0 4px rgba(0,180,255,.35),
-    0 0 0 6px rgba(0,255,208,.25);
-}
-.sigil-dropzone--over{ cursor: copy; }
-
-/* Orb size + small-screen polish */
-:root{
-  --sigil-orb-size: clamp(88px, 18vw, 128px);
-}
+/* Small screens */
 @media (max-width: 560px){
-  :root{ --sigil-orb-size: clamp(80px, 28vw, 104px); }
-  .sigil-center{ min-height: 260px; padding: 20px 14px; }
+  .sigil-center{
+    min-height: 260px;
+    padding: 20px 14px;
+  }
+  .sigil-orb{
+    width: clamp(80px, 28vw, 104px);
+    height: clamp(80px, 28vw, 104px);
+  }
 }
 
-/* (Optional) elevate the grid & rings for more “OMG WOW” pop */
-.sigil-grid{
-  opacity:.22;
-  filter: drop-shadow(0 0 12px rgba(255,255,255,.05));
-}
-.sigil-ring--outer{
-  box-shadow:
-    inset 0 0 0 1px rgba(0,255,208,.24),
-    0 0 36px rgba(0,255,208,.22);
-}
-.sigil-ring--inner{
-  box-shadow:
-    inset 0 0 0 1px rgba(138,43,226,.26),
-    inset 0 0 30px rgba(138,43,226,.22);
+/* Motion safety */
+@media (prefers-reduced-motion: reduce){
+  *{
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition: none !important;
+  }
 }
