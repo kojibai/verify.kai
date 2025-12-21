@@ -436,6 +436,8 @@ export function kairosEpochNow(timeSource: KaiTimeSource = getKaiTimeSource()): 
   return timeSource.nowEpochMs();
 }
 
+export { kairosEpochNow as kairosEpochNow }; // explicit re-export for bundler resolution
+
 /** Date object backed by the φ clock (no Date.now usage). */
 export function kairosDateNow(timeSource: KaiTimeSource = getKaiTimeSource()): Date {
   return new Date(kairosEpochNow(timeSource));
