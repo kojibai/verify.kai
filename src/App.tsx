@@ -3,29 +3,12 @@
    App.tsx · ΦNet Sovereign Gate Shell (KaiOS-style PWA)
    v29.4.4 · INSTANT LOAD / NO-HOMEPAGE-SPLASH / WarmTimer Fix / Heavy UI Deferred
 
-   ✅ ADDITIONAL CONSTRAINT (this rewrite):
-   - App.tsx NEVER touches wall-clock (no Date.now / new Date / Date parsing).
-   - “NOW” inside the app = Kai pulse computed from an internal deterministic pulse clock.
-   - The pulse clock advances using performance.now() (monotonic) + φ-exact bridge math
-     already embedded in kai_pulse.ts (via microPulsesSinceGenesis).
-
-   ✅ REAL ANCHOR (no “starts at 0” ever):
-   - On boot, PulseClock MUST seed to a real anchor immediately.
-   - Priority:
-     1) localStorage anchor (persisted μpulses)
-     2) build-injected anchor μpulses (VITE_KAI_ANCHOR_MICRO)  ← recommended
-     3) performance.timeOrigin + performance.now (no Date API)  ← final fallback
-   - Outcome: Pulse never starts at 0 unless you are literally at GENESIS.
-
-   ✅ NO RANDOM RELOADS (hardening):
-   - App.tsx does NOT reload on SW controllerchange.
-   - If any other module assigns navigator.serviceWorker.oncontrollerchange to reload,
-     App.tsx neutralizes it (without changing your warm/caching behavior).
-
-   Notes:
-   - This makes App.tsx wall-clock-free in the “no Date APIs” sense.
-   - If you want ZERO epoch-derived fallback, set VITE_KAI_ANCHOR_MICRO at build time
-     (string BigInt μpulses) and you will never touch timeOrigin either.
+   ✅ GOALS (implemented):
+   - Fix linter/TS error: warmTimer not defined → ref-based timer.
+   - Instant first paint: code-split heavy modules (Chart / Modals / Explorer / Klock).
+   - Homepage splash killer: remove any boot/splash overlays on "/" immediately.
+   - SW warming: idle-only + focus rewarm, abort-safe, respects Save-Data/2G.
+   - Zero “loading splash” fallbacks: Suspense fallback is null/blank spacer.
 ────────────────────────────────────────────────────────────────────────────── */
 
 import React, {
@@ -43,18 +26,13 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 
 import {
+  momentFromUTC,
   DAYS_PER_MONTH,
   DAYS_PER_YEAR,
-  GENESIS_TS,
-  microPulsesSinceGenesis,
   MONTHS_PER_YEAR,
-  N_DAY_MICRO,
-  WEEKDAYS,
-  DAY_TO_CHAKRA,
   type ChakraDay,
-  type Weekday,
 } from "./utils/kai_pulse";
-import { fmt2, formatPulse } from "./utils/kaiTimeDisplay";
+import { fmt2, formatPulse, modPos, readNum } from "./utils/kaiTimeDisplay";
 import { usePerfMode } from "./hooks/usePerfMode";
 import { SIGIL_EXPLORER_OPEN_EVENT } from "./constants/sigilExplorer";
 
@@ -74,15 +52,15 @@ declare global {
 ────────────────────────────────────────────────────────────────────────────── */
 const KaiVohModal = lazy(
   () => import("./components/KaiVoh/KaiVohModal"),
-) as React.LazyExoticComponent<
-  React.ComponentType<{ open: boolean; onClose: () => void }>
->;
+) as React.LazyExoticComponent<React.ComponentType<{ open: boolean; onClose: () => void }>>;
 
 const SigilModal = lazy(
   () => import("./components/SigilModal"),
 ) as React.LazyExoticComponent<
   React.ComponentType<{ initialPulse: number; onClose: () => void }>
 >;
+
+
 
 const HomePriceChartCard = lazy(
   () => import("./components/HomePriceChartCard"),
@@ -216,6 +194,8 @@ type KlockPopoverProps = {
 
 type KlockNavState = { openDetails?: boolean };
 
+type KaiMoment = ReturnType<typeof momentFromUTC>;
+
 function isInteractiveTarget(t: EventTarget | null): boolean {
   const el = t instanceof Element ? t : null;
   if (!el) return false;
@@ -233,276 +213,14 @@ function getInitialAppVersion(): string {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────────
-   FULL DETERMINISM: PulseClock (App.tsx has ZERO Date APIs)
-   - No Date.now / new Date / Date parsing.
-   - Advances with performance.now() (monotonic) + φ-exact ms→μpulse bridge.
-   - MUST seed from a real anchor immediately (never start at 0).
-────────────────────────────────────────────────────────────────────────────── */
-const GENESIS_MS_BI = BigInt(GENESIS_TS);
-const MAX_SAFE_BI = 9_007_199_254_740_991n;
-
-const modE = (a: bigint, m: bigint): bigint => {
-  const r = a % m;
-  return r >= 0n ? r : r + m;
-};
-
-const floorDivE = (a: bigint, d: bigint): bigint => {
-  const q = a / d;
-  const r = a % d;
-  return r === 0n || a >= 0n ? q : q - 1n;
-};
-
-const toSafeNumber = (x: bigint): number => {
-  if (x > MAX_SAFE_BI) return Number(MAX_SAFE_BI);
-  if (x < -MAX_SAFE_BI) return -Number(MAX_SAFE_BI);
-  return Number(x);
-};
-
-function perfNowMs(): number {
-  if (typeof performance === "undefined" || typeof performance.now !== "function") return 0;
-  return performance.now();
-}
-
-function deltaMicroFromDeltaMs(deltaMs: bigint): bigint {
-  // Convert Δms → μpulses using the canonical φ-exact bridge already in kai_pulse.ts.
-  // microPulsesSinceGenesis( GENESIS_TS + Δms ) is defined such that at GENESIS_TS it's 0.
-  return microPulsesSinceGenesis(GENESIS_MS_BI + deltaMs);
-}
-
-function readBuildAnchorMicro(): bigint | null {
-  // Recommended: inject a real μpulse anchor at build time:
-  //   VITE_KAI_ANCHOR_MICRO="123456789012345n? NO"  → must be digits only for BigInt
-  // Example:
-  //   VITE_KAI_ANCHOR_MICRO=123456789012345678
-  const raw = import.meta.env.VITE_KAI_ANCHOR_MICRO;
-  if (typeof raw !== "string" || raw.length === 0) return null;
-
-  try {
-    const bi = BigInt(raw);
-    return bi > 0n ? bi : null;
-  } catch {
-    return null;
-  }
-}
-
-function readPerfOriginAnchorMicro(perfAtBaseMs: number): bigint | null {
-  // Final fallback: derive an epoch-ms anchor from the browser perf clock WITHOUT using Date APIs.
-  // This ensures first-boot is anchored at the session zero-point, never 0.
-  if (typeof performance === "undefined") return null;
-
-  const origin =
-    typeof performance.timeOrigin === "number" && Number.isFinite(performance.timeOrigin)
-      ? performance.timeOrigin
-      : null;
-  if (origin === null) return null;
-
-  const epochMs = origin + perfAtBaseMs;
-  if (!Number.isFinite(epochMs) || epochMs <= 0) return null;
-
-  try {
-    const epochMsBI = BigInt(Math.floor(epochMs));
-    const pμ = microPulsesSinceGenesis(epochMsBI);
-    return pμ > 0n ? pμ : null;
-  } catch {
-    return null;
-  }
-}
-
-type PulseClockListener = (pμNow: bigint) => void;
-
-type PulseClock = {
-  getMicroNow: () => bigint;
-  getPulseNow: () => number;
-  subscribe: (fn: PulseClockListener) => () => void;
-  hardSealMicro: (pμ: bigint) => void;
-};
-
-const pulseClock: PulseClock = (() => {
-  const STORAGE_KEY = "kai:clock:anchor-micro-v1";
-
-  let baseMicro: bigint = 0n;
-  let basePerf: number = 0;
-  let initialized = false;
-
-  const listeners = new Set<PulseClockListener>();
-  let intervalId: number | null = null;
-
-  // lifecycle for global listeners
-  let visHandler: (() => void) | null = null;
-  let pageHideHandler: (() => void) | null = null;
-
-  const loadBase = (): boolean => {
-    if (typeof window === "undefined") return false;
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (typeof raw === "string" && raw.length) {
-        baseMicro = BigInt(raw);
-        return baseMicro > 0n;
-      }
-    } catch {
-      /* ignore */
-    }
-    return false;
-  };
-
-  const saveBase = (): void => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(STORAGE_KEY, baseMicro.toString());
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const ensureInit = (): void => {
-    if (initialized) return;
-
-    // 1) Try persisted anchor first (pure deterministic continuity, no epoch dependency).
-    const hasStored = loadBase();
-
-    // Always set perf base at init boundary.
-    basePerf = perfNowMs();
-
-    // 2) If no stored anchor, seed from build-injected anchor.
-    if (!hasStored) {
-      const buildAnchor = readBuildAnchorMicro();
-      if (buildAnchor) {
-        baseMicro = buildAnchor;
-        saveBase();
-      }
-    }
-
-    // 3) If still not anchored, seed from perf-origin epoch bridge (no Date APIs).
-    if (baseMicro <= 0n) {
-      const perfAnchor = readPerfOriginAnchorMicro(basePerf);
-      if (perfAnchor) {
-        baseMicro = perfAnchor;
-        saveBase();
-      }
-    }
-
-    // Absolute last resort (should never happen in modern browsers):
-    // keep baseMicro at 0n, but we will still advance deterministically from perf deltas.
-    initialized = true;
-  };
-
-  const getMicroNow = (): bigint => {
-    ensureInit();
-
-    const nowPerf = perfNowMs();
-    const dMsNum = nowPerf - basePerf;
-
-    // Use floor to avoid jitter-induced forward/back micro oscillation.
-    const dMsInt =
-      dMsNum <= 0 ? 0n : BigInt(Math.floor(dMsNum));
-
-    const dMicro = deltaMicroFromDeltaMs(dMsInt);
-    return baseMicro + dMicro;
-  };
-
-  const getPulseNow = (): number => {
-    const pμ = getMicroNow();
-    const p = floorDivE(pμ, 1_000_000n);
-    return toSafeNumber(p);
-  };
-
-  const publish = (): void => {
-    const pμ = getMicroNow();
-    listeners.forEach((fn) => fn(pμ));
-  };
-
-  const sealNow = (): void => {
-    const pμ = getMicroNow();
-    baseMicro = pμ;
-    basePerf = perfNowMs();
-    saveBase();
-  };
-
-  const start = (): void => {
-    if (typeof window === "undefined") return;
-    if (intervalId !== null) return;
-
-    const onVis = (): void => {
-      if (typeof document === "undefined") return;
-      if (document.visibilityState === "hidden") sealNow();
-    };
-    const onPageHide = (): void => sealNow();
-
-    visHandler = onVis;
-    pageHideHandler = onPageHide;
-
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", onVis, { passive: true });
-    }
-    window.addEventListener("pagehide", onPageHide, { passive: true });
-
-    // 4Hz UI cadence is enough for “live” header without thrash.
-    intervalId = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-      publish();
-    }, 250);
-  };
-
-  const stopIfIdle = (): void => {
-    if (listeners.size !== 0) return;
-
-    if (intervalId !== null) {
-      window.clearInterval(intervalId);
-      intervalId = null;
-    }
-
-    if (typeof document !== "undefined" && visHandler) {
-      document.removeEventListener("visibilitychange", visHandler);
-    }
-    if (pageHideHandler) {
-      window.removeEventListener("pagehide", pageHideHandler);
-    }
-
-    visHandler = null;
-    pageHideHandler = null;
-
-    // Seal once more at stop boundary (keeps continuity within deterministic pulse domain)
-    try {
-      sealNow();
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const subscribe = (fn: PulseClockListener): (() => void) => {
-    ensureInit();
-    listeners.add(fn);
-    start();
-
-    // Immediate publish to avoid any “0” paint.
-    try {
-      fn(getMicroNow());
-    } catch {
-      /* ignore */
-    }
-
-    return () => {
-      listeners.delete(fn);
-      stopIfIdle();
-    };
-  };
-
-  const hardSealMicro = (pμ: bigint): void => {
-    ensureInit();
-    baseMicro = pμ;
-    basePerf = perfNowMs();
-    saveBase();
-    publish();
-  };
-
-  return { getMicroNow, getPulseNow, subscribe, hardSealMicro };
-})();
-
-/* ──────────────────────────────────────────────────────────────────────────────
-   KKS v1.0 display math (exact step) — derived from μpulses
+   KKS v1.0 display math (exact step)
 ────────────────────────────────────────────────────────────────────────────── */
 const BEATS_PER_DAY = 36;
 const STEPS_PER_BEAT = 44;
+const STEPS_PER_DAY = BEATS_PER_DAY * STEPS_PER_BEAT;
+
+// Canon breath count per day (precision)
+const PULSES_PER_DAY = 17_491.270421;
 
 const ARK_COLORS: readonly string[] = [
   "var(--chakra-ark-0)",
@@ -542,43 +260,43 @@ type BeatStepDMY = {
   year: number; // 0-based
 };
 
-function computeBeatStepDMYFromMicro(pμ: bigint): BeatStepDMY {
-  // ✅ Beat/Step: derived from TRUE day length (N_DAY_MICRO), not the 17,424 grid.
-  // steps/day = 36 * 44 = 1584
-  const stepsPerDayBI = BigInt(BEATS_PER_DAY * STEPS_PER_BEAT);
-  const stepsPerBeatBI = BigInt(STEPS_PER_BEAT);
+function computeBeatStepDMY(m: KaiMoment): BeatStepDMY {
+  const pulse = readNum(m, "pulse") ?? 0;
 
-  // μpulses into current day (0..N_DAY_MICRO-1), safe for negative values too
-  const posInDay = modE(pμ, N_DAY_MICRO);
+  const pulseInDay = modPos(pulse, PULSES_PER_DAY);
+  const dayFrac = PULSES_PER_DAY > 0 ? pulseInDay / PULSES_PER_DAY : 0;
 
-  // stepOfDay = floor( posInDay * stepsPerDay / N_DAY_MICRO )
-  const stepOfDayBI = (posInDay * stepsPerDayBI) / N_DAY_MICRO;
+  const rawStepOfDay = Math.floor(dayFrac * STEPS_PER_DAY);
+  const stepOfDay = Math.min(STEPS_PER_DAY - 1, Math.max(0, rawStepOfDay));
 
-  const beatBI = stepOfDayBI / stepsPerBeatBI; // 0..35
-  const stepBI = stepOfDayBI % stepsPerBeatBI; // 0..43
+  const beat = Math.min(BEATS_PER_DAY - 1, Math.max(0, Math.floor(stepOfDay / STEPS_PER_BEAT)));
+  const step = Math.min(
+    STEPS_PER_BEAT - 1,
+    Math.max(0, stepOfDay - beat * STEPS_PER_BEAT),
+  );
 
-  const beat = Math.min(BEATS_PER_DAY - 1, Math.max(0, toSafeNumber(beatBI)));
-  const step = Math.min(STEPS_PER_BEAT - 1, Math.max(0, toSafeNumber(stepBI)));
+  const dayIndexFromMoment =
+    readNum(m, "dayIndex") ?? readNum(m, "dayIndex0") ?? readNum(m, "dayIndexSinceGenesis");
 
-  // Day index: exact μpulse day math (no float)
-  const dayIndexBI = floorDivE(pμ, N_DAY_MICRO);
+  const eps = 1e-9;
+  const dayIndex =
+    dayIndexFromMoment !== null ? Math.floor(dayIndexFromMoment) : Math.floor((pulse + eps) / PULSES_PER_DAY);
 
-  const daysPerYearBI = BigInt(DAYS_PER_YEAR);
-  const daysPerMonthBI = BigInt(DAYS_PER_MONTH);
-  const monthsPerYearBI = BigInt(MONTHS_PER_YEAR);
+  const daysPerYear = Number.isFinite(DAYS_PER_YEAR) ? DAYS_PER_YEAR : 336;
+  const daysPerMonth = Number.isFinite(DAYS_PER_MONTH) ? DAYS_PER_MONTH : 42;
+  const monthsPerYear = Number.isFinite(MONTHS_PER_YEAR) ? MONTHS_PER_YEAR : 8;
 
-  const yearBI = floorDivE(dayIndexBI, daysPerYearBI);
-  const dayInYearBI = modE(dayIndexBI, daysPerYearBI);
+  const year = Math.floor(dayIndex / daysPerYear);
+  const dayInYear = modPos(dayIndex, daysPerYear);
 
-  let monthIndexBI = dayInYearBI / daysPerMonthBI;
-  if (monthIndexBI < 0n) monthIndexBI = 0n;
-  if (monthIndexBI > monthsPerYearBI - 1n) monthIndexBI = monthsPerYearBI - 1n;
+  let monthIndex = Math.floor(dayInYear / daysPerMonth);
+  if (monthIndex < 0) monthIndex = 0;
+  if (monthIndex > monthsPerYear - 1) monthIndex = monthsPerYear - 1;
 
-  const dayInMonthBI = dayInYearBI - monthIndexBI * daysPerMonthBI;
+  const dayInMonth = dayInYear - monthIndex * daysPerMonth;
 
-  const month = toSafeNumber(monthIndexBI) + 1;
-  const day = toSafeNumber(dayInMonthBI) + 1;
-  const year = toSafeNumber(yearBI);
+  const month = monthIndex + 1;
+  const day = Math.floor(dayInMonth) + 1;
 
   return { beat, step, day, month, year };
 }
@@ -589,43 +307,6 @@ function formatBeatStepLabel(v: BeatStepDMY): string {
 
 function formatDMYLabel(v: BeatStepDMY): string {
   return `D${v.day}/M${v.month}/Y${v.year}`;
-}
-
-type KaiSnap = {
-  pμ: bigint;
-  pulse: number;
-  pulseStr: string;
-  beatStepDMY: BeatStepDMY;
-  beatStepLabel: string;
-  dmyLabel: string;
-  weekday: Weekday;
-  chakraDay: ChakraDay;
-};
-
-function snapshotFromMicro(pμ: bigint): KaiSnap {
-  const pulseBI = floorDivE(pμ, 1_000_000n);
-  const pulse = toSafeNumber(pulseBI);
-  const pulseStr = formatPulse(pulse);
-
-  const dayIndexBI = floorDivE(pμ, N_DAY_MICRO);
-  const weekdayIdx = toSafeNumber(modE(dayIndexBI, BigInt(WEEKDAYS.length)));
-  const weekday = WEEKDAYS[weekdayIdx] ?? WEEKDAYS[0];
-  const chakraDay = DAY_TO_CHAKRA[weekday];
-
-  const bsd = computeBeatStepDMYFromMicro(pμ);
-  const beatStepLabel = formatBeatStepLabel(bsd);
-  const dmyLabel = formatDMYLabel(bsd);
-
-  return {
-    pμ,
-    pulse,
-    pulseStr,
-    beatStepDMY: bsd,
-    beatStepLabel,
-    dmyLabel,
-    weekday,
-    chakraDay,
-  };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────────
@@ -639,7 +320,7 @@ function useDisableZoom(): void {
 
     const nowTs = (e: TouchEvent): number => {
       const ts = (e as unknown as { timeStamp?: number }).timeStamp;
-      return typeof ts === "number" && Number.isFinite(ts) ? ts : perfNowMs();
+      return typeof ts === "number" && Number.isFinite(ts) ? ts : performance.now();
     };
 
     const onTouchEnd = (e: TouchEvent): void => {
@@ -900,7 +581,11 @@ function getPortalHost(): HTMLElement {
 /* ──────────────────────────────────────────────────────────────────────────────
    Popovers
 ────────────────────────────────────────────────────────────────────────────── */
-function ExplorerPopover({ open, onClose, children }: ExplorerPopoverProps): React.JSX.Element | null {
+function ExplorerPopover({
+  open,
+  onClose,
+  children,
+}: ExplorerPopoverProps): React.JSX.Element | null {
   const isClient = typeof document !== "undefined";
   const vvSize = useVisualViewportSize();
 
@@ -954,12 +639,15 @@ function ExplorerPopover({ open, onClose, children }: ExplorerPopoverProps): Rea
     };
   }, [open, isClient, vvSize]);
 
-  const onBackdropPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>): void => {
-    if (e.target === e.currentTarget) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  }, []);
+  const onBackdropPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>): void => {
+      if (e.target === e.currentTarget) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    [],
+  );
 
   const onBackdropClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>): void => {
@@ -972,10 +660,13 @@ function ExplorerPopover({ open, onClose, children }: ExplorerPopoverProps): Rea
     [onClose],
   );
 
-  const onClosePointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>): void => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
+  const onClosePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>): void => {
+      e.preventDefault();
+      e.stopPropagation();
+    },
+    [],
+  );
 
   if (!open || !isClient || !portalHost) return null;
 
@@ -1067,12 +758,15 @@ function KlockPopover({ open, onClose, children }: KlockPopoverProps): React.JSX
     };
   }, [open, isClient, vvSize]);
 
-  const onBackdropPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>): void => {
-    if (e.target === e.currentTarget) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  }, []);
+  const onBackdropPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>): void => {
+      if (e.target === e.currentTarget) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    [],
+  );
 
   const onBackdropClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>): void => {
@@ -1085,10 +779,13 @@ function KlockPopover({ open, onClose, children }: KlockPopoverProps): React.JSX
     [onClose],
   );
 
-  const onClosePointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>): void => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
+  const onClosePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>): void => {
+      e.preventDefault();
+      e.stopPropagation();
+    },
+    [],
+  );
 
   if (!open || !isClient || !portalHost) return null;
 
@@ -1162,8 +859,7 @@ export function SigilMintRoute(): React.JSX.Element {
   const navigate = useNavigate();
   const [open, setOpen] = useState<boolean>(true);
 
-  // Deterministic “now” pulse from internal pulse clock (no Date API)
-  const initialPulse = useMemo<number>(() => pulseClock.getPulseNow(), []);
+  const initialPulse = useMemo<number>(() => momentFromUTC(new Date()).pulse, []);
 
   const handleClose = useCallback((): void => {
     setOpen(false);
@@ -1250,7 +946,27 @@ function LiveKaiButton({
   breathMs,
   breathsPerDay,
 }: LiveKaiButtonProps): React.JSX.Element {
-  const [snap, setSnap] = useState<KaiSnap>(() => snapshotFromMicro(pulseClock.getMicroNow()));
+  const [snap, setSnap] = useState<{
+    pulse: number;
+    pulseStr: string;
+    beatStepDMY: BeatStepDMY;
+    beatStepLabel: string;
+    dmyLabel: string;
+    chakraDay: ChakraDay;
+  }>(() => {
+    const m = momentFromUTC(new Date());
+    const pulse = readNum(m, "pulse") ?? 0;
+    const pulseStr = formatPulse(pulse);
+    const bsd = computeBeatStepDMY(m);
+    return {
+      pulse,
+      pulseStr,
+      beatStepDMY: bsd,
+      beatStepLabel: formatBeatStepLabel(bsd),
+      dmyLabel: formatDMYLabel(bsd),
+      chakraDay: m.chakraDay,
+    };
+  });
 
   const neonTextStyle = useMemo<CSSProperties>(
     () => ({
@@ -1271,12 +987,11 @@ function LiveKaiButton({
   );
 
   const arcColor = useMemo(() => {
-    const pos = modE(snap.pμ, N_DAY_MICRO);
-    const arcSize = N_DAY_MICRO / BigInt(ARK_COLORS.length);
-    const idxBI = arcSize === 0n ? 0n : pos / arcSize;
-    const idx = Math.min(ARK_COLORS.length - 1, Math.max(0, toSafeNumber(idxBI)));
+    const pos = modPos(snap.pulse, PULSES_PER_DAY);
+    const arcSize = PULSES_PER_DAY / ARK_COLORS.length;
+    const idx = Math.min(ARK_COLORS.length - 1, Math.max(0, Math.floor(pos / arcSize)));
     return ARK_COLORS[idx] ?? ARK_COLORS[0];
-  }, [snap.pμ]);
+  }, [snap.pulse]);
 
   const chakraColor = useMemo(() => {
     return CHAKRA_DAY_COLORS[snap.chakraDay] ?? CHAKRA_DAY_COLORS.Heart;
@@ -1301,21 +1016,42 @@ function LiveKaiButton({
   );
 
   useEffect(() => {
-    // Subscribe to the internal pulse clock (monotonic + deterministic)
-    return pulseClock.subscribe((pμNow) => {
-      const next = snapshotFromMicro(pμNow);
+    let alive = true;
+
+    const tick = (): void => {
+      if (!alive) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+
+      const m = momentFromUTC(new Date());
+      const pulse = readNum(m, "pulse") ?? 0;
+      const pulseStr = formatPulse(pulse);
+
+      const bsd = computeBeatStepDMY(m);
+      const beatStepLabel = formatBeatStepLabel(bsd);
+      const dmyLabel = formatDMYLabel(bsd);
+
       setSnap((prev) => {
-        if (
-          prev.pulseStr === next.pulseStr &&
-          prev.beatStepLabel === next.beatStepLabel &&
-          prev.dmyLabel === next.dmyLabel &&
-          prev.chakraDay === next.chakraDay
-        ) {
+        if (prev.pulseStr === pulseStr && prev.beatStepLabel === beatStepLabel && prev.dmyLabel === dmyLabel) {
           return prev;
         }
-        return next;
+        return {
+          pulse,
+          pulseStr,
+          beatStepDMY: bsd,
+          beatStepLabel,
+          dmyLabel,
+          chakraDay: m.chakraDay,
+        };
       });
-    });
+    };
+
+    tick();
+    const id = window.setInterval(tick, 250);
+
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
   }, []);
 
   const liveTitle = useMemo(() => {
@@ -1378,27 +1114,6 @@ function LiveKaiButton({
 }
 
 /* ──────────────────────────────────────────────────────────────────────────────
-   NO AUTO-RELOAD ON SW CONTROL (prevents “first load reload”)
-   - Many SW setups assign navigator.serviceWorker.oncontrollerchange to reload.
-   - We neutralize that property handler here (does NOT change your warm/caching flow).
-────────────────────────────────────────────────────────────────────────────── */
-function useNoAutoReloadOnSwControllerChange(): void {
-  useEffect(() => {
-    if (typeof navigator === "undefined") return;
-    if (!("serviceWorker" in navigator)) return;
-
-    const sw = navigator.serviceWorker;
-
-    const prev = sw.oncontrollerchange;
-    sw.oncontrollerchange = null;
-
-    return () => {
-      sw.oncontrollerchange = prev;
-    };
-  }, []);
-}
-
-/* ──────────────────────────────────────────────────────────────────────────────
    AppChrome
 ────────────────────────────────────────────────────────────────────────────── */
 export function AppChrome(): React.JSX.Element {
@@ -1407,7 +1122,6 @@ export function AppChrome(): React.JSX.Element {
 
   useDisableZoom();
   usePerfMode();
-  useNoAutoReloadOnSwControllerChange();
 
   // Re-kill splash on "/" before paint (guarantee)
   useIsoLayoutEffect(() => {
@@ -1463,7 +1177,6 @@ export function AppChrome(): React.JSX.Element {
   }, [heavyUiReady]);
 
   // SW warm-up (idle-only + focus cadence, abort-safe, respects Save-Data/2G)
-  // ✅ unchanged behavior — only hardening is “no auto reload” hook above.
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return undefined;
 
