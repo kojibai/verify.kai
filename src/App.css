@@ -1822,6 +1822,7 @@ a:hover {
   .nav-list {
     display: flex;
     flex-wrap: nowrap;
+    align-items: stretch;
     gap: 0.5rem;
 
     padding: 0.7rem;
@@ -1871,11 +1872,30 @@ a:hover {
       rgba(6, 14, 35, 0.92),
       rgba(6, 14, 35, 0)
     );
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 0.28rem;
+    gap: 0.2rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(245, 247, 255, 0.78);
+    text-shadow: 0 0 8px rgba(51, 246, 255, 0.42);
+    animation: nav-swipe-hint 3.6s ease-in-out infinite;
+    content: "Swipe →";
   }
 
   .nav-item {
-    flex: 0 0 calc((100% - 0.5rem) / 2);
+    flex: 0 0 clamp(130px, 38vw, 170px);
+    height: auto;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.3rem;
+    padding: 0.62rem 0.66rem;
 
     scroll-snap-align: start;
     scroll-snap-stop: always;
@@ -1996,7 +2016,8 @@ a:hover {
   }
 
   .nav-item {
-    flex: 0 0 72%;
+    flex: 0 0 clamp(120px, 48vw, 158px);
+    height: auto;
   }
 }
 
@@ -2023,7 +2044,8 @@ a:hover {
   }
 
   .nav-item {
-    flex: 0 0 78%;
+    flex: 0 0 clamp(112px, 60vw, 148px);
+    height: auto;
   }
 
   .nav-head,
@@ -2037,6 +2059,24 @@ a:hover {
 
   .panel-foot {
     padding: 0.5rem 0.78rem calc(0.62rem + var(--safe-bottom));
+  }
+}
+
+@keyframes nav-swipe-hint {
+  0% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+  15% {
+    opacity: 0.9;
+  }
+  55% {
+    opacity: 0.9;
+    transform: translateX(-5px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(0);
   }
 }
 
