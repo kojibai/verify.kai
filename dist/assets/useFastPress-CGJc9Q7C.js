@@ -1,0 +1,1 @@
+import{Tn as e,jn as t}from"./index-BUaEhjRR.js";var n=t(e(),1);function r(e){let t=(0,n.useRef)(!1);return{onPointerUp:(0,n.useCallback)(n=>{n.pointerType&&n.pointerType!==`mouse`&&(t.current=!0,e(n),setTimeout(()=>{t.current=!1},0))},[e]),onClick:(0,n.useCallback)(n=>{if(t.current){t.current=!1;return}e(n)},[e])}}export{r as t};
