@@ -123,7 +123,7 @@ export function phiSpiralLevelFromPulse(pulse: number): number {
 // ──────────────────────────────────────────────────────────────
 // Engine constants — exact integers in μpulses (1 pulse = 1_000_000 μpulses)
 // ──────────────────────────────────────────────────────────────
-const MU_PER_PULSE = 1_000_000n as const;
+const MU_PER_PULSE = 1_000_000n;
 
 // Exact micro-pulses per day (17,491.270421 pulses/day)
 const MU_PER_DAY = 17_491_270_421n as const;

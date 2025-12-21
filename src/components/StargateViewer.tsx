@@ -17,6 +17,8 @@ import {
   type FC,
 } from "react";
 import KaiSigil, { type KaiSigilProps } from "./KaiSigil";
+import { kaiPulseNowBridge } from "../utils/kai_pulse";
+import { useKaiTime } from "../hooks/useKaiTime";
 import "./StargateViewer.css";
 
 /* ════════════ Public Props ═════════════════════════════════════ */
@@ -30,13 +32,10 @@ export interface StargateViewerProps {
 }
 
 /* ════════════ Time maths (same as Kai-API) ═════════════════════ */
-const GENESIS_TS        = Date.UTC(2024, 4, 10, 6, 45, 40);
-const PULSE_MS          = 5_236;                 // Eternal Pulse
 const PULSES_PER_STEP   = 11;
 const STEPS_PER_BEAT    = 44;
 const PULSES_PER_BEAT   = PULSES_PER_STEP * STEPS_PER_BEAT; // 484
 const DIVISIONS         = 11;                    // micro-breaths
-const TICK_MS           = PULSE_MS / DIVISIONS / 4;          // ≈119 ms
 const PHI               = (1 + Math.sqrt(5)) / 2;
 
 /* ════════════ Chakra helpers ═══════════════════════════════════ */
@@ -51,8 +50,6 @@ const CHAKRA_NAMES = [
 // Cross-browser fullscreen signatures without `any`
 
 /* ════════════ Utils ════════════════════════════════════════════ */
-const nowPulse = (): number => Math.floor((Date.now() - GENESIS_TS) / PULSE_MS);
-
 const isIOS = (): boolean => {
   if (typeof navigator === "undefined") return false; // SSR/Node
   const { userAgent, vendor, platform, maxTouchPoints } = navigator;
@@ -76,9 +73,12 @@ const StargateViewer: FC<StargateViewerProps> = ({
   baseHue    = 180,
   controls   = true,
 }) => {
+  const { timeSource } = useKaiTime();
   /* — state — */
   const [sigilUrl,  setSigilUrl ] = useState<string | undefined>(initialUrl);
-  const [livePulse, setLivePulse] = useState<number>(initialPulse ?? nowPulse());
+  const [livePulse, setLivePulse] = useState<number>(
+    initialPulse ?? timeSource.nowPulse()
+  );
   const [paused,    setPaused   ] = useState<boolean>(prefersReducedMotion());
   const [isFull,    setIsFull   ] = useState<boolean>(false);
   const [tilt,      setTilt     ] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -134,20 +134,20 @@ const StargateViewer: FC<StargateViewerProps> = ({
 
     let lastBeat = beat;
     let lastStep = stepPct;
+    let lastPulse = livePulse;
+    let raf: number | null = null;
 
     const tick = (): void => {
-      /* time → sigil maths */
-      const now          = Date.now();
-      const msSinceGen   = now - GENESIS_TS;
-      const pulsePhase   = (msSinceGen % PULSE_MS) / PULSE_MS; // 0-1
-      const subPhase     = (msSinceGen % (PULSE_MS / DIVISIONS)) / (PULSE_MS / DIVISIONS);
-      const breath       = 0.5 + 0.5 * Math.sin(pulsePhase * 2 * Math.PI * PHI);
+      const pulseFloat = kaiPulseNowBridge(timeSource);
+      const pulsePhase = pulseFloat - Math.floor(pulseFloat); // 0-1
+      const subPhase = (pulsePhase * DIVISIONS) % 1;
+      const breath = 0.5 + 0.5 * Math.sin(pulsePhase * 2 * Math.PI * PHI);
 
-      const pulse        = nowPulse();
-      const inBeat       = pulse % PULSES_PER_BEAT;
-      const beatIdx      = Math.floor(pulse / PULSES_PER_BEAT) % 36;
+      const pulse = Math.floor(pulseFloat);
+      const inBeat = pulse % PULSES_PER_BEAT;
+      const beatIdx = Math.floor(pulse / PULSES_PER_BEAT) % 36;
       const pulsesInStep = inBeat % PULSES_PER_STEP;
-      const stepPercent  = pulsesInStep / PULSES_PER_STEP;
+      const stepPercent = pulsesInStep / PULSES_PER_STEP;
 
       /* CSS vars on the gate */
       gate.style.setProperty("--kai-phase",  pulsePhase.toString());
@@ -169,7 +169,10 @@ const StargateViewer: FC<StargateViewerProps> = ({
       }
 
       /* update counters only when they change */
-      if (pulse !== livePulse) setLivePulse(pulse);
+      if (pulse !== lastPulse) {
+        lastPulse = pulse;
+        setLivePulse(pulse);
+      }
       if (beatIdx !== lastBeat) {
         lastBeat = beatIdx;
         setBeat(beatIdx);
@@ -179,27 +182,22 @@ const StargateViewer: FC<StargateViewerProps> = ({
         lastStep = stepPercent;
         setStepPct(stepPercent);
       }
+
+      raf = requestAnimationFrame(tick);
     };
 
-    /* battery-friendly interval; paused on tab hide */
-    let id: number | null = window.setInterval(tick, TICK_MS);
     const onVis = () => {
-      if (document.hidden) {
-        if (id !== null) { clearInterval(id); id = null; }
-      } else if (!paused && id === null) {
-        tick();
-        id = window.setInterval(tick, TICK_MS);
-      }
+      if (!document.hidden && raf === null) raf = requestAnimationFrame(tick);
     };
     document.addEventListener("visibilitychange", onVis);
-    tick();
+    raf = requestAnimationFrame(tick);
 
     return () => {
-      if (id !== null) clearInterval(id);
       document.removeEventListener("visibilitychange", onVis);
+      if (raf !== null) cancelAnimationFrame(raf);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paused, tilt.x, tilt.y, baseHue]);
+  }, [paused, tilt.x, tilt.y, baseHue, timeSource]);
 
   /* ══ Gyro + pointer parallax (mobile + desktop) ═══════════════ */
   useEffect(() => {
