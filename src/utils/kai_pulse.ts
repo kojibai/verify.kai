@@ -163,6 +163,139 @@ const chakraForWeekdayIndex = (idx: number): { weekday: Weekday; chakraDay: Chak
 };
 
 // ─────────────────────────────────────────────────────────────
+// KaiTimeSource — monotonic φ-clock rooted in deterministic seeds
+// ─────────────────────────────────────────────────────────────
+type PerfClock = { now: () => number; timeOrigin: number };
+
+type SignedPulseSnapshot = { pulse?: number; microPulses?: bigint; capturedMs?: number };
+
+const DEFAULT_SIGNED_SNAPSHOT: SignedPulseSnapshot = {
+  pulse: 0,
+  microPulses: 0n,
+  capturedMs: GENESIS_TS,
+};
+
+const resolvePerfClock = (): PerfClock => {
+  const perf = globalThis.performance;
+  const now =
+    perf && typeof perf.now === "function" ? () => perf.now() : () => Date.now();
+  const timeOrigin =
+    perf && typeof perf.timeOrigin === "number" ? perf.timeOrigin : Date.now();
+  return { now, timeOrigin };
+};
+
+const parsePulseNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "string" && value.trim().length) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+};
+
+const readOverridePulse = (): number | null => {
+  const g = globalThis as Record<string, unknown>;
+  const rc =
+    (g.__KLOCKRC__ as Record<string, unknown> | undefined) ??
+    (g.__klockrc as Record<string, unknown> | undefined) ??
+    (g.klockrc as Record<string, unknown> | undefined);
+
+  const candidates = [
+    g.override_pulse,
+    g.overridePulse,
+    rc?.override_pulse,
+    rc?.pulse,
+  ];
+
+  for (const value of candidates) {
+    const parsed = parsePulseNumber(value);
+    if (parsed !== null) return parsed;
+  }
+
+  const envCandidate =
+    typeof process !== "undefined" && process?.env
+      ? process.env.KAI_OVERRIDE_PULSE ?? process.env.OVERRIDE_PULSE
+      : undefined;
+  const metaEnv =
+    typeof import.meta !== "undefined"
+      ? (import.meta as { env?: Record<string, string | undefined> }).env
+      : undefined;
+  const metaCandidate = metaEnv?.VITE_OVERRIDE_PULSE ?? metaEnv?.OVERRIDE_PULSE;
+
+  return parsePulseNumber(envCandidate ?? metaCandidate);
+};
+
+const readSignedSnapshot = (): SignedPulseSnapshot | null => {
+  const g = globalThis as Record<string, unknown>;
+  const snap = g.__KAI_SIGNED_PULSE_SNAPSHOT__ as SignedPulseSnapshot | undefined;
+  if (snap && (typeof snap.pulse === "number" || typeof snap.microPulses === "bigint")) {
+    return snap;
+  }
+  return DEFAULT_SIGNED_SNAPSHOT;
+};
+
+export type KaiTimeSourceOptions = {
+  overridePulse?: number | bigint;
+  snapshot?: SignedPulseSnapshot;
+  clock?: PerfClock;
+};
+
+export class KaiTimeSource {
+  private readonly clock: PerfClock;
+  private readonly seedMicroPulses: bigint;
+  private readonly perfAtSeed: number;
+
+  constructor(options: KaiTimeSourceOptions = {}) {
+    this.clock = options.clock ?? resolvePerfClock();
+    const overridePulse =
+      options.overridePulse !== undefined
+        ? parsePulseNumber(options.overridePulse)
+        : readOverridePulse();
+    const snapshot = options.snapshot ?? readSignedSnapshot();
+
+    const snapshotMicro =
+      snapshot?.microPulses ??
+      (typeof snapshot?.pulse === "number"
+        ? BigInt(Math.trunc(snapshot.pulse)) * 1_000_000n
+        : null);
+
+    const epochMs = BigInt(
+      Math.round(this.clock.timeOrigin + this.clock.now())
+    );
+    const bridgedMicro = microPulsesSinceGenesis(epochMs);
+
+    this.seedMicroPulses =
+      overridePulse !== null
+        ? BigInt(Math.trunc(overridePulse)) * 1_000_000n
+        : snapshotMicro ?? bridgedMicro;
+
+    this.perfAtSeed = this.clock.now();
+  }
+
+  /** Current μpulses using monotonic performance deltas. */
+  nowMicroPulses(): bigint {
+    const deltaUs = BigInt(
+      Math.round((this.clock.now() - this.perfAtSeed) * 1000)
+    );
+    const deltaMicro = mulDivRoundHalfEven(
+      deltaUs,
+      INV_Tx1000_NUM,
+      INV_Tx1000_DEN * 1000n
+    );
+    return this.seedMicroPulses + deltaMicro;
+  }
+
+  /** Current pulse index (floor) based on the internal μpulse counter. */
+  nowPulse(): number {
+    return toSafeNumber(floorDivE(this.nowMicroPulses(), 1_000_000n));
+  }
+}
+
+const kaiTimeSource = new KaiTimeSource();
+export const getKaiTimeSource = () => kaiTimeSource;
+
+// ─────────────────────────────────────────────────────────────
 // BIGINT ISO-8601 PARSER (signed/zero years; proleptic Gregorian)
 //   - No reliance on JS Date for strings
 //   - Unlimited range (BigInt ms since Unix epoch)
@@ -253,8 +386,8 @@ export function microPulsesSinceGenesis(utc: string | Date | bigint): bigint {
   return mulDivRoundHalfEven(deltaMs, INV_Tx1000_NUM, INV_Tx1000_DEN);
 }
 /** Bridge used by UI timers: current pulse as a fractional number (μpulse precise). */
-export function kaiPulseNowBridge(): number {
-  const pμ = microPulsesSinceGenesis(BigInt(Date.now()));
+export function kaiPulseNowBridge(timeSource: KaiTimeSource = getKaiTimeSource()): number {
+  const pμ = timeSource.nowMicroPulses();
 
   // Safe near “now”; clamp if someone runs this millions of years out.
   const LIM = 9_007_199_254_740_991n; // Number.MAX_SAFE_INTEGER as bigint
@@ -266,19 +399,22 @@ export function kaiPulseNowBridge(): number {
 /** Milliseconds until the next integer pulse boundary (>= 0).
  * Arg retained for back-compat; boundary is computed from local φ-bridge time.
  */
-export function msUntilNextPulseBoundary(pulseNow?: number): number {
+export function msUntilNextPulseBoundary(
+  pulseNow?: number,
+  timeSource: KaiTimeSource = getKaiTimeSource(),
+): number {
   const pμNow =
     typeof pulseNow === "number" && Number.isFinite(pulseNow)
       ? (() => {
           // pulseNow is (μpulses / 1e6) from kaiPulseNowBridge() → recover μpulses safely.
           const approx = Math.round(pulseNow * 1_000_000);
-          if (!Number.isFinite(approx)) return microPulsesSinceGenesis(BigInt(Date.now()));
+          if (!Number.isFinite(approx)) return timeSource.nowMicroPulses();
           // Clamp to safe BigInt range if someone hands insane values.
           const LIM = Number.MAX_SAFE_INTEGER;
           const clamped = Math.max(-LIM, Math.min(LIM, approx));
           return BigInt(clamped);
         })()
-      : microPulsesSinceGenesis(BigInt(Date.now()));
+      : timeSource.nowMicroPulses();
 
   const next = (floorDivE(pμNow, 1_000_000n) + 1n) * 1_000_000n; // next whole pulse
   const deltaμ = next - pμNow;                                   // 0..1_000_000
@@ -318,8 +454,12 @@ export function latticeFromMicroPulses(pμ: bigint): {
 }
 
 /** Full KaiMoment from any UTC input (string/Date/bigint). */
-export function momentFromUTC(utc: string | Date | bigint): KaiMoment {
-  const pμ = microPulsesSinceGenesis(utc);
+export function momentFromUTC(
+  utc?: string | Date | bigint,
+  timeSource: KaiTimeSource = getKaiTimeSource(),
+): KaiMoment {
+  const pμ =
+    typeof utc === "undefined" ? timeSource.nowMicroPulses() : microPulsesSinceGenesis(utc);
 
   // Integer pulse index (Euclidean floor toward −∞)
   const pulse = toSafeNumber(floorDivE(pμ, 1_000_000n));
@@ -431,14 +571,20 @@ export function parseKaiFromServer(json: {
 // ─────────────────────────────────────────────────────────────
 
 /** Local-only: compute KaiMoment for now or a provided ISO/Date/bigint. */
-export async function fetchKai(iso?: string | Date | bigint): Promise<KaiMoment> {
-  const input = typeof iso === "undefined" ? new Date() : iso;
-  return Promise.resolve(momentFromUTC(input));
+export async function fetchKai(
+  iso?: string | Date | bigint,
+  timeSource: KaiTimeSource = getKaiTimeSource(),
+): Promise<KaiMoment> {
+  return Promise.resolve(momentFromUTC(iso, timeSource));
 }
 
 /** Local-only: same as fetchKai. Kept for call-site compatibility. */
-export async function fetchKaiOrLocal(iso?: string | Date | bigint, now: Date = new Date()): Promise<KaiMoment> {
-  return Promise.resolve(momentFromUTC(typeof iso === "undefined" ? now : iso));
+export async function fetchKaiOrLocal(
+  iso?: string | Date | bigint,
+  now?: Date,
+  timeSource: KaiTimeSource = getKaiTimeSource(),
+): Promise<KaiMoment> {
+  return Promise.resolve(momentFromUTC(typeof iso === "undefined" ? now : iso, timeSource));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -471,8 +617,11 @@ export function buildBreathIso(minuteLocalISO: string, breathIdx: number): strin
 }
 
 /** Back-compat export for sigil page (`computeKaiLocally`) */
-export function computeKaiLocally(date: Date): KaiMoment {
-  return momentFromUTC(date);
+export function computeKaiLocally(
+  date?: Date | string | bigint,
+  timeSource: KaiTimeSource = getKaiTimeSource(),
+): KaiMoment {
+  return momentFromUTC(date, timeSource);
 }
 
 // ─────────────────────────────────────────────────────────────
