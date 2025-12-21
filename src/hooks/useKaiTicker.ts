@@ -1,29 +1,27 @@
 // src/hooks/useKaiTicker.ts
 import { useEffect, useRef, useState } from "react";
-import { PULSE_MS, computeKaiLocally } from "../utils/kai_pulse";
+import { msUntilNextSovereignPulse, sovereignPulseNow, PULSE_MS } from "../utils/sovereign_pulse";
+
+const hasPerformance = typeof performance !== "undefined";
 
 export function useKaiTicker() {
   const [pulse, setPulse] = useState<number | null>(null);
   const [msToNextPulse, setMsToNextPulse] = useState<number>(PULSE_MS);
-  const lastPulseAtRef = useRef<number | null>(null);
   const lastPulseRef = useRef<number | null>(null);
 
   useEffect(() => {
     let intervalId: number | null = null;
     const update = () => {
-      const calc = computeKaiLocally(new Date());
-      const now = Date.now();
-      if (lastPulseRef.current == null || calc.pulse !== lastPulseRef.current) {
-        lastPulseRef.current = calc.pulse;
-        lastPulseAtRef.current = now;
-        setPulse(calc.pulse);
+      const current = sovereignPulseNow();
+      if (lastPulseRef.current == null || current !== lastPulseRef.current) {
+        lastPulseRef.current = current;
+        setPulse(current);
         setMsToNextPulse(PULSE_MS);
-      } else {
-        const lastAt = lastPulseAtRef.current;
-        const rem = lastAt == null ? PULSE_MS : Math.max(0, PULSE_MS - (now - lastAt));
-        setPulse(calc.pulse);
-        setMsToNextPulse(rem);
+        return;
       }
+      const rem = msUntilNextSovereignPulse(current);
+      setPulse(current);
+      setMsToNextPulse(rem);
     };
     intervalId = window.setInterval(update, 50);
     update();

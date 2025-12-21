@@ -2,6 +2,7 @@
 // Engine: exact integers in μpulses + φ bridge via decimal.js (no drift; no float rounding in core)
 
 import Decimal from "decimal.js";
+import { MICRO_PER_PULSE, sovereignPulseNow } from "./utils/sovereign_pulse";
 
 // ──────────────────────────────────────────────────────────────
 // Canon constants (Kai-Klok KKS-1.0)
@@ -123,7 +124,7 @@ export function phiSpiralLevelFromPulse(pulse: number): number {
 // ──────────────────────────────────────────────────────────────
 // Engine constants — exact integers in μpulses (1 pulse = 1_000_000 μpulses)
 // ──────────────────────────────────────────────────────────────
-const MU_PER_PULSE = 1_000_000n as const;
+const MU_PER_PULSE = MICRO_PER_PULSE as const;
 
 // Exact micro-pulses per day (17,491.270421 pulses/day)
 const MU_PER_DAY = 17_491_270_421n as const;
@@ -149,6 +150,25 @@ const USE_DAILY_ANCHOR = true as const;
 // ──────────────────────────────────────────────────────────────
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const imod = (x: bigint, m: bigint) => ((x % m) + m) % m;
+const floorDivE = (a: bigint, d: bigint) => {
+  const q = a / d;
+  const r = a % d;
+  return r === 0n || a >= 0n ? q : q - 1n;
+};
+
+const resolvePulseSource = (input?: Date | number): number => {
+  if (typeof input === "number" && Number.isFinite(input)) return Math.trunc(input);
+  return sovereignPulseNow();
+};
+
+const muFromSource = (input?: Date | number): bigint =>
+  BigInt(resolvePulseSource(input)) * MU_PER_PULSE;
+
+const sunriseOffsetMu = (): bigint => {
+  const sec = getSunriseOffsetSecDec();
+  const micro = sec.mul(1_000_000).div(BREATH_SEC_DEC);
+  return BigInt(micro.toDecimalPlaces(0, Decimal.ROUND_HALF_EVEN).toString());
+};
 
 // Typed union + helper to avoid `any`
 type OffsetInput = number | string | Decimal;
@@ -156,13 +176,9 @@ function toDecimal(v: OffsetInput): Decimal {
   return v instanceof Decimal ? v : new Decimal(v as number | string);
 }
 
-// φ-bridge: Chronos (Unix ms) → μpulses since GENESIS, exact to 1 μpulse
-function muSinceGenesis(unixMs: number): bigint {
-  const deltaS = new Decimal(unixMs).minus(GENESIS_TS).div(1000);
-  const pulses = deltaS.div(BREATH_SEC_DEC);            // (s) / (3+√5) ⇒ pulses (Decimal)
-  const micro  = pulses.mul(1_000_000);                 // ⇒ μpulses (Decimal)
-  const floored = micro.toDecimalPlaces(0, Decimal.ROUND_FLOOR);
-  return BigInt(floored.toString());                   // exact integer μpulses
+// μpulses since GENESIS using the sovereign pulse source (no Chronos)
+function muSinceGenesis(input?: Date | number): bigint {
+  return muFromSource(input);
 }
 
 // μpulses → Unix ms (for UI-only timestamps; rounded to nearest ms, ties-to-even)
@@ -177,11 +193,16 @@ function unixMsFromMu(mu: bigint): number {
 /** Local storage (sunrise offset model) — store exact value as string */
 // ──────────────────────────────────────────────────────────────
 const KEY_OFFSET_SEC = "kai.sunrise.offsetSec"; // seconds after UTC midnight (may be fractional)
-const KEY_ANCHOR_ISO = "kai.sunrise.anchorISO"; // optional: last tap time for reference
 
 /** Read persisted sunrise offset (seconds after UTC midnight) as Decimal. */
 function getSunriseOffsetSecDec(): Decimal {
-  const raw = localStorage.getItem(KEY_OFFSET_SEC);
+  const raw = (() => {
+    try {
+      return typeof localStorage !== "undefined" ? localStorage.getItem(KEY_OFFSET_SEC) : null;
+    } catch {
+      return null;
+    }
+  })();
   try {
     return raw ? new Decimal(raw) : new Decimal(0);
   } catch {
@@ -199,20 +220,22 @@ export function setSunriseOffsetSec(sec: OffsetInput) {
   const d = toDecimal(sec);
   // Only for wall-clock offset relative to *UTC midnight* (human input); Kai math does not use 24h.
   const normalized = d.mod(86400).plus(86400).mod(86400); // ((sec % 86400)+86400)%86400
-  localStorage.setItem(KEY_OFFSET_SEC, normalized.toString());
-  localStorage.setItem(KEY_ANCHOR_ISO, new Date().toISOString());
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(KEY_OFFSET_SEC, normalized.toString());
+    }
+  } catch {
+    // ignore storage failures
+  }
 }
 
 /** Convenience: set offset so that "sun rose now". */
-export function tapSunroseNow(now = new Date()) {
-  const utcMid = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  // Date gives ms resolution; fine for an *offset*.
-  const sec = new Decimal(now.getTime() - utcMid.getTime()).div(1000);
-  setSunriseOffsetSec(sec);
+export function tapSunroseNow() {
+  setSunriseOffsetSec(0);
 }
 
 /** Convenience: set offset from HH:MM[:SS[.fff…]] local wall time. */
-export function setSunriseFromLocalHHMM(hhmm: string, now = new Date()) {
+export function setSunriseFromLocalHHMM(hhmm: string) {
   const m = hhmm.match(/^(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/);
   if (!m) return;
   const hh = Math.min(23, Math.max(0, Number(m[1])));
@@ -220,13 +243,7 @@ export function setSunriseFromLocalHHMM(hhmm: string, now = new Date()) {
   const ss = m[3] ? Math.min(59, Math.max(0, Number(m[3]))) : 0;
   const frac = m[4] ? new Decimal("0." + m[4]) : new Decimal(0);
 
-  const localMid = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  const localCandidate = new Date(localMid.getTime());
-  localCandidate.setHours(hh, mm, ss, 0);
-
-  const candidateMs = new Decimal(localCandidate.getTime()).plus(frac.mul(1000));
-  const utcMid = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const offsetSec = candidateMs.minus(utcMid.getTime()).div(1000);
+  const offsetSec = new Decimal(hh * 3600 + mm * 60 + ss).plus(frac);
   setSunriseOffsetSec(offsetSec);
 }
 
@@ -236,22 +253,14 @@ export function setSunriseFromLocalHHMM(hhmm: string, now = new Date()) {
 
 /** Genesis-anchored: first local sunrise ≥ GENESIS_TS (exact). */
 function muGenesisFirstSunriseLocal(): bigint {
-  const offSec = getSunriseOffsetSecDec();
-  const g = new Date(GENESIS_TS);
-  const utcMid0 = Date.UTC(g.getUTCFullYear(), g.getUTCMonth(), g.getUTCDate());
-
-  const candidateMu = muSinceGenesis(
-    new Decimal(utcMid0).plus(offSec.mul(1000)).toNumber()
-  );
-  const genesisMu = muSinceGenesis(GENESIS_TS);
-
-  return (candidateMu <= genesisMu) ? candidateMu + MU_PER_DAY : candidateMu;
+  const offset = sunriseOffsetMu();
+  return offset <= 0n ? offset + MU_PER_DAY : offset;
 }
 
 /** GENESIS-tiling window: phase-locked to muGenesisFirstSunriseLocal. */
-function muSolarWindowGenesis(now = new Date()) {
+function muSolarWindowGenesis(now?: Date | number) {
   const muFirst = muGenesisFirstSunriseLocal();
-  const muNow = muSinceGenesis(now.getTime());
+  const muNow = muFromSource(now);
   const diff = muNow - muFirst;
   const k = diff >= 0n ? diff / MU_PER_DAY : -(((-diff) + MU_PER_DAY - 1n) / MU_PER_DAY);
   const muLast = muFirst + k * MU_PER_DAY;
@@ -260,35 +269,23 @@ function muSolarWindowGenesis(now = new Date()) {
 }
 
 /** DAILY-anchored window: today’s UTC-midnight + stored offset (feels like old impl). */
-function muSolarWindowDaily(now = new Date()) {
-  const offSec = getSunriseOffsetSecDec();
-  const muNow  = muSinceGenesis(now.getTime());
-
-  const utcMidTodayMs = Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate()
-  );
-
-  const candMs = new Decimal(utcMidTodayMs).plus(offSec.mul(1000));
-  const muCand = muSinceGenesis(candMs.toNumber());
-
-  let muLast = muCand;
-  let muNext = muCand + MU_PER_DAY;
-  if (muNow < muCand) {
-    muLast = muCand - MU_PER_DAY;
-    muNext = muCand;
-  }
+function muSolarWindowDaily(now?: Date | number) {
+  const muNow  = muFromSource(now);
+  const offMu = sunriseOffsetMu();
+  const shifted = muNow - offMu;
+  const dayIdx = floorDivE(shifted, MU_PER_DAY);
+  const muLast = dayIdx * MU_PER_DAY + offMu;
+  const muNext = muLast + MU_PER_DAY;
   return { muLast, muNext, muNow };
 }
 
 /** Active window selector (daily by default). */
-function muSolarWindow(now = new Date()) {
+function muSolarWindow(now?: Date | number) {
   return USE_DAILY_ANCHOR ? muSolarWindowDaily(now) : muSolarWindowGenesis(now);
 }
 
 /** UI helper: Date window (rounded to nearest ms, UI-only). */
-export function getSolarWindow(now = new Date()) {
+export function getSolarWindow(now?: Date | number) {
   const { muLast, muNext } = muSolarWindow(now);
   return {
     lastSunrise: new Date(unixMsFromMu(muLast)),
@@ -301,18 +298,18 @@ export function getSolarWindow(now = new Date()) {
 // ──────────────────────────────────────────────────────────────
 
 /** Exact eternal micro-pulses since GENESIS (engine). */
-export function getKaiMicroPulseEternal(now = new Date()): bigint {
-  return muSinceGenesis(now.getTime());
+export function getKaiMicroPulseEternal(now?: Date | number): bigint {
+  return muFromSource(now);
 }
 
 /** Eternal pulses (whole number for frontend; no decimals). */
-export function getKaiPulseEternalInt(now = new Date()): number {
+export function getKaiPulseEternalInt(now?: Date | number): number {
   const mu = getKaiMicroPulseEternal(now);
   return Number(mu / MU_PER_PULSE); // floor (safe for ≥ genesis)
 }
 
 /** Alias kept for callers importing `getKaiPulseEternal`. */
-export function getKaiPulseEternal(now = new Date()): number {
+export function getKaiPulseEternal(now?: Date | number): number {
   return getKaiPulseEternalInt(now);
 }
 
@@ -320,15 +317,15 @@ export function getKaiPulseEternal(now = new Date()): number {
 // Map now → pulses/beat/step (solar-aligned) with exact integer grid mapping
 // ──────────────────────────────────────────────────────────────
 
-export function getKaiPulseToday(now = new Date()): {
+export function getKaiPulseToday(now?: Date | number): {
   // Back-compat & UI fields:
-  kaiPulseToday: number;           // whole-number pulses in the φ-day (kept for callers)
-  kaiPulseTodayInt: number;        // same integer (explicit)
-  kaiPulseTodayContinuous: number; // fractional within-day pulses (for diagnostics/graphs)
-  beatIndex: number;               // 0..35
-  stepIndex: number;               // 0..43
-  dayPercent: number;              // 0..100 (soft display)
-  percentIntoStep: number;         // 0..100 (soft display)
+  kaiPulseToday: number;
+  kaiPulseTodayInt: number;
+  kaiPulseTodayContinuous: number;
+  beatIndex: number;
+  stepIndex: number;
+  dayPercent: number;
+  percentIntoStep: number;
 } {
   const { muLast, muNext, muNow } = muSolarWindow(now);
   const muSpan = muNext - muLast; // == MU_PER_DAY
@@ -369,7 +366,7 @@ export function getKaiPulseToday(now = new Date()): {
 // ──────────────────────────────────────────────────────────────
 // Solar-aligned calendar counters (sunrise→sunrise; exact μ math)
 // ──────────────────────────────────────────────────────────────
-export function getSolarAlignedCounters(now = new Date()) {
+export function getSolarAlignedCounters(now?: Date | number) {
   const { muLast } = muSolarWindow(now);
   const muFirst = muGenesisFirstSunriseLocal();
 
@@ -424,8 +421,8 @@ export function getSolarAlignedCounters(now = new Date()) {
 // ──────────────────────────────────────────────────────────────
 // Eternal (GENESIS-anchored) calendar counters (exact μ math)
 // ──────────────────────────────────────────────────────────────
-export function getEternalAlignedCounters(now = new Date()) {
-  const muNow = muSinceGenesis(now.getTime());
+export function getEternalAlignedCounters(now?: Date | number) {
+  const muNow = muFromSource(now);
   const daysSinceGenesis0 = Number(muNow / MU_PER_DAY); // integer division
   const eternalDay = daysSinceGenesis0 + 1;
 
@@ -467,7 +464,7 @@ export function getEternalAlignedCounters(now = new Date()) {
 // ──────────────────────────────────────────────────────────────
 // Display helper — UI should render Eternal by default
 // ──────────────────────────────────────────────────────────────
-export function getDisplayAlignedCounters(now = new Date()) {
+export function getDisplayAlignedCounters(now?: Date | number) {
   const solar = getSolarAlignedCounters(now);
   const eternal = getEternalAlignedCounters(now);
 
@@ -489,7 +486,7 @@ export function getDisplayAlignedCounters(now = new Date()) {
 // ──────────────────────────────────────────────────────────────
 /** 6 equal solar arcs per day (exact via μ scaling; UI returns name) */
 // ──────────────────────────────────────────────────────────────
-export function getSolarArcName(now = new Date()): string {
+export function getSolarArcName(now?: Date | number): string {
   const { muLast, muNext, muNow } = muSolarWindow(now);
   const muSpan = muNext - muLast;
   const muInto = imod(muNow - muLast, MU_PER_DAY);
@@ -509,7 +506,7 @@ export function getSolarArcName(now = new Date()): string {
 // ──────────────────────────────────────────────────────────────
 
 /** For UI that wants today's solar-aligned integer pulse and grid indices. */
-export function uiKaiPulseToday(now = new Date()) : {
+export function uiKaiPulseToday(now?: Date | number) : {
   kaiPulseToday: number; // whole number (no decimals)
   beatIndex: number;     // 0..35
   stepIndex: number;     // 0..43
@@ -519,6 +516,6 @@ export function uiKaiPulseToday(now = new Date()) : {
 }
 
 /** For UI counters that want a single integer "Kai Pulse (Eternal)". */
-export function uiKaiPulseEternal(now = new Date()): number {
+export function uiKaiPulseEternal(now?: Date | number): number {
   return getKaiPulseEternal(now);
 }
