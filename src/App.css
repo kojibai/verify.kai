@@ -1166,6 +1166,14 @@ a:hover {
   will-change: background-position;
   animation: brandSubtitleDrift 10.472s linear infinite;
 }
+
+@media (min-width: 980px) {
+  .brand__subtitle {
+    max-width: none;
+    overflow: visible;
+    text-overflow: unset;
+  }
+}
 @keyframes brandSubtitleDrift {
   0% {
     background-position: 0% 50%;
