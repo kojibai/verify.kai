@@ -151,7 +151,7 @@ const SolarAnchoredDial: React.FC<SolarAnchoredDialProps> = ({
   // Handlers
   const handleApplyHHMM = () => {
     if (!hhmm) return;
-    setSunriseFromLocalHHMM(hhmm, new Date());
+    setSunriseFromLocalHHMM(hhmm);
     setHhmm("");
     const off = getSunriseOffsetSec();
     setOffsetPreview(off);
@@ -160,7 +160,7 @@ const SolarAnchoredDial: React.FC<SolarAnchoredDialProps> = ({
   };
 
   const handleTapSunrose = () => {
-    tapSunroseNow(new Date());
+    tapSunroseNow();
     const off = getSunriseOffsetSec();
     setOffsetPreview(off);
     onSunriseChange?.(off);
