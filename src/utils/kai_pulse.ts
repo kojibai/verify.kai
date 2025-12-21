@@ -25,6 +25,12 @@ export const GENESIS_TS = 1715323541888 as const; // 2024-05-10T06:45:41.888Z
 // This is only a baseline reference; daily solar boundaries are computed dynamically.
 export const SOLAR_GENESIS_UTC_TS = 1715400806000 as const; // 2024-05-11T04:13:26.000Z
 
+// Kairos runtime bootstrap anchor
+// This value is computed ONCE at build time using wall time,
+// then frozen forever. Runtime never uses Chronos.
+export const PRECOMPUTED_KAI_ANCHOR_PULSE = <NUMBER>; // ← keep placeholder
+export const PRECOMPUTED_KAI_ANCHOR_PERF_NOW = 0;
+
 // Semantic lattice (indexing only).
 export const PULSES_STEP = 11 as const;              // pulses per step
 export const STEPS_BEAT  = 44 as const;              // steps per beat
@@ -393,6 +399,28 @@ export function microPulsesSinceGenesis(utc: string | Date | bigint): bigint {
   return mulDivRoundHalfEven(deltaMs, INV_Tx1000_NUM, INV_Tx1000_DEN);
 }
 
+/**
+ * Runtime-safe Kai pulse resolver.
+ * Uses ONLY performance.now() and the precomputed anchor.
+ * Never touches Date or Chronos.
+ */
+export function getLiveKaiPulse(
+  perfNow: number = performance.now()
+): number {
+  const deltaMs = BigInt(Math.floor(perfNow));
+  const deltaMicro = mulDivRoundHalfEven(
+    deltaMs,
+    INV_Tx1000_NUM,
+    INV_Tx1000_DEN
+  );
+
+  const anchorMicro =
+    BigInt(PRECOMPUTED_KAI_ANCHOR_PULSE) * 1_000_000n;
+
+  const liveMicro = anchorMicro + deltaMicro;
+  return toSafeNumber(floorDivE(liveMicro, 1_000_000n));
+}
+
 const microPulsesToMs = (microPulses: bigint): bigint =>
   mulDivRoundHalfEven(microPulses, T_MS_NUM, T_MS_DEN * 1_000_000n);
 
@@ -507,6 +535,17 @@ export function momentFromUTC(
 export function momentFromPulse(pulse: number | bigint): KaiMoment {
   const msEpoch = epochMsFromPulse(pulse);
   return momentFromUTC(msEpoch);
+}
+
+/**
+ * Full KaiMoment computed from internal Kai time only.
+ * Deterministic across devices, OSes, and clock drift.
+ */
+export function getLiveKaiMoment(
+  perfNow: number = performance.now()
+): KaiMoment {
+  const pulse = getLiveKaiPulse(perfNow);
+  return momentFromPulse(pulse);
 }
 
 /**
