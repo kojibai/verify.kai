@@ -103,7 +103,7 @@
   /* Perf knobs (mobile throttles) */
   --orbit-blur: 40px;
   --glow-blur: 32px;
-  --font-base: clamp(11px, 2.4vw, 16px);
+  --font-base: clamp(13px, 2.74vw, 18.6px);
     /* ── Chakra ink + chakra ark (arc) colors ───────────────────── */
 
   /* 0 Root */
