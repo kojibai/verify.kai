@@ -33,6 +33,7 @@ import KaiKlock from "./KaiKlock";
 import SigilGlyphButton from "./SigilGlyphButton";
 import WeekKalendarModal from "./WeekKalendarModal";
 import SolarAnchoredDial from "./SolarAnchoredDial";
+import { kairosEpochNow } from "../utils/kai_pulse";
 
 // ⬇️ Sovereign Solar imports (offline, no geolocation / suncalc)
 import useSovereignSolarClock from "../utils/useSovereignSolarClock";
@@ -470,7 +471,7 @@ function countersFromOverride(now: Date, sec: number, dowOffset: number): SolarA
 /* ────────────────────────────────────────────────
    Build Offline Payload (baseline, then solar-overlay applied)
    ──────────────────────────────────────────────── */
-function buildOfflinePayload(now: Date = new Date()): KlockData {
+function buildOfflinePayload(now: Date = new Date(kairosEpochNow())): KlockData {
   const nowMs = now.getTime();
   const { muLast, muNow, solarDayIndex } = solarWindowMu(nowMs);
 
@@ -696,14 +697,9 @@ type PulseWorkerHandle = { worker: Worker; url: string };
 function makePulseWorker(): PulseWorkerHandle | null {
   try {
     const code = `
-      const GEN=${ETERNAL_GENESIS_PULSE};
       const DUR=${MS_PER_PULSE};
       function sched(){
-        const now=Date.now();
-        const elapsed=now-GEN;
-        const next=GEN+Math.ceil(elapsed/DUR)*DUR;
-        const delay=Math.max(0, next-now);
-        setTimeout(()=>{ postMessage({ t: Date.now() }); sched(); }, delay);
+        setTimeout(()=>{ postMessage({ t: 0 }); sched(); }, DUR);
       }
       sched();
     `;
@@ -737,7 +733,7 @@ const INSTANT_OPEN_STYLE: React.CSSProperties = {
    ──────────────────────────────────────────────── */
 export const EternalKlock: React.FC = () => {
   // ✅ No loading flash: start with a baseline offline payload immediately.
-  const [klock, setKlock] = useState<KlockData>(() => buildOfflinePayload(new Date()));
+  const [klock, setKlock] = useState<KlockData>(() => buildOfflinePayload());
 
   const [showDetails, setShowDetails] = useState<boolean>(false);
   const [glowPulse, setGlowPulse] = useState<boolean>(false);
@@ -858,7 +854,7 @@ export const EternalKlock: React.FC = () => {
      - recompute arc/resonance from solar-aligned beat
      ──────────────────────────────────────────────────────────────── */
   const refreshKlock = useCallback((forcedSec?: number): void => {
-    const now = new Date();
+    const now = new Date(kairosEpochNow());
 
     // baseline payload
     const data = buildOfflinePayload(now);
@@ -1009,7 +1005,7 @@ export const EternalKlock: React.FC = () => {
      ──────────────────────────────────────────────────────────────── */
   const fireTick = useCallback(
     (forcedSec?: number) => {
-      const now = Date.now();
+      const now = kairosEpochNow();
       if (now - lastTickRef.current < 180) return; // global de-dupe window
       lastTickRef.current = now;
 
@@ -1040,7 +1036,7 @@ export const EternalKlock: React.FC = () => {
 
     const scheduleNext = () => {
       if (!runningRef.current) return;
-      const delay = msToNextPulse(Date.now());
+      const delay = msToNextPulse(kairosEpochNow());
       timeoutRef.current = window.setTimeout(() => {
         fireTick();
         scheduleNext();
@@ -1190,13 +1186,13 @@ export const EternalKlock: React.FC = () => {
     const detailNode = detailRef.current;
 
     const markInteractionInside = () => {
-      suppressScrollCloseUntil.current = Date.now() + 800;
+      suppressScrollCloseUntil.current = kairosEpochNow() + 800;
     };
 
     const handleScroll = () => {
       const ae = document.activeElement as HTMLElement | null;
       const focusedInside = !!ae && !!overlayNode?.contains(ae);
-      const inCooldown = Date.now() < suppressScrollCloseUntil.current;
+      const inCooldown = kairosEpochNow() < suppressScrollCloseUntil.current;
       if (focusedInside || inCooldown) return;
       closeDetails();
     };
@@ -1221,7 +1217,7 @@ export const EternalKlock: React.FC = () => {
       closeDetails();
       return;
     }
-    suppressScrollCloseUntil.current = Date.now() + 800;
+    suppressScrollCloseUntil.current = kairosEpochNow() + 800;
     if ("vibrate" in navigator && typeof navigator.vibrate === "function") navigator.vibrate(10);
     audioRef.current?.play().catch(() => void 0);
     setShowDetails(true);
@@ -1273,7 +1269,7 @@ export const EternalKlock: React.FC = () => {
 
   // Manual open ALWAYS works (no dismiss gate on button tap)
   const openWeekModal = useCallback(() => {
-    suppressScrollCloseUntil.current = Date.now() + 800;
+    suppressScrollCloseUntil.current = kairosEpochNow() + 800;
     setShowWeekModal(true);
     if ("vibrate" in navigator && typeof navigator.vibrate === "function") navigator.vibrate(8);
   }, []);
@@ -1857,7 +1853,7 @@ export const EternalKlock: React.FC = () => {
                   setSolarOverrideSec(sec);
 
                   try {
-                    localStorage.setItem(SOLAR_BROADCAST_KEY, String(Date.now()));
+                    localStorage.setItem(SOLAR_BROADCAST_KEY, String(kairosEpochNow()));
                   } catch {
                     void 0;
                   }
@@ -1867,7 +1863,7 @@ export const EternalKlock: React.FC = () => {
                     void 0;
                   }
                   try {
-                    const msg: SolarBroadcastMessage = { type: "solar:updated", t: Date.now() };
+                    const msg: SolarBroadcastMessage = { type: "solar:updated", t: kairosEpochNow() };
                     solarBcRef.current?.postMessage(msg);
                   } catch {
                     void 0;

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { kairosEpochNow } from "../../utils/kai_pulse";
 import type { EmbeddedAttachment, ExpiryUnit, SigilPayload } from "../../types/sigil";
 
 type Press = {
@@ -407,8 +408,9 @@ export default function SovereignControls({
 
   /* ─────────────── Upload orchestration ─────────────── */
   function addToQueue(files: File[]) {
+    const ts = kairosEpochNow();
     const items: UploadItem[] = files.map((f, i) => ({
-      id: `${Date.now()}-${i}-${f.name}-${f.size}`,
+      id: `${ts}-${i}-${f.name}-${f.size}`,
       name: f.name,
       size: f.size,
       type: f.type || "application/octet-stream",

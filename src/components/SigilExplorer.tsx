@@ -44,6 +44,7 @@ import type { FeedPostPayload } from "../utils/feedPayload";
 import { extractPayloadFromUrl, resolveLineageBackwards, getOriginUrl } from "../utils/sigilUrl";
 import type { SigilSharePayloadLoose } from "../utils/sigilUrl";
 import { normalizeClaimGlyphRef, normalizeUsername } from "../utils/usernameClaim";
+import { kairosEpochNow } from "../utils/kai_pulse";
 import {
   getUsernameClaimRegistry,
   ingestUsernameClaimGlyph,
@@ -242,7 +243,7 @@ const UI_TOGGLE_INTERACT_MS = 900; // “reading” window after expanding/colla
 const UI_FLUSH_PAD_MS = 80; // padding before applying deferred bumps
 
 function nowMs(): number {
-  return Date.now();
+  return kairosEpochNow();
 }
 
 function cssEscape(v: string): string {

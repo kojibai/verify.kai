@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FC, KeyboardEvent, SyntheticEvent } from "react";
 import { createPortal, flushSync } from "react-dom";
+import { kairosEpochNow } from "../utils/kai_pulse";
 
 import "./WeekKalendarModal.css";
 
@@ -318,7 +319,7 @@ function toSavedNote(u: unknown): SavedNote | null {
 
   const beat = isNum(r.beat) ? r.beat : undefined;
   const step = isNum(r.step) ? r.step : undefined;
-  const createdAt = isNum(r.createdAt) ? r.createdAt : Date.now();
+  const createdAt = isNum(r.createdAt) ? r.createdAt : kairosEpochNow();
 
   if (beat === undefined || step === undefined) {
     const d = deriveBeatStepFromPulse(r.pulse);
@@ -371,7 +372,7 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
   const canUseDOM = typeof window !== "undefined" && typeof document !== "undefined";
 
   /* ── time state (pulse-bound) ── */
-  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [nowMs, setNowMs] = useState<number>(() => kairosEpochNow());
 
   const nowDate = useMemo(() => new Date(nowMs), [nowMs]);
   const localKai = useMemo<LocalKai>(() => computeLocalKai(nowDate), [nowDate]);
@@ -405,7 +406,7 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
   /* ── μpulse-aligned scheduler (NO NodeJS.Timeout) ── */
   const timeoutRef = useRef<number | null>(null);
 
-  const epochNow = () => performance.timeOrigin + performance.now();
+  const epochNow = () => kairosEpochNow();
 
   const computeNextBoundary = (nowEpochMs: number) => {
     const elapsed = nowEpochMs - GENESIS_TS;
@@ -429,7 +430,7 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
     const delay = Math.max(0, target - now);
 
     timeoutRef.current = window.setTimeout(() => {
-      setNowMs(Date.now());
+      setNowMs(kairosEpochNow());
       armAlignedTimer();
     }, delay);
   }, [clearAlignedTimer]);
@@ -440,7 +441,7 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
 
     const onVis = () => {
       if (document.visibilityState === "visible") {
-        setNowMs(Date.now());
+        setNowMs(kairosEpochNow());
         armAlignedTimer();
       }
     };
@@ -455,7 +456,7 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
   /* ── notes persistence (sorted insert; no per-render sort) ── */
   const addNote = useCallback((note: EnrichedNote) => {
     setNotes((prev) => {
-      const saved: SavedNote = { ...note, createdAt: Date.now() };
+      const saved: SavedNote = { ...note, createdAt: kairosEpochNow() };
       const next = insertSortedByPulse(prev, saved);
       try {
         localStorage.setItem(NOTES_KEY, JSON.stringify(next));

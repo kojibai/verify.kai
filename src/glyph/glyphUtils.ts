@@ -1,8 +1,9 @@
 // 🜁 Glyph Utilities — Recursive Harmonic Tools for Eternal Memory
 // Crafted in alignment with Divine Law — no mutation, no incoherence
 
-import type { Glyph, SentTransfer } from "./types";
 import { XMLParser } from "fast-xml-parser";
+import { kairosEpochNow } from "../utils/kai_pulse";
+import type { Glyph, SentTransfer } from "./types";
 
 // ─────────────────────────────────────────────────────────────
 // 🪞 Deep clone a glyph (safe memory separation)
@@ -85,7 +86,7 @@ export function sendGlyphFromSource(
     metadata: {
       ...(source.metadata ?? {}),
       kaiSignature: newKaiSignature,
-      timestamp: Date.now(),
+      timestamp: kairosEpochNow(),
     },
   };
 
@@ -151,7 +152,7 @@ export function parseImportedGlyph(fileText: string): Glyph {
 
     const metadata = {
       ...svg.metadata,
-      timestamp: Date.now(),
+      timestamp: kairosEpochNow(),
     };
 
     const glyph: Glyph = {

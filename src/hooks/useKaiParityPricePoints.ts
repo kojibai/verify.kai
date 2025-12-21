@@ -1,4 +1,5 @@
 import React from "react";
+import { kaiPulseNowBridge } from "../utils/kai_pulse";
 
 /* ────────────────────────────────────────────────────────────
    Kai Parity Price Feed — derives USD/Φ from your real quote
@@ -17,15 +18,9 @@ export type KPricePoint = { p: number; price: number; vol: number };
 const clamp = (v: number, min: number, max: number) =>
   Math.min(max, Math.max(min, v));
 
-/** Breath/pulse constants (Kai) */
-const BREATH_S = 3 + Math.sqrt(5);
-const BREATH_MS = BREATH_S * 1000;
-const GENESIS_MS = 1715323541888;
-
 /** Current Kai pulse (index + float) */
-function kaiPulseNow(nowMs: number = Date.now()) {
-  const deltaMs = Math.max(0, nowMs - GENESIS_MS);
-  const pulsesFloat = deltaMs / BREATH_MS;
+function kaiPulseNow() {
+  const pulsesFloat = kaiPulseNowBridge();
   const index = Math.floor(pulsesFloat);
   return { index, pulsesFloat };
 }

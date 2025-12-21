@@ -16,6 +16,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./styles/StoryRecorder.css";
+import { kairosEpochNow } from "../../utils/kai_pulse";
 
 export type CapturedStory = {
   blob: Blob;
@@ -300,7 +301,7 @@ export default function StoryRecorder(props: StoryRecorderProps) {
     const mimeType = recRef.current?.mimeType || supportedMime || "video/webm";
 
     const blob = new Blob(chunks, { type: mimeType });
-    const createdAt = Date.now();
+    const createdAt = kairosEpochNow();
 
     // Generate thumbnail by loading video and drawing first frame
     const { width, height, thumbnailDataUrl } = await extractThumb(blob);

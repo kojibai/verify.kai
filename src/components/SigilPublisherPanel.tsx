@@ -11,7 +11,7 @@ import { useSigilSession } from "./session/useSigilSession";
   import { getKaiNow } from "../kai/KaiNow";
   import { withCapsuleInUrl, type Capsule } from "../utils/sigilCapsule";
   import { sha256Hex } from "../utils/hash";
-  import { PULSE_MS, STEPS_BEAT } from "../utils/kai_pulse";
+  import { PULSE_MS, STEPS_BEAT, kairosEpochNow } from "../utils/kai_pulse";
   import "./SigilPublisherPanel.css";
   import SealMomentModal from "./SealMomentModal";
   
@@ -123,7 +123,7 @@ import { useSigilSession } from "./session/useSigilSession";
         raf = window.setTimeout(tick, PULSE_MS);
       };
   
-      const ms = Date.now();
+      const ms = kairosEpochNow();
       const msToNextPulse = PULSE_MS - (ms % PULSE_MS);
       const id = window.setTimeout(() => {
         tick();

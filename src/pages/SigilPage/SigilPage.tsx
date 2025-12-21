@@ -56,6 +56,7 @@ import {
 import { ensureLink, setJsonLd, setMeta } from "../../utils/domHead";
 import { validateSvgForVerifier, putMetadata } from "../../utils/svgMeta";
 import { decodeSigilHistory } from "../../utils/sigilUrl";
+import { kairosEpochNow } from "../../utils/kai_pulse";
 
 /* ——— Theme ——— */
 import { CHAKRA_THEME, isIOS } from "../../components/sigil/theme";
@@ -166,7 +167,7 @@ type SendLockWire = {
 
 type SendLockRecord = { id: string; at: number };
 
-const nowMs = (): number => Date.now();
+const nowMs = (): number => kairosEpochNow();
 
 /** Local loose debit shape that's compatible with SigilPayload['debits'] and DebitRecord */
 type DebitLoose = {
@@ -373,7 +374,7 @@ const publishRotation = (keys: string[], token: string) => {
   const uniq = Array.from(new Set(keys.map((k) => k.toLowerCase()).filter(Boolean)));
   uniq.forEach((canonical) => {
     try {
-      localStorage.setItem(rotationKey(canonical), `${token}@${Date.now()}`);
+      localStorage.setItem(rotationKey(canonical), `${token}@${nowMs()}`);
     } catch {}
     try {
       const bc = new BroadcastChannel(ROTATE_CH);
@@ -427,7 +428,7 @@ function broadcastDescendants(canonical: string, token: string, list: Descendant
       canonical: canonical.toLowerCase(),
       token,
       list,
-      stamp: Date.now(),
+      stamp: nowMs(),
     };
     bc.postMessage(msg);
     bc.close();
@@ -748,7 +749,7 @@ useEffect(() => {
   }, [absUrl, copy]);
 
 useEffect(() => {
-  const now = Date.now();
+  const now = nowMs();
   const route = (routeHash || "").toLowerCase();
 
   if (suppressAuthUntil > now) return;
@@ -1926,7 +1927,7 @@ const sealClass =
       );
       if (burnKeys.length) publishRotation(burnKeys, freshNonce);
       setLinkStatus("archived");
-      setSuppressAuthUntil(Date.now() + 250);
+      setSuppressAuthUntil(nowMs() + 250);
 
 putMetadata(svg, nextMeta);
 ensureCanonicalMetadataFirst(svg);
@@ -2559,7 +2560,7 @@ useEffect(() => {
     const v = displayedChipPhi;
     if (Number.isFinite(v)) {
       // push with legacy ms; the chart normalizes to Kai beats (fractional)
-      pushSample({ t: Date.now(), v });
+      pushSample({ t: nowMs(), v });
     }
     tid = window.setTimeout(() => {
       raf = requestAnimationFrame(tick);

@@ -20,6 +20,7 @@ import {
 import { createPortal } from "react-dom";
 import html2canvas from "html2canvas";
 import JSZip from "jszip";
+import { kairosEpochNow } from "../utils/kai_pulse";
 
 /* Moment row */
 import SigilMomentRow from "./SigilMomentRow";
@@ -537,10 +538,7 @@ function buildLocalKairosLike(now: Date): KaiApiResponseLike {
 
 /* ═════════════ aligned time helpers ═════════════ */
 const epochNow = (): number => {
-  if (typeof performance !== "undefined" && typeof performance.now === "function") {
-    return performance.timeOrigin + performance.now();
-  }
-  return Date.now();
+  return kairosEpochNow();
 };
 
 const computeNextBoundary = (nowMs: number): number => {

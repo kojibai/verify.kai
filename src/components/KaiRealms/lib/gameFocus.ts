@@ -6,6 +6,7 @@
 //   if (paused) skip game updates.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { kairosEpochNow } from "../../../utils/kai_pulse";
 
 export type GameFocusDetail = {
   id: string; // unique id of the component taking focus ("KaiMaze", "KaiKasino", ...)
@@ -33,7 +34,7 @@ function getBC(): BroadcastChannel | null {
 }
 
 export function announceGameFocus(id: string): void {
-  const detail: GameFocusDetail = { id, ts: Date.now() };
+  const detail: GameFocusDetail = { id, ts: kairosEpochNow() };
 
   if (hasWindow) {
     try {

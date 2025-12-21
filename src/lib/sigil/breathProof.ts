@@ -14,6 +14,8 @@
 // • Bind pulse/beat/step/nonce/expiry in the message you sign.
 //
 
+import { kairosEpochNow } from "../../utils/kai_pulse";
+
 export type BreathKeyPair = {
   publicKeyJwk: JsonWebKey;
   privateKey: CryptoKey; // non-extractable by default
@@ -170,7 +172,7 @@ export async function selfTestBreathProof(): Promise<{
     const { publicKeyJwk, privateKey } = await generateKeyPair();
     const msg = encodeCanonicalMessage({
       test: true,
-      when: Date.now(),
+      when: kairosEpochNow(),
       rnd: crypto.getRandomValues(new Uint32Array(4)).join(""),
     });
     const sig = await signCanonicalMessage(privateKey, msg);

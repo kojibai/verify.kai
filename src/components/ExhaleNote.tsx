@@ -8,7 +8,7 @@ import { DEFAULT_ISSUANCE_POLICY, quotePhiForUsd } from "../utils/phi-issuance";
 
 /* ---- modular pieces ---- */
 import { NOTE_TITLE } from "./exhale-note/titles";
-import { momentFromUTC, epochMsFromPulse, PULSE_MS as KAI_PULSE_MS } from "../utils/kai_pulse";
+import { momentFromUTC, epochMsFromPulse, PULSE_MS as KAI_PULSE_MS, kairosEpochNow } from "../utils/kai_pulse";
 import { renderPreview } from "./exhale-note/dom";
 import { buildBanknoteSVG } from "./exhale-note/banknoteSvg";
 import buildProofPagesHTML from "./exhale-note/proofPages";
@@ -171,9 +171,9 @@ function useRafThrottle(cb: () => void, fps = 8) {
   }, []);
 
   return useCallback(() => {
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const now = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : 0;
     const run = () => {
-      lastRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
+      lastRef.current = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : 0;
       rafRef.current = null;
       cbRef.current();
     };
@@ -372,7 +372,7 @@ async function computeValuationStamp(u: IntrinsicUnsigned): Promise<string> {
 function msUntilNextPulseBoundaryLocal(pulseNowInt: number): number {
   try {
     const nextPulseMs = epochMsFromPulse(pulseNowInt + 1);
-    const nowMs = BigInt(Date.now());
+    const nowMs = BigInt(kairosEpochNow());
     const delta = nextPulseMs - nowMs;
     if (delta <= 0n) return 0;
     // delta is always ~0..6000ms here, safe to Number()
@@ -406,7 +406,7 @@ const ExhaleNote: React.FC<NoteProps> = ({
 
   /* Live Kai pulse (integer) + boundary timer */
   const readNowPulseInt = useCallback((): number => {
-    const local = momentFromUTC(BigInt(Date.now())).pulse;
+    const local = momentFromUTC(BigInt(kairosEpochNow())).pulse;
     const ext = getNowPulse?.();
     const extOk =
       typeof ext === "number" &&

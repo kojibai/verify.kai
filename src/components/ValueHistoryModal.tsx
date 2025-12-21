@@ -1,5 +1,6 @@
 // src/components/ValueHistoryModal.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
+import { kairosEpochNow } from "../utils/kai_pulse";
 import "./ValueHistoryModal.css";
 
 /** Kairos series point: t = absolute *fractional* beat since genesis, v = value (Φ) */
@@ -32,7 +33,7 @@ function msToAbsBeat(ms: number): number {
 }
 
 /** Snapshot of “now” in Kai beats at module-load time (keeps hooks pure). */
-const NOW_BEAT_AT_LOAD = msToAbsBeat(Date.now());
+const NOW_BEAT_AT_LOAD = msToAbsBeat(kairosEpochNow());
 
 /** Normalize any epoch-ms series to Kai beats. */
 function normalizeToKaiBeats(src: Point[]): Point[] {

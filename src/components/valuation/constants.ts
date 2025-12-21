@@ -1,4 +1,6 @@
 // valuation/constants.ts
+import { kairosEpochNow } from "../../utils/kai_pulse";
+
 export const COLORS = ["#37ffe4", "#a78bfa", "#5ce1ff", "#11d7ff"] as const;
 // (type is readonly [...])
 export const BREATH_MS = 5236;
@@ -15,4 +17,4 @@ export const SIGIL_TYPE = "Sigil" as const;
 export const SEGMENT_SIZE = 2000 as const;
 
 /** Current Kai pulse (unix-seconds); used across UI + stamps */
-export const kaiPulseNow = (): number => Math.floor(Date.now() / 1000);
+export const kaiPulseNow = (): number => Math.floor(kairosEpochNow() / 1000);

@@ -21,6 +21,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, ReactElement } from "react";
 import "./styles/KaiVoh.css";
+import { kairosEpochNow } from "../../utils/kai_pulse";
 import {
   ATTACHMENTS_VERSION,
   TOKEN_SOFT_BUDGET,
@@ -322,7 +323,9 @@ type EncodeDiag = {
 };
 
 const nowMs = (): number =>
-  typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+  typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : kairosEpochNow();
 
 const nextPaint = async (): Promise<void> => {
   await new Promise<void>((r) => requestAnimationFrame(() => r()));
@@ -343,7 +346,7 @@ const withTimeout = async <T,>(p: Promise<T>, ms: number, label: string): Promis
 const makeId = (): string => {
   const c: Crypto | undefined = typeof crypto !== "undefined" ? crypto : undefined;
   if (c && "randomUUID" in c && typeof c.randomUUID === "function") return c.randomUUID();
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${kairosEpochNow().toString(36)}-${Math.random().toString(36).slice(2)}`;
 };
 
 // Singleton worker plumbing (module-scope; not React state)
@@ -911,7 +914,7 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
         sigilId,
         phiKey: hasVerifiedSigil && phiKey ? phiKey : undefined,
         kaiSignature: hasVerifiedSigil && kaiSignature ? kaiSignature : undefined,
-        ts: Date.now(),
+        ts: kairosEpochNow(),
         attachments: mergedAttachments,
         parentUrl,
         originUrl,

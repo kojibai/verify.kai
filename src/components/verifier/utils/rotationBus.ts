@@ -6,6 +6,7 @@
    • Uses localStorage, BroadcastChannel, and window CustomEvent
 ────────────────────────────────────────────────────────────────── */
 
+import { kairosEpochNow } from "../../utils/kai_pulse";
 import { logError } from "./log";
 
 export const ROTATE_CH = "sigil-xfer-v1";
@@ -43,7 +44,7 @@ export function publishRotation(
       if (typeof localStorage !== "undefined") {
         localStorage.setItem(
           rotationKey(canonical),
-          `${token}@${Date.now()}`
+          `${token}@${kairosEpochNow()}`
         );
       }
     } catch (err) {

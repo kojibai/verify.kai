@@ -2,6 +2,8 @@
 // Side-effect module (no exports). Import once on client pages.
 /* eslint-disable @typescript-eslint/consistent-type-assertions */
 
+import { kairosEpochNow } from "./kai_pulse";
+
 type AudioCtor = new () => AudioContext;
 
 type AudioWindow = Window & {
@@ -399,7 +401,7 @@ function playSacredGong(): void {
 /* ─────────────── Orchestration & Install ─────────────── */
 
 function fireFeedback(): void {
-  const nowMs = Date.now();
+  const nowMs = kairosEpochNow();
   if (nowMs - lastFire < 120) return; // guard double-clicks
   lastFire = nowMs;
 

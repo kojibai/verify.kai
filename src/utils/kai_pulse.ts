@@ -28,8 +28,8 @@ export const SOLAR_GENESIS_UTC_TS = 1715400806000 as const; // 2024-05-11T04:13:
 // Kairos runtime bootstrap anchor
 // This value is computed ONCE at build time using wall time,
 // then frozen forever. Runtime never uses Chronos.
-export const PRECOMPUTED_KAI_ANCHOR_PULSE = <NUMBER>; // ← keep placeholder
-export const PRECOMPUTED_KAI_ANCHOR_PERF_NOW = 0;
+export const PRECOMPUTED_KAI_ANCHOR_PULSE = /* <NUMBER> */ 0; // ← keep placeholder
+export const PRECOMPUTED_KAI_ANCHOR_PERF_NOW = /* <PERF_NOW_MS> */ 0;
 
 // Semantic lattice (indexing only).
 export const PULSES_STEP = 11 as const;              // pulses per step
@@ -171,7 +171,7 @@ const chakraForWeekdayIndex = (idx: number): { weekday: Weekday; chakraDay: Chak
 // ─────────────────────────────────────────────────────────────
 // KaiTimeSource — monotonic φ-clock rooted in deterministic seeds
 // ─────────────────────────────────────────────────────────────
-type PerfClock = { now: () => number; timeOrigin: number };
+type PerfClock = { now: () => number };
 
 type SignedPulseSnapshot = { pulse?: number; microPulses?: bigint; capturedMs?: number };
 
@@ -184,10 +184,24 @@ const DEFAULT_SIGNED_SNAPSHOT: SignedPulseSnapshot = {
 const resolvePerfClock = (): PerfClock => {
   const perf = globalThis.performance;
   const now =
-    perf && typeof perf.now === "function" ? () => perf.now() : () => Date.now();
-  const timeOrigin =
-    perf && typeof perf.timeOrigin === "number" ? perf.timeOrigin : Date.now();
-  return { now, timeOrigin };
+    perf && typeof perf.now === "function"
+      ? () => perf.now()
+      : () => 0;
+  return { now };
+};
+
+const microPulsesFromPerfAnchor = (perfNow: number): bigint => {
+  const deltaMs = BigInt(Math.floor(perfNow - PRECOMPUTED_KAI_ANCHOR_PERF_NOW));
+  const deltaMicro = mulDivRoundHalfEven(
+    deltaMs,
+    INV_Tx1000_NUM,
+    INV_Tx1000_DEN
+  );
+
+  const anchorMicro =
+    BigInt(PRECOMPUTED_KAI_ANCHOR_PULSE) * 1_000_000n;
+
+  return anchorMicro + deltaMicro;
 };
 
 const parsePulseNumber = (value: unknown): number | null => {
@@ -266,17 +280,15 @@ export class KaiTimeSource {
         ? BigInt(Math.trunc(snapshot.pulse)) * 1_000_000n
         : null);
 
-    const epochMs = BigInt(
-      Math.round(this.clock.timeOrigin + this.clock.now())
-    );
-    const bridgedMicro = microPulsesSinceGenesis(epochMs);
+    const perfNow = this.clock.now();
+    const bridgedMicro = microPulsesFromPerfAnchor(perfNow);
 
     this.seedMicroPulses =
       overridePulse !== null
         ? BigInt(Math.trunc(overridePulse)) * 1_000_000n
         : snapshotMicro ?? bridgedMicro;
 
-    this.perfAtSeed = this.clock.now();
+    this.perfAtSeed = perfNow;
   }
 
   /** Current μpulses using monotonic performance deltas. */
@@ -405,19 +417,9 @@ export function microPulsesSinceGenesis(utc: string | Date | bigint): bigint {
  * Never touches Date or Chronos.
  */
 export function getLiveKaiPulse(
-  perfNow: number = performance.now()
+  perfNow: number = (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : 0
 ): number {
-  const deltaMs = BigInt(Math.floor(perfNow));
-  const deltaMicro = mulDivRoundHalfEven(
-    deltaMs,
-    INV_Tx1000_NUM,
-    INV_Tx1000_DEN
-  );
-
-  const anchorMicro =
-    BigInt(PRECOMPUTED_KAI_ANCHOR_PULSE) * 1_000_000n;
-
-  const liveMicro = anchorMicro + deltaMicro;
+  const liveMicro = microPulsesFromPerfAnchor(perfNow);
   return toSafeNumber(floorDivE(liveMicro, 1_000_000n));
 }
 
@@ -1036,9 +1038,17 @@ function epochMsFromUTCInput(utc: string | Date | bigint): bigint {
 }
 
 export async function buildKaiKlockResponse(utc?: string | Date | bigint) {
+  const timeSource = getKaiTimeSource();
+  const msUTC =
+    typeof utc === "undefined"
+      ? epochMsFromMicroPulses(timeSource.nowMicroPulses())
+      : epochMsFromUTCInput(utc);
+
   // 1) Real UTC instant (no pulse snapping) and exact lattice & μpulses
-  const msUTC = (typeof utc === "undefined") ? BigInt(Date.now()) : epochMsFromUTCInput(utc);
-  const pμ = microPulsesSinceGenesis(msUTC);
+  const pμ =
+    typeof utc === "undefined"
+      ? timeSource.nowMicroPulses()
+      : microPulsesSinceGenesis(msUTC);
 
   const pulse = toSafeNumber(floorDivE(pμ, 1_000_000n));
   const { beat, stepIndex } = latticeFromMicroPulses(pμ);

@@ -1,5 +1,7 @@
 // v48 atomic send lock helpers (BroadcastChannel + localStorage)
 
+import { kairosEpochNow } from "../../utils/kai_pulse";
+
 export const SEND_LOCK_CH = "sigil-sendlock-v1";
 export const SEND_LOCK_EVENT = "sigil:sendlock";
 export const SEND_LOCK_ERROR_EVENT = "sigil:sendlock-error";
@@ -33,7 +35,7 @@ type SendLockErrorDetail = {
   error: Record<string, unknown>;
 };
 
-const nowMs = (): number => Date.now();
+const nowMs = (): number => kairosEpochNow();
 
 const sendLockKey = (canonical: string, token: string) =>
   `sigil:sendlock:${canonical}:t:${token}`;
@@ -77,7 +79,8 @@ const generateId = (): string => {
   } catch {
     // fall through to Math.random
   }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  const t = nowMs();
+  return `${t.toString(36)}-${Math.random().toString(36).slice(2)}`;
 };
 
 export function acquireSendLock(

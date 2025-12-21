@@ -1,3 +1,5 @@
+import { kairosEpochNow } from "./kai_pulse";
+
 /**
  * v46 — cryptoLedger.ts
  * -----------------------------------------------------------------------------
@@ -293,7 +295,7 @@ export type DebitRecord = {
         type: "debits",
         canonical: h,
         qs: encodeDebitsQS(d),
-        stamp: Date.now(),
+        stamp: kairosEpochNow(),
         token: token ?? null,
       };
       bc.postMessage(msg);

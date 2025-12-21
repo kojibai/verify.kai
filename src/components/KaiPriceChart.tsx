@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { kaiPulseNowBridge } from "../utils/kai_pulse";
 
 /** ---------- Public types (imported by other files) ---------- */
 export type KPricePoint = { p: number; price: number; vol: number };
@@ -57,11 +58,7 @@ export type KaiPriceChartProps = {
 };
 
 /** ---------- Kai constants (bridge only) ---------- */
-const KAI_EPOCH_MS = 1715323541888; // canonical bridge
-const BREATH_S = 3 + Math.sqrt(5);
-const BREATH_MS = BREATH_S * 1000;
-
-const kaiPulseNow = (): number => (Date.now() - KAI_EPOCH_MS) / BREATH_MS;
+const kaiPulseNow = (): number => kaiPulseNowBridge();
 
 /** ---------- helpers ---------- */
 const clamp = (x: number, min: number, max: number) => Math.max(min, Math.min(max, x));
