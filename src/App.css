@@ -103,7 +103,7 @@
   /* Perf knobs (mobile throttles) */
   --orbit-blur: 40px;
   --glow-blur: 32px;
-  --font-base: clamp(14.3px, 3.014vw, 20.46px);
+  --font-base: clamp(13.59px, 2.863vw, 19.44px);
     /* ── Chakra ink + chakra ark (arc) colors ───────────────────── */
 
   /* 0 Root */
@@ -3091,6 +3091,80 @@ a:hover {
    13) Eternal KaiKlok Popover — TRUE FULLSCREEN + HUGE STAGE
    (Single source of truth; X is always clickable)
    ───────────────────────────────────────────────────────────── */
+
+.klock-pop {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: grid;
+  place-items: stretch;
+  padding: 0;
+
+  width: 100vw;
+  height: 100vh;
+
+  background: radial-gradient(
+      1400px 900px at 18% 8%,
+      rgba(255, 220, 140, 0.18),
+      transparent 64%
+    ),
+    radial-gradient(
+      1200px 820px at 82% 16%,
+      rgba(120, 220, 255, 0.16),
+      transparent 62%
+    ),
+    radial-gradient(
+      900px 700px at 50% 110%,
+      rgba(190, 130, 255, 0.1),
+      transparent 60%
+    ),
+    rgba(2, 4, 8, 0.72);
+
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
+  overscroll-behavior: contain;
+  isolation: isolate;
+
+  contain: layout paint;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+@supports (height: 100dvh) {
+  .klock-pop {
+    height: 100dvh;
+  }
+}
+
+.klock-pop__panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  overflow: hidden;
+
+  border: 1px solid rgba(255, 255, 255, 0.1);
+
+  box-shadow: inset 0 0 0 1px rgba(255, 216, 120, 0.1),
+    inset 0 0 0 2px rgba(120, 220, 255, 0.06), 0 40px 120px rgba(0, 0, 0, 0.55);
+
+  background: radial-gradient(
+      1600px 900px at 12% 6%,
+      rgba(255, 210, 120, 0.16),
+      transparent 68%
+    ),
+    radial-gradient(
+      1400px 900px at 88% 10%,
+      rgba(120, 220, 255, 0.12),
+      transparent 66%
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+
+  contain: layout paint;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
 /* breath shimmer layer — PERF: opacity/transform only */
 .klock-pop__panel::before {
   content: "";
@@ -3110,128 +3184,159 @@ a:hover {
   opacity: 0.9;
   transform: translateZ(0);
   animation: klock-breathe var(--klock-breath, var(--breath-s)) ease-in-out infinite;
-  will-change: transform, opacity; /* ✅ FIX */
-}
-
-/* optional sheen (keep it transform/opacity only) */
-.klock-pop__panel::after {
-  content: "";
-  position: absolute;
-  inset: -30%;
-  pointer-events: none;
-
-  background: linear-gradient(
-    120deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.14) 45%,
-    transparent 70%
-  );
-
-  transform: rotate(18deg) translateX(-58%) translateZ(0);
-  opacity: 0;
-
-  animation: klock-sheen calc(var(--breath-s, 5.236s) * 2) ease-in-out infinite;
-  mix-blend-mode: soft-light;
   will-change: transform, opacity;
 }
 
-/* TRUE fullscreen stage wrapper */
-.klock-pop__body {
-  position: relative;
-  height: 100%;
-  width: 100%;
-  min-height: 0;
+/* ultra-light rune-grid / glass grain layer */
+.klock-pop__panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background: linear-gradient(transparent, rgba(255, 255, 255, 0.05)),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.05) 0 1px,
+      transparent 1px 36px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.04) 0 1px,
+      transparent 1px 44px
+    );
+  mix-blend-mode: overlay;
+}
+
+@keyframes klock-breathe {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.82;
+  }
+  50% {
+    transform: translate3d(0, -1.2%, 0) scale(1.03);
+    opacity: 0.98;
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.86;
+  }
+}
+
+/* ✅ CLOSE BUTTON (FIXED): always above body/stage */
+.klock-pop__close {
+  position: absolute;
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  right: calc(14px + env(safe-area-inset-right, 0px));
+
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
 
   display: grid;
   place-items: center;
 
-  padding:
-    calc(18px + env(safe-area-inset-top, 0px))
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(255, 225, 150, 0.12);
+
+  border: 1px solid var(--klock-border-strong, rgba(255, 231, 160, 0.62));
+  background: rgba(8, 12, 20, 0.46);
+  color: rgba(240, 246, 255, 0.96);
+
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+
+  z-index: 50;
+  transform: translateZ(0);
+}
+.klock-pop__close:focus-visible {
+  outline: none;
+  box-shadow: var(--klock-ring, 0 0 0 2px rgba(255, 225, 150, 0.22)),
+    0 18px 60px rgba(0, 0, 0, 0.55);
+}
+
+/* BODY */
+.klock-pop__body {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.klock-stage {
+  height: 100%;
+  width: 100%;
+  display: grid;
+  place-items: center;
+
+  padding: calc(18px + env(safe-area-inset-top, 0px))
     calc(18px + env(safe-area-inset-right, 0px))
     calc(18px + env(safe-area-inset-bottom, 0px))
     calc(18px + env(safe-area-inset-left, 0px));
-
-  overflow: hidden;
 }
 
-/* MASSIVE hero square (clock fills this) */
-.klock-stage {
-  width: min(92vmin, 980px);
+.klock-stage__inner {
+  width: min(98vmin, 1280px);
+  height: min(98vmin, 1280px);
   aspect-ratio: 1 / 1;
 
   display: grid;
   place-items: center;
 
-  border-radius: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  margin: 0 auto;
 
-  background:
-    radial-gradient(900px 520px at 18% 0%, rgba(255, 210, 120, 0.14), transparent 60%),
-    radial-gradient(820px 620px at 92% 110%, rgba(120, 220, 255, 0.12), transparent 62%),
-    linear-gradient(180deg, rgba(10, 16, 36, 0.86), rgba(3, 6, 16, 0.92));
-
-  box-shadow:
-    0 40px 120px rgba(0, 0, 0, 0.62),
-    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
-    0 0 90px rgba(255, 217, 121, 0.10);
-
-  overflow: hidden;
-  transform: translateZ(0);
-  contain: layout paint;
+  filter: drop-shadow(0 30px 90px rgba(0, 0, 0, 0.55));
 }
 
-/* Let the clock UI fill the square cleanly */
-.klock-stage > * {
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
+.klock-stage__inner > * {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+}
+.klock-stage__inner :where(svg, canvas, img) {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  display: block;
+}
+.klock-stage__inner :where(.wrap, .container, .root) {
+  height: 100% !important;
 }
 
-/* Close button positioning (uses your existing .kx-x button) */
-.klock-pop__close {
-  position: absolute;
-  top: calc(12px + env(safe-area-inset-top, 0px));
-  right: calc(12px + env(safe-area-inset-right, 0px));
-  z-index: 60; /* above shimmer layers */
-}
-
-/* compositor-safe breath */
-@keyframes klock-breathe {
-  0%, 100% {
-    opacity: 0.62;
-    transform: translateZ(0) scale(0.99);
-  }
-  50% {
-    opacity: 0.92;
-    transform: translateZ(0) scale(1.02);
-  }
-}
-
-@keyframes klock-sheen {
-  0%   { transform: rotate(18deg) translateX(-58%) translateZ(0); opacity: 0; }
-  35%  { opacity: 0.42; }
-  70%  { transform: rotate(18deg) translateX(58%) translateZ(0);  opacity: 0; }
-  100% { opacity: 0; }
-}
-
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  .klock-pop__panel::before,
-  .klock-pop__panel::after {
-    animation: none !important;
-  }
-}
-
-/* Mobile throttle (keeps look, lowers paint cost) */
-@media (max-width: 650px) {
-  .klock-pop {
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
+@media (max-width: 720px) {
   .klock-stage {
-    width: min(94vmin, 560px);
-    border-radius: 22px;
+    padding: calc(12px + env(safe-area-inset-top, 0px))
+      calc(12px + env(safe-area-inset-right, 0px))
+      calc(12px + env(safe-area-inset-bottom, 0px))
+      calc(12px + env(safe-area-inset-left, 0px));
+  }
+  .klock-stage__inner {
+    width: min(98vmin, 1280px);
+    height: min(98vmin, 1280px);
+  }
+}
+
+.klock-pop .kai-klock-shell {
+  max-width: none;
+  width: clamp(360px, 88vmin, 1400px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .klock-pop__panel::before {
+    animation: none;
   }
 }
 
