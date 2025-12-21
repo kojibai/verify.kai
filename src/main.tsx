@@ -7,6 +7,7 @@ import "./App.css";
 
 import AppRouter from "./router/AppRouter";
 import { APP_VERSION, SW_VERSION_EVENT } from "./version";
+import { KaiTimeProvider } from "./hooks/useKaiTime";
 
 // ✅ REPLACE scheduler impl with your utils cadence file
 import { startKaiCadence } from "./utils/kai_cadence";
@@ -48,7 +49,9 @@ if (isProduction) {
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <AppRouter />
+    <KaiTimeProvider>
+      <AppRouter />
+    </KaiTimeProvider>
   </React.StrictMode>
 );
 

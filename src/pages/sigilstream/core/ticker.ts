@@ -2,7 +2,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { computeLocalKai, GENESIS_TS, PULSE_MS, KAI_PULSE_SEC } from "./kai_time";
+import { useKaiTime } from "../../../hooks/useKaiTime";
+import {
+  computeLocalKaiFromMicroPulses,
+  PULSE_MS,
+  KAI_PULSE_SEC,
+} from "./kai_time";
+import { msUntilNextPulseBoundary } from "../../../utils/kai_pulse";
 import type { LocalKai } from "./types";
 
 /**
@@ -13,48 +19,30 @@ import type { LocalKai } from "./types";
 export function useKaiPulseCountdown(active: boolean): number | null {
   const [secsLeft, setSecsLeft] = useState<number | null>(active ? KAI_PULSE_SEC : null);
   const rafRef = useRef<number | null>(null);
-  const targetRef = useRef<number | null>(null);
-
-  const scheduleNextBoundary = () => {
-    const now = Date.now();
-    const periods = Math.ceil((now - GENESIS_TS) / PULSE_MS);
-    targetRef.current = GENESIS_TS + periods * PULSE_MS;
-  };
+  const { timeSource } = useKaiTime();
 
   useEffect(() => {
     if (!active) {
       if (rafRef.current != null) window.cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
-      targetRef.current = null;
       setSecsLeft(null);
       return;
     }
 
-    scheduleNextBoundary();
+    const compute = () =>
+      msUntilNextPulseBoundary(undefined, timeSource) / 1000;
 
     const tick = () => {
-      const target = targetRef.current;
-      if (target == null) {
-        setSecsLeft(null);
-      } else {
-        const now = Date.now();
-
-        // If we crossed the boundary, immediately align to the next one instead of sitting at 0.
-        if (now >= target) {
-          scheduleNextBoundary();
-          setSecsLeft(0);
-        } else {
-          setSecsLeft((target - now) / 1000);
-        }
-      }
-
+      setSecsLeft(compute());
       rafRef.current = window.requestAnimationFrame(tick);
     };
 
     rafRef.current = window.requestAnimationFrame(tick);
 
     const onVis = () => {
-      if (document.visibilityState === "visible") scheduleNextBoundary();
+      if (document.visibilityState === "visible") {
+        setSecsLeft(compute());
+      }
     };
     document.addEventListener("visibilitychange", onVis);
 
@@ -78,56 +66,36 @@ export function useKaiPulseCountdown(active: boolean): number | null {
  * - Reschedules on visibility change to stay in lockstep after backgrounding.
  */
 export function useAlignedKaiTicker(): LocalKai {
-  const [kai, setKai] = useState<LocalKai>(() => computeLocalKai(new Date()));
-  const timerRef = useRef<number | null>(null);
+  const { timeSource, msToNextPulse } = useKaiTime();
+  const [kai, setKai] = useState<LocalKai>(() =>
+    computeLocalKaiFromMicroPulses(timeSource.nowMicroPulses())
+  );
 
-  const setCssPhaseVars = () => {
+  const setCssPhaseVars = (lagMs: number) => {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
-    const now = Date.now();
-    const lag = (PULSE_MS - ((now - GENESIS_TS) % PULSE_MS)) % PULSE_MS; // ms until boundary
     root.style.setProperty("--pulse-dur", `${PULSE_MS}ms`);
     // Negative delay causes CSS animations to appear already in-progress by `lag`
-    root.style.setProperty("--pulse-offset", `-${Math.round(lag)}ms`);
-  };
-
-  const schedule = () => {
-    if (timerRef.current) window.clearTimeout(timerRef.current);
-
-    const now = Date.now();
-    const elapsed = now - GENESIS_TS;
-    const next = GENESIS_TS + Math.ceil(elapsed / PULSE_MS) * PULSE_MS;
-    const delay = Math.max(0, next - now);
-
-    // Keep CSS phase vars fresh (useful for pure-CSS progress)
-    setCssPhaseVars();
-
-    timerRef.current = window.setTimeout(() => {
-      // Update state exactly at boundary, then immediately schedule the next one
-      setKai(computeLocalKai(new Date()));
-      schedule();
-    }, delay) as unknown as number;
+    root.style.setProperty("--pulse-offset", `-${Math.round(lagMs)}ms`);
   };
 
   useEffect(() => {
-    schedule();
+    // Keep CSS phase vars fresh (useful for pure-CSS progress)
+    setCssPhaseVars(msToNextPulse);
+    setKai(computeLocalKaiFromMicroPulses(timeSource.nowMicroPulses()));
 
     const onVis = () => {
       if (document.visibilityState === "visible") {
-        // Recompute immediately and reschedule to avoid any drift after background throttling.
-        setKai(computeLocalKai(new Date()));
-        schedule();
+        setCssPhaseVars(msToNextPulse);
+        setKai(computeLocalKaiFromMicroPulses(timeSource.nowMicroPulses()));
       }
     };
     document.addEventListener("visibilitychange", onVis);
 
     return () => {
-      if (timerRef.current) window.clearTimeout(timerRef.current);
-      timerRef.current = null;
       document.removeEventListener("visibilitychange", onVis);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [msToNextPulse, timeSource]);
 
   return kai;
 }

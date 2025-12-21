@@ -48,9 +48,7 @@ export function microPulsesSinceGenesis(date: Date): bigint {
   return roundTiesToEvenBigInt(micro);
 }
 
-/** Compute LocalKai (display/state) at a Date — μpulse-true */
-export function computeLocalKai(date: Date): LocalKai {
-  const pμ_total = microPulsesSinceGenesis(date);
+export function computeLocalKaiFromMicroPulses(pμ_total: bigint): LocalKai {
   const pμ_in_day = imod(pμ_total, N_DAY_MICRO);
   const dayIndex = floorDiv(pμ_total, N_DAY_MICRO);
 
@@ -107,6 +105,12 @@ export function computeLocalKai(date: Date): LocalKai {
     _pμ_in_day: pμ_in_day,
     _pμ_in_beat,
   };
+}
+
+/** Compute LocalKai (display/state) at a Date — μpulse-true */
+export function computeLocalKai(date: Date): LocalKai {
+  const pμ_total = microPulsesSinceGenesis(date);
+  return computeLocalKaiFromMicroPulses(pμ_total);
 }
 
 /** Build a strict Kai label from an absolute pulse index */
