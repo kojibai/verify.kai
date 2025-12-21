@@ -1077,34 +1077,36 @@ function LiveKaiButton({
       style={timeStyle}
     >
       <span className="live-orb" aria-hidden="true" />
-      <div className="live-text">
-        <div className="live-meta">
-          <span className="mono" style={neonTextStyle}>
-            ☤KAI
-          </span>
-        </div>
+      <div className="live-scroll" aria-hidden="true">
+        <div className="live-text">
+          <div className="live-meta">
+            <span className="mono" style={neonTextStyle}>
+              ☤KAI
+            </span>
+          </div>
 
-        <div className="live-meta">
-          <span className="mono" style={neonTextStyle}>
-            {snap.pulseStr}
-          </span>
-        </div>
+          <div className="live-meta">
+            <span className="mono" style={neonTextStyle}>
+              {snap.pulseStr}
+            </span>
+          </div>
 
-        <div className="live-sub">
-          <span className="mono" style={neonTextStyleHalf}>
-            <span className="kai-num kai-num--ark">{snap.beatStepLabel}</span>{" "}
-            <span aria-hidden="true" style={{ opacity: 0.7 }}>
-              •
-            </span>{" "}
-            <span className="kai-tag">D</span>
-            <span className="kai-num kai-num--chakra">{snap.beatStepDMY.day}</span>
-            <span className="kai-sep">/</span>
-            <span className="kai-tag">M</span>
-            <span className="kai-num kai-num--month">{snap.beatStepDMY.month}</span>
-            <span className="kai-sep">/</span>
-            <span className="kai-tag">Y</span>
-            <span className="kai-num">{snap.beatStepDMY.year}</span>
-          </span>
+          <div className="live-sub">
+            <span className="mono" style={neonTextStyleHalf}>
+              <span className="kai-num kai-num--ark">{snap.beatStepLabel}</span>{" "}
+              <span aria-hidden="true" style={{ opacity: 0.7 }}>
+                •
+              </span>{" "}
+              <span className="kai-tag">D</span>
+              <span className="kai-num kai-num--chakra">{snap.beatStepDMY.day}</span>
+              <span className="kai-sep">/</span>
+              <span className="kai-tag">M</span>
+              <span className="kai-num kai-num--month">{snap.beatStepDMY.month}</span>
+              <span className="kai-sep">/</span>
+              <span className="kai-tag">Y</span>
+              <span className="kai-num">{snap.beatStepDMY.year}</span>
+            </span>
+          </div>
         </div>
       </div>
     </button>
@@ -1495,12 +1497,14 @@ export function AppChrome(): React.JSX.Element {
           </div>
         </div>
 
-        <LiveKaiButton
-          onOpenKlock={openKlock}
-          breathS={BREATH_S}
-          breathMs={BREATH_MS}
-          breathsPerDay={BREATHS_PER_DAY}
-        />
+        <div className="topbar-right" aria-label="Live Kai clock">
+          <LiveKaiButton
+            onOpenKlock={openKlock}
+            breathS={BREATH_S}
+            breathMs={BREATH_MS}
+            breathsPerDay={BREATHS_PER_DAY}
+          />
+        </div>
       </header>
 
       <main className="app-stage" id="app-content" role="main" aria-label="Sovereign Value Workspace">
