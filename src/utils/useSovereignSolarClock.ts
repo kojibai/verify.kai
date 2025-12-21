@@ -6,13 +6,13 @@ import {
   SOLAR_DAY_NAMES,
   MONTHS,
   HARMONIC_DAY_PULSES,
-  BREATH_SEC,
   getKaiPulseEternal,
   getKaiPulseToday,
   getSolarAlignedCounters,
   getSolarArcName,
   getSunriseOffsetSec,
 } from "../SovereignSolar";
+import { msUntilNextSovereignPulse, sovereignPulseNow } from "./sovereign_pulse";
 import { subscribeSunriseOffset } from "./solarSync";
 
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
@@ -25,15 +25,21 @@ export type SolarStep = {
 };
 
 export default function useSovereignSolarClock() {
-  const [now, setNow] = useState<Date>(new Date());
+  const [pulseNow, setPulseNow] = useState<number>(sovereignPulseNow());
   const [tick, setTick] = useState(0); // used to re-eval on external sunrise change
 
   // φ tick
   useEffect(() => {
-    const pulse = () => { setNow(new Date()); };
+    let id: number | null = null;
+    const pulse = () => {
+      setPulseNow(sovereignPulseNow());
+      const next = msUntilNextSovereignPulse();
+      id = window.setTimeout(pulse, Math.max(16, Math.round(next)));
+    };
     pulse();
-    const id = setInterval(pulse, Math.round(BREATH_SEC * 1000));
-    return () => clearInterval(id);
+    return () => {
+      if (id !== null) window.clearTimeout(id);
+    };
   }, []);
 
   // react to sunrise changes (from Eternal/controls)
@@ -43,9 +49,9 @@ export default function useSovereignSolarClock() {
   }, []);
 
   // core (100% offline)
-  const kaiPulseEternal = useMemo(() => getKaiPulseEternal(now), [now, tick]);
+  const kaiPulseEternal = useMemo(() => getKaiPulseEternal(pulseNow), [pulseNow, tick]);
 
-  const today = useMemo(() => getKaiPulseToday(now), [now, tick]);
+  const today = useMemo(() => getKaiPulseToday(pulseNow), [pulseNow, tick]);
   const {
     kaiPulseToday,
     dayPercent,
@@ -65,9 +71,9 @@ export default function useSovereignSolarClock() {
   );
 
   const solarStepString = `${solarBeatIndex}:${String(solarStepIndex).padStart(2, "0")}`;
-  const solarArcName = useMemo(() => getSolarArcName(now), [now, tick]);
+  const solarArcName = useMemo(() => getSolarArcName(pulseNow), [pulseNow, tick]);
 
-  const counters = useMemo(() => getSolarAlignedCounters(now), [now, tick]);
+  const counters = useMemo(() => getSolarAlignedCounters(pulseNow), [pulseNow, tick]);
   const solarWeekDayName = SOLAR_DAY_NAMES[counters.solarAlignedWeekDayIndex];
 
   const monthIndex1 = clamp(counters.solarAlignedMonth, 1, 8);
@@ -91,7 +97,7 @@ export default function useSovereignSolarClock() {
   );
 
   return {
-    now,
+    now: pulseNow,
     sunriseOffsetSec: getSunriseOffsetSec(),
     kaiPulseEternal,
     kaiPulseToday,

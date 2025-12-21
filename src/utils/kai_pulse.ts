@@ -45,7 +45,13 @@ export const MONTHS_PER_YEAR = 8 as const;
 export const DAYS_PER_YEAR   = DAYS_PER_MONTH * MONTHS_PER_YEAR; // 336
 
 // φ-exact pulse duration (display-only ms) from T = 3 + √5 seconds.
-export const PULSE_MS: number = Math.round((3 + Math.sqrt(5)) * 1000);
+import {
+  MICRO_PER_PULSE,
+  PULSE_MS,
+  msUntilNextSovereignPulse,
+  sovereignMicroPulseNow,
+} from "./sovereign_pulse";
+export { PULSE_MS, MICRO_PER_PULSE };
 
 // There is intentionally **no** DAY_MS. Seconds/day is irrational; the engine stays in integers.
 
@@ -254,7 +260,7 @@ export function microPulsesSinceGenesis(utc: string | Date | bigint): bigint {
 }
 /** Bridge used by UI timers: current pulse as a fractional number (μpulse precise). */
 export function kaiPulseNowBridge(): number {
-  const pμ = microPulsesSinceGenesis(BigInt(Date.now()));
+  const pμ = sovereignMicroPulseNow();
 
   // Safe near “now”; clamp if someone runs this millions of years out.
   const LIM = 9_007_199_254_740_991n; // Number.MAX_SAFE_INTEGER as bigint
@@ -267,27 +273,7 @@ export function kaiPulseNowBridge(): number {
  * Arg retained for back-compat; boundary is computed from local φ-bridge time.
  */
 export function msUntilNextPulseBoundary(pulseNow?: number): number {
-  const pμNow =
-    typeof pulseNow === "number" && Number.isFinite(pulseNow)
-      ? (() => {
-          // pulseNow is (μpulses / 1e6) from kaiPulseNowBridge() → recover μpulses safely.
-          const approx = Math.round(pulseNow * 1_000_000);
-          if (!Number.isFinite(approx)) return microPulsesSinceGenesis(BigInt(Date.now()));
-          // Clamp to safe BigInt range if someone hands insane values.
-          const LIM = Number.MAX_SAFE_INTEGER;
-          const clamped = Math.max(-LIM, Math.min(LIM, approx));
-          return BigInt(clamped);
-        })()
-      : microPulsesSinceGenesis(BigInt(Date.now()));
-
-  const next = (floorDivE(pμNow, 1_000_000n) + 1n) * 1_000_000n; // next whole pulse
-  const deltaμ = next - pμNow;                                   // 0..1_000_000
-
-  // μpulses → ms using φ-exact rational
-  const deltaMs = mulDivRoundHalfEven(deltaμ, T_MS_NUM, T_MS_DEN * 1_000_000n);
-
-  const out = toSafeNumber(deltaMs);
-  return out < 0 ? 0 : out;
+  return msUntilNextSovereignPulse(pulseNow);
 }
 
 
@@ -297,6 +283,9 @@ export function epochMsFromPulse(pulse: number | bigint): bigint {
   const deltaMs = mulDivRoundHalfEven(p, T_MS_NUM, T_MS_DEN);
   return BigInt(GENESIS_TS) + deltaMs;
 }
+
+const epochMsFromMicroPulses = (pμ: bigint): bigint =>
+  BigInt(GENESIS_TS) + mulDivRoundHalfEven(pμ, T_MS_NUM, T_MS_DEN * MICRO_PER_PULSE);
 
 /** Indexing on the semantic lattice from μpulses (integers only). */
 export function latticeFromMicroPulses(pμ: bigint): {
@@ -318,11 +307,9 @@ export function latticeFromMicroPulses(pμ: bigint): {
 }
 
 /** Full KaiMoment from any UTC input (string/Date/bigint). */
-export function momentFromUTC(utc: string | Date | bigint): KaiMoment {
-  const pμ = microPulsesSinceGenesis(utc);
-
+function kaiMomentFromMicroPulses(pμ: bigint): KaiMoment {
   // Integer pulse index (Euclidean floor toward −∞)
-  const pulse = toSafeNumber(floorDivE(pμ, 1_000_000n));
+  const pulse = toSafeNumber(floorDivE(pμ, MICRO_PER_PULSE));
 
   // Lattice breakdown
   const { beat, stepIndex, percentIntoStep } = latticeFromMicroPulses(pμ);
@@ -338,10 +325,17 @@ export function momentFromUTC(utc: string | Date | bigint): KaiMoment {
   return { pulse, beat, stepIndex, stepPctAcrossBeat, chakraDay, weekday };
 }
 
+/** Full KaiMoment from any UTC input (string/Date/bigint). */
+export function momentFromUTC(utc: string | Date | bigint): KaiMoment {
+  const pμ = microPulsesSinceGenesis(utc);
+  return kaiMomentFromMicroPulses(pμ);
+}
+
 /** Convert a pulse index (±) → KaiMoment using exact bridges. */
 export function momentFromPulse(pulse: number | bigint): KaiMoment {
-  const msEpoch = epochMsFromPulse(pulse);
-  return momentFromUTC(msEpoch);
+  const p = typeof pulse === "bigint" ? pulse : BigInt(Math.trunc(pulse));
+  const pμ = p * MICRO_PER_PULSE;
+  return kaiMomentFromMicroPulses(pμ);
 }
 
 /**
@@ -432,13 +426,18 @@ export function parseKaiFromServer(json: {
 
 /** Local-only: compute KaiMoment for now or a provided ISO/Date/bigint. */
 export async function fetchKai(iso?: string | Date | bigint): Promise<KaiMoment> {
-  const input = typeof iso === "undefined" ? new Date() : iso;
-  return Promise.resolve(momentFromUTC(input));
+  if (typeof iso === "undefined") {
+    return Promise.resolve(kaiMomentFromMicroPulses(sovereignMicroPulseNow()));
+  }
+  return Promise.resolve(momentFromUTC(iso));
 }
 
 /** Local-only: same as fetchKai. Kept for call-site compatibility. */
 export async function fetchKaiOrLocal(iso?: string | Date | bigint, now: Date = new Date()): Promise<KaiMoment> {
-  return Promise.resolve(momentFromUTC(typeof iso === "undefined" ? now : iso));
+  if (typeof iso === "undefined") {
+    return Promise.resolve(kaiMomentFromMicroPulses(sovereignMicroPulseNow()));
+  }
+  return Promise.resolve(momentFromUTC(iso ?? now));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -824,10 +823,13 @@ function epochMsFromUTCInput(utc: string | Date | bigint): bigint {
 
 export async function buildKaiKlockResponse(utc?: string | Date | bigint) {
   // 1) Real UTC instant (no pulse snapping) and exact lattice & μpulses
-  const msUTC = (typeof utc === "undefined") ? BigInt(Date.now()) : epochMsFromUTCInput(utc);
-  const pμ = microPulsesSinceGenesis(msUTC);
+  const pμ =
+    typeof utc === "undefined"
+      ? sovereignMicroPulseNow()
+      : microPulsesSinceGenesis(epochMsFromUTCInput(utc));
+  const msUTC = epochMsFromMicroPulses(pμ);
 
-  const pulse = toSafeNumber(floorDivE(pμ, 1_000_000n));
+  const pulse = toSafeNumber(floorDivE(pμ, MICRO_PER_PULSE));
   const { beat, stepIndex } = latticeFromMicroPulses(pμ);
 
   // Eternal weekday (from μpulse day math)
@@ -856,7 +858,7 @@ export async function buildKaiKlockResponse(utc?: string | Date | bigint) {
 
   // 6) Derived counts
   const kaiPulseEternal = pulse;
-  const kaiPulseToday = safeInt(floorDivE(modE(pμ, N_DAY_MICRO), 1_000_000n));
+  const kaiPulseToday = safeInt(floorDivE(modE(pμ, N_DAY_MICRO), MICRO_PER_PULSE));
   const eternalKaiPulseToday = kaiPulseToday;
 
   // 7) Year/Month/Week progress (eternal)

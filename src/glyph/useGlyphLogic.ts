@@ -1,11 +1,12 @@
 // src/glyph/useGlyphLogic.ts
 // 🜄 Harmonic Glyph Operations — Recursive Sovereign Execution Layer
 
+import { sovereignPulseNow } from "../utils/sovereign_pulse";
 import type { Glyph } from "./types";
 
 // Constants
 const DEFAULT_GROWTH_RATE = 0.000777; // Optional growth per pulse
-const DEFAULT_PULSE_NOW = () => Math.floor(Date.now() / 5236); // fallback Kai pulse if Kai-Klok not injected
+const DEFAULT_PULSE_NOW = () => sovereignPulseNow(); // fallback Kai pulse if Kai-Klok not injected
 
 // ─────────────────────────────────────────────────────────────
 // 🫁 Get the currently available balance from a source glyph
@@ -91,7 +92,7 @@ export function sendGlyphFromSource(
       name: "Derivative Glyph",
       message,
       creator: recipientHash,
-      timestamp: Date.now(),
+      timestamp: pulseNow,
     },
   };
 
