@@ -1,5 +1,5 @@
 // useSovereignSolarClock.ts — shared clock data hook for KaiKlock + Eternal
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ETERNAL_BEATS_PER_DAY,
   ETERNAL_STEPS_PER_BEAT,
@@ -13,6 +13,7 @@ import {
   getSolarArcName,
   getSunriseOffsetSec,
 } from "../SovereignSolar";
+import { getKaiTimeSource } from "../utils/kai_pulse";
 import { subscribeSunriseOffset } from "./solarSync";
 
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
@@ -25,12 +26,13 @@ export type SolarStep = {
 };
 
 export default function useSovereignSolarClock() {
-  const [now, setNow] = useState<Date>(new Date());
+  const timeSourceRef = useRef(getKaiTimeSource());
+  const [now, setNow] = useState<Date>(() => new Date(timeSourceRef.current.nowEpochMs()));
   const [tick, setTick] = useState(0); // used to re-eval on external sunrise change
 
   // φ tick
   useEffect(() => {
-    const pulse = () => { setNow(new Date()); };
+    const pulse = () => { setNow(new Date(timeSourceRef.current.nowEpochMs())); };
     pulse();
     const id = setInterval(pulse, Math.round(BREATH_SEC * 1000));
     return () => clearInterval(id);

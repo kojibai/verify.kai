@@ -290,6 +290,13 @@ export class KaiTimeSource {
   nowPulse(): number {
     return toSafeNumber(floorDivE(this.nowMicroPulses(), 1_000_000n));
   }
+
+  /** Current epoch milliseconds (φ bridge, monotonic perf deltas). */
+  nowEpochMs(): number {
+    const deltaMs = microPulsesToMs(this.nowMicroPulses());
+    const epochMs = BigInt(GENESIS_TS) + deltaMs;
+    return toSafeNumber(epochMs);
+  }
 }
 
 const kaiTimeSource = new KaiTimeSource();
@@ -384,6 +391,24 @@ export function microPulsesSinceGenesis(utc: string | Date | bigint): bigint {
   }
   const deltaMs = msEpoch - BigInt(GENESIS_TS);
   return mulDivRoundHalfEven(deltaMs, INV_Tx1000_NUM, INV_Tx1000_DEN);
+}
+
+const microPulsesToMs = (microPulses: bigint): bigint =>
+  mulDivRoundHalfEven(microPulses, T_MS_NUM, T_MS_DEN * 1_000_000n);
+
+/** Convert μpulses since Genesis → epoch ms (BigInt). */
+export function epochMsFromMicroPulses(microPulses: bigint): bigint {
+  return BigInt(GENESIS_TS) + microPulsesToMs(microPulses);
+}
+
+/** Epoch ms from φ-clock (monotonic, ignores wall-clock jumps). */
+export function kairosEpochNow(timeSource: KaiTimeSource = getKaiTimeSource()): number {
+  return timeSource.nowEpochMs();
+}
+
+/** Date object backed by the φ clock (no Date.now usage). */
+export function kairosDateNow(timeSource: KaiTimeSource = getKaiTimeSource()): Date {
+  return new Date(kairosEpochNow(timeSource));
 }
 /** Bridge used by UI timers: current pulse as a fractional number (μpulse precise). */
 export function kaiPulseNowBridge(timeSource: KaiTimeSource = getKaiTimeSource()): number {

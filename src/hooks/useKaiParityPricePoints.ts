@@ -1,4 +1,5 @@
 import React from "react";
+import { getKaiTimeSource } from "../utils/kai_pulse";
 
 /* ────────────────────────────────────────────────────────────
    Kai Parity Price Feed — derives USD/Φ from your real quote
@@ -21,9 +22,10 @@ const clamp = (v: number, min: number, max: number) =>
 const BREATH_S = 3 + Math.sqrt(5);
 const BREATH_MS = BREATH_S * 1000;
 const GENESIS_MS = 1715323541888;
+const kaiClock = getKaiTimeSource();
 
-/** Current Kai pulse (index + float) */
-function kaiPulseNow(nowMs: number = Date.now()) {
+/** Current Kai pulse (index + float) — φ-clock based, monotonic. */
+function kaiPulseNow(nowMs: number = kaiClock.nowEpochMs()) {
   const deltaMs = Math.max(0, nowMs - GENESIS_MS);
   const pulsesFloat = deltaMs / BREATH_MS;
   const index = Math.floor(pulsesFloat);

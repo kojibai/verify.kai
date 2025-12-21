@@ -1,18 +1,20 @@
 // src/hooks/useKaiTicker.ts
 import { useEffect, useRef, useState } from "react";
-import { PULSE_MS, computeKaiLocally } from "../utils/kai_pulse";
+import { PULSE_MS, computeKaiLocally, getKaiTimeSource } from "../utils/kai_pulse";
 
 export function useKaiTicker() {
   const [pulse, setPulse] = useState<number | null>(null);
   const [msToNextPulse, setMsToNextPulse] = useState<number>(PULSE_MS);
   const lastPulseAtRef = useRef<number | null>(null);
   const lastPulseRef = useRef<number | null>(null);
+  const timeSourceRef = useRef(getKaiTimeSource());
 
   useEffect(() => {
     let intervalId: number | null = null;
     const update = () => {
-      const calc = computeKaiLocally(new Date());
-      const now = Date.now();
+      const timeSource = timeSourceRef.current;
+      const calc = computeKaiLocally(undefined, timeSource);
+      const now = timeSource.nowEpochMs();
       if (lastPulseRef.current == null || calc.pulse !== lastPulseRef.current) {
         lastPulseRef.current = calc.pulse;
         lastPulseAtRef.current = now;
