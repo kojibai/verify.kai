@@ -219,14 +219,7 @@ const ONE_PULSE_MICRO = 1_000_000n;
 // ✅ NEW canonical key (μpulses since Genesis)
 const KAI_ANCHOR_PMICRO_KEY = "phi_kai_anchor_pmicro_v1";
 
-// ✅ legacy key you previously wrote (epoch ms)
-const KAI_ANCHOR_MSUTC_LEGACY_KEY = "phi_kai_anchor_msutc_v1";
 
-// Vite env typing (no `any`)
-type ViteEnv = {
-  VITE_KAI_ANCHOR_PMICRO?: string; // preferred: μpulses since Genesis
-  VITE_KAI_ANCHOR_MICRO?: string; // legacy name; treat same as above
-};
 
 type KaiAnchorSource = "storage" | "env" | "kpp"; // kpp = kai_pulse.ts
 type KaiAnchor = { pμ0: bigint; perf0: number; source: KaiAnchorSource };
@@ -251,18 +244,6 @@ function roundTiesToEvenBigInt(x: number): bigint {
   return BigInt(s * (i % 2 === 0 ? i : i + 1));
 }
 
-function readLocalStorageBigInt(key: string): bigint | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return null;
-    if (!/^-?\d+$/.test(raw.trim())) return null;
-    return BigInt(raw.trim());
-  } catch {
-    return null;
-  }
-}
-
 function writeLocalStorageBigInt(key: string, v: bigint): void {
   if (typeof window === "undefined") return;
   try {
@@ -272,18 +253,7 @@ function writeLocalStorageBigInt(key: string, v: bigint): void {
   }
 }
 
-function readLocalStorageMsUTC(key: string): number | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return null;
-    const n = Number(raw);
-    if (!Number.isFinite(n) || n <= 0) return null;
-    return Math.floor(n);
-  } catch {
-    return null;
-  }
-}
+
 
 /* epoch-ms → μpulses since Genesis (bridge uses canonical GENESIS_TS / PULSE_MS) */
 function microPulsesSinceGenesisMs(msUTC: number): bigint {
@@ -312,29 +282,7 @@ function normalizeKaiEpochRawToMicroPulses(raw: bigint): bigint {
   return microPulsesSinceGenesisMs(epochMs);
 }
 
-function readInjectedEnvAnchorMicroPulses(): bigint | null {
-  try {
-    const env = (import.meta as unknown as { env?: ViteEnv }).env;
-    const raw = (env?.VITE_KAI_ANCHOR_PMICRO ?? env?.VITE_KAI_ANCHOR_MICRO)?.trim();
-    if (!raw) return null;
 
-    // Accept integer strings only (μpulses checkpoint).
-    if (!/^-?\d+$/.test(raw)) return null;
-
-    const bi = BigInt(raw);
-
-    // Heuristic support: if someone accidentally injects epoch-ms (< ~year 2096),
-    // convert it to μpulses since Genesis.
-    if (bi > 0n && bi < 4_000_000_000_000n) {
-      const ms = Number(bi);
-      if (Number.isFinite(ms)) return microPulsesSinceGenesisMs(ms);
-    }
-
-    return bi;
-  } catch {
-    return null;
-  }
-}
 
 function seedFromKaiPulseNow(): bigint {
   // kairosEpochNow() is the canonical source (matches SigilModal)
@@ -342,18 +290,6 @@ function seedFromKaiPulseNow(): bigint {
   return normalizeKaiEpochRawToMicroPulses(raw);
 }
 
-function ensureKaiAnchor(): KaiAnchor {
-  if (kaiAnchorStore.anchor) return kaiAnchorStore.anchor;
-
-  if (typeof window === "undefined") {
-    kaiAnchorStore.anchor = { pμ0: 0n, perf0: 0, source: "kpp" };
-    return kaiAnchorStore.anchor;
-  }
-
-  const pμ0 = seedFromKaiPulseNow();
-  kaiAnchorStore.anchor = { pμ0, perf0: 0, source: "kpp" };
-  return kaiAnchorStore.anchor;
-}
 
 // Force-resync anchor from canonical now (eliminates stale-storage offsets)
 function hardResyncKaiAnchor(): void {
