@@ -10,6 +10,94 @@ import { APP_VERSION, SW_VERSION_EVENT } from "./version";
 
 // ✅ REPLACE scheduler impl with your utils cadence file
 import { startKaiCadence } from "./utils/kai_cadence";
+import { GENESIS_TS, PULSE_MS, seedKaiNowMicroPulses } from "./utils/kai_pulse";
+
+
+/* ────────────────────────────────────────────────────────────────
+   Kai NOW seeding (μpulses) — one-time coordinate selection only.
+   Priority:
+     1) localStorage checkpoint (if present)
+     2) build-injected env anchor: VITE_KAI_ANCHOR_MICRO
+     3) performance.timeOrigin + performance.now() → bridged to μpulses
+────────────────────────────────────────────────────────────────── */
+
+const KAI_SEED_KEYS: readonly string[] = [
+  // try multiple to match whatever you’ve used historically
+  "kai.now.micro",
+  "kai_now_micro",
+  "kai_anchor_micro",
+  "KAI_ANCHOR_MICRO",
+  "KAI_NOW_MICRO",
+];
+
+const parseBigInt = (v: unknown): bigint | null => {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  if (!/^-?\d+$/.test(s)) return null;
+  try {
+    return BigInt(s);
+  } catch {
+    return null;
+  }
+};
+
+const roundTiesToEvenBigInt = (x: number): bigint => {
+  if (!Number.isFinite(x)) return 0n;
+  const sign = x < 0 ? -1 : 1;
+  const ax = Math.abs(x);
+  const i = Math.trunc(ax);
+  const frac = ax - i;
+
+  if (frac < 0.5) return BigInt(sign * i);
+  if (frac > 0.5) return BigInt(sign * (i + 1));
+  // exactly .5 → ties-to-even
+  return BigInt(sign * (i % 2 === 0 ? i : i + 1));
+};
+
+const microPulsesSinceGenesisFromEpochMs = (epochMs: number): bigint => {
+  const deltaMs = epochMs - GENESIS_TS;
+  const pulses = deltaMs / PULSE_MS; // PULSE_MS may be fractional; OK
+  return roundTiesToEvenBigInt(pulses * 1_000_000);
+};
+
+const readSeedFromLocalStorage = (): bigint | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    for (const k of KAI_SEED_KEYS) {
+      const raw = window.localStorage.getItem(k);
+      const b = parseBigInt(raw);
+      if (b !== null) return b;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+};
+
+const readSeedFromEnv = (): bigint | null => {
+  // avoids needing ImportMetaEnv augmentation
+  const env = import.meta.env as Record<string, string | boolean | undefined>;
+  const raw = env["VITE_KAI_ANCHOR_MICRO"];
+  return parseBigInt(typeof raw === "string" ? raw : undefined);
+};
+
+const pickSeedMicroPulses = (): bigint => {
+  const fromLS = readSeedFromLocalStorage();
+  if (fromLS !== null) return fromLS;
+
+  const fromEnv = readSeedFromEnv();
+  if (fromEnv !== null) return fromEnv;
+
+  // final fallback: one-time bridge from perf-derived epoch ms
+  const epochMs = performance.timeOrigin + performance.now();
+  return microPulsesSinceGenesisFromEpochMs(epochMs);
+};
+
+// 🔒 MUST happen before any component calls kairosEpochNow()
+if (typeof window !== "undefined") {
+  const pμ = pickSeedMicroPulses();
+  seedKaiNowMicroPulses(pμ);
+}
 
 const isProduction = import.meta.env.MODE === "production";
 

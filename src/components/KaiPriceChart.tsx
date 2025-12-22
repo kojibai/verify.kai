@@ -1,6 +1,8 @@
+// src/components/KaiPriceChart.tsx
 "use client";
 
 import * as React from "react";
+import { GENESIS_TS, PULSE_MS } from "../utils/kai_pulse";
 
 /** ---------- Public types (imported by other files) ---------- */
 export type KPricePoint = { p: number; price: number; vol: number };
@@ -57,15 +59,35 @@ export type KaiPriceChartProps = {
 };
 
 /** ---------- Kai constants (bridge only) ---------- */
-const KAI_EPOCH_MS = 1715323541888; // canonical bridge
-const BREATH_S = 3 + Math.sqrt(5);
-const BREATH_MS = BREATH_S * 1000;
+const BREATH_MS = PULSE_MS;
 
-const kaiPulseNow = (): number => (Date.now() - KAI_EPOCH_MS) / BREATH_MS;
+// Safe global getter (typed)
+const getGlobal = <T,>(key: string): T | undefined => {
+  const g = globalThis as unknown as Record<string, unknown>;
+  return g[key] as T | undefined;
+};
+
+type KaiPulseNowFn = () => number;
+
+/**
+ * kaiPulseNow()
+ * Priority:
+ *  1) Use a global bridge if the app provides one (zero duplication, exact canonical behavior)
+ *  2) Fallback: compute from GENESIS_TS + performance clock (no Date API)
+ */
+const kaiPulseNow = (): number => {
+  const gBridge = getGlobal<KaiPulseNowFn>("kaiPulseNowBridge") ?? getGlobal<KaiPulseNowFn>("kaiPulseNow");
+  if (typeof gBridge === "function") return gBridge();
+
+  // Fallback bridge (client-only; monotonic-ish; no Date.now)
+  const nowMs = performance.timeOrigin + performance.now();
+  return (nowMs - GENESIS_TS) / PULSE_MS;
+};
 
 /** ---------- helpers ---------- */
 const clamp = (x: number, min: number, max: number) => Math.max(min, Math.min(max, x));
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
 const fmtUSD = (n: number) =>
   n.toLocaleString("en-US", {
     style: "currency",
@@ -93,6 +115,7 @@ const phiVol = (pulse: number) => {
 const EMPTY_POINTS: ReadonlyArray<KPricePoint> = Object.freeze([] as KPricePoint[]);
 const EMPTY_BANDS: ReadonlyArray<number> = Object.freeze([] as number[]);
 
+/** ---------- styles ---------- */
 const KAI_PRICE_CHART_CSS = `
 .kai-price-wrap { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji"; color: #e7fbf7; }
 .kai-price-chart { display:block; width:100%; height:auto; }
@@ -122,12 +145,6 @@ const KAI_PRICE_CHART_CSS = `
 `;
 
 const defaultPadding = { l: 64, r: 20, t: 28, b: 36 };
-
-// Safe global getter (typed)
-const getGlobal = <T,>(key: string): T | undefined => {
-  const g = globalThis as Record<string, unknown>;
-  return g[key] as T | undefined;
-};
 
 // Choose an X grid segment count that guarantees label spacing (no overlap),
 // based on the *display* width (mobile-safe), while respecting gridXTicks as a MAX.
@@ -199,9 +216,11 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
   React.useEffect(() => {
     fetchMetaRef.current = fetchSigilMeta ?? getGlobal<() => Promise<SigilMeta>>("fetchSigilMeta");
   }, [fetchSigilMeta]);
+
   React.useEffect(() => {
     buildSeriesRef.current = buildExchangeSeries ?? getGlobal<BuildExchangeSeries>("buildExchangeSeries");
   }, [buildExchangeSeries]);
+
   React.useEffect(() => {
     policyRef.current = issuancePolicy ?? getGlobal<IssuancePolicy>("DEFAULT_ISSUANCE_POLICY");
   }, [issuancePolicy]);
@@ -328,8 +347,8 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
         const prevPrice = lastPriceRef.current;
         const c = computeForPulse(pInt, prevPrice);
 
-        setLivePts((prev: KPricePoint[]) => {
-          const next = [...prev, { p: pInt, price: c.price, vol: c.vol }];
+        setLivePts((prevArr: KPricePoint[]) => {
+          const next = [...prevArr, { p: pInt, price: c.price, vol: c.vol }];
           return next.length > windowPoints ? next.slice(next.length - windowPoints) : next;
         });
 
@@ -440,9 +459,9 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
   const area = React.useMemo(() => {
     if (!path || screenPts.length === 0) return "";
     const bottomY = padding.t + ih;
-    const last = screenPts[screenPts.length - 1]!;
-    const first = screenPts[0]!;
-    return `${path} L${last.x.toFixed(2)} ${bottomY.toFixed(2)} L${first.x.toFixed(2)} ${bottomY.toFixed(2)} Z`;
+    const lastPt = screenPts[screenPts.length - 1]!;
+    const firstPt = screenPts[0]!;
+    return `${path} L${lastPt.x.toFixed(2)} ${bottomY.toFixed(2)} L${firstPt.x.toFixed(2)} ${bottomY.toFixed(2)} Z`;
   }, [path, screenPts, ih, padding.t]);
 
   // Crosshair
@@ -577,7 +596,7 @@ const KaiPriceChart: React.FC<KaiPriceChartProps> = ({
           <g className="kpc-empty">
             <text
               x={padding.l + Math.max(10, (autoWidth ? measuredW : width) - padding.l - padding.r) / 2}
-              y={padding.t + Math.max(10, height - padding.t - padding.b) + 2}
+              y={padding.t + Math.max(10, height - padding.t - padding.b) / 2}
               textAnchor="middle"
               alignmentBaseline="middle"
               className="kpc-axis-text"

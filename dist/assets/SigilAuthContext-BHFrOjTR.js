@@ -1,1 +1,0 @@
-import{An as e,wn as t}from"./index-CEPP-mDI.js";var n=e(t(),1);const r=(0,n.createContext)(null);function i(){let e=(0,n.useContext)(r);if(!e)throw Error(`useSigilAuth must be used within <SigilAuthProvider>.`);return e}export{i as n,r as t};

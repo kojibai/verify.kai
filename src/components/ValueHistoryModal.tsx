@@ -1,5 +1,6 @@
 // src/components/ValueHistoryModal.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
+import { kairosEpochNow } from "../utils/kai_pulse";
 import "./ValueHistoryModal.css";
 
 /** Kairos series point: t = absolute *fractional* beat since genesis, v = value (Φ) */
@@ -27,12 +28,13 @@ const MS_PER_BEAT =
 const GENESIS_TS = 1715323541888; // 2024-05-10T06:45:41.888Z
 
 /** Convert epoch-ms → absolute fractional beats since genesis. */
-function msToAbsBeat(ms: number): number {
-  return (ms - GENESIS_TS) / MS_PER_BEAT;
+function msToAbsBeat(ms: number | bigint): number {
+  const n = typeof ms === "bigint" ? Number(ms) : ms;
+  return (n - GENESIS_TS) / MS_PER_BEAT;
 }
 
 /** Snapshot of “now” in Kai beats at module-load time (keeps hooks pure). */
-const NOW_BEAT_AT_LOAD = msToAbsBeat(Date.now());
+const NOW_BEAT_AT_LOAD = msToAbsBeat(kairosEpochNow());
 
 /** Normalize any epoch-ms series to Kai beats. */
 function normalizeToKaiBeats(src: Point[]): Point[] {
@@ -85,9 +87,7 @@ export default function ValueHistoryModal({
   // (new array when you push/append). That keeps React + Compiler semantics correct.
   const kaiSorted = useMemo(() => {
     const normalized = normalizeToKaiBeats(series || []);
-    return normalized.length
-      ? [...normalized].sort((a, b) => a.t - b.t)
-      : normalized;
+    return normalized.length ? [...normalized].sort((a, b) => a.t - b.t) : normalized;
   }, [series]);
 
   // If the stream is still warming up, seed a single point from latestValue
@@ -119,15 +119,12 @@ export default function ValueHistoryModal({
 
   // Extents (with gentle pad)
   const { minT, maxT, minV, maxV } = useMemo(() => {
-    if (!filtered.length)
-      return { minT: 0, maxT: 1, minV: 0, maxV: 1 };
+    if (!filtered.length) return { minT: 0, maxT: 1, minV: 0, maxV: 1 };
     const ts = filtered.map((p) => p.t);
     const vs = filtered.map((p) => p.v);
     const vMin = Math.min(...vs);
     const vMax = Math.max(...vs);
-    const pad =
-      (vMax - vMin) * 0.08 ||
-      Math.max(0.000001, Math.abs(vMax) * 0.02);
+    const pad = (vMax - vMin) * 0.08 || Math.max(0.000001, Math.abs(vMax) * 0.02);
     return {
       minT: Math.min(...ts),
       maxT: Math.max(...ts),
@@ -162,27 +159,16 @@ export default function ValueHistoryModal({
     const wrap = wrapRef.current;
     if (!el || !wrap) return;
 
-    const DPR = Math.max(
-      1,
-      Math.floor(window.devicePixelRatio || 1)
-    );
-    const W = Math.max(
-      280,
-      Math.min(1200, wrap.clientWidth || 320)
-    );
-    const H = Math.max(
-      220,
-      Math.min(420, Math.round(W * 0.42))
-    );
+    const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+    const W = Math.max(280, Math.min(1200, wrap.clientWidth || 320));
+    const H = Math.max(220, Math.min(420, Math.round(W * 0.42)));
 
     el.width = W * DPR;
     el.height = H * DPR;
     el.style.width = `${W}px`;
     el.style.height = `${H}px`;
 
-    type CtxMaybeReset = CanvasRenderingContext2D & {
-      resetTransform?: () => void;
-    };
+    type CtxMaybeReset = CanvasRenderingContext2D & { resetTransform?: () => void };
     const ctx = el.getContext("2d") as CtxMaybeReset | null;
     if (!ctx) return;
 
@@ -203,18 +189,11 @@ export default function ValueHistoryModal({
     const padY = 24;
     const x = (t: number) => {
       const span = Math.max(1e-9, maxT - minT);
-      return (
-        padX +
-        ((t - minT) / span) * (W - padX * 2)
-      );
+      return padX + ((t - minT) / span) * (W - padX * 2);
     };
     const y = (v: number) => {
       const rng = Math.max(1e-12, maxV - minV);
-      return (
-        H -
-        padY -
-        ((v - minV) / rng) * (H - padY * 2)
-      );
+      return H - padY - ((v - minV) / rng) * (H - padY * 2);
     };
 
     // Grid (subtle)
@@ -222,8 +201,7 @@ export default function ValueHistoryModal({
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let i = 0; i <= 4; i++) {
-      const gy =
-        padY + (i * (H - padY * 2)) / 4;
+      const gy = padY + (i * (H - padY * 2)) / 4;
       ctx.moveTo(padX, gy);
       ctx.lineTo(W - padX, gy);
     }
@@ -234,9 +212,7 @@ export default function ValueHistoryModal({
     const pts = filtered.map((p, i) => {
       const start = Math.max(0, i - smooth);
       const seg = filtered.slice(start, i + 1);
-      const avg =
-        seg.reduce((s, q) => s + q.v, 0) /
-        seg.length;
+      const avg = seg.reduce((s, q) => s + q.v, 0) / seg.length;
       return { t: p.t, v: avg };
     });
 
@@ -256,23 +232,13 @@ export default function ValueHistoryModal({
     }
 
     // Area fill
-    const grad = ctx.createLinearGradient(
-      0,
-      padY,
-      0,
-      H - padY
-    );
+    const grad = ctx.createLinearGradient(0, padY, 0, H - padY);
     grad.addColorStop(0, "rgba(55,230,212,.35)");
     grad.addColorStop(1, "rgba(55,230,212,0)");
     ctx.beginPath();
     ctx.moveTo(x(pts[0].t), y(pts[0].v));
-    pts.forEach((p) =>
-      ctx.lineTo(x(p.t), y(p.v))
-    );
-    ctx.lineTo(
-      x(pts[pts.length - 1].t),
-      H - padY
-    );
+    pts.forEach((p) => ctx.lineTo(x(p.t), y(p.v)));
+    ctx.lineTo(x(pts[pts.length - 1].t), H - padY);
     ctx.lineTo(x(pts[0].t), H - padY);
     ctx.closePath();
     ctx.fillStyle = grad;
@@ -294,12 +260,7 @@ export default function ValueHistoryModal({
     ctx.shadowBlur = 0;
 
     // Crosshair & tooltip
-    if (
-      hoverX != null &&
-      hoverY != null &&
-      hoverIdx != null &&
-      filtered[hoverIdx]
-    ) {
+    if (hoverX != null && hoverY != null && hoverIdx != null && filtered[hoverIdx]) {
       const p = filtered[hoverIdx];
       const xx = x(p.t);
       const yy = y(p.v);
@@ -317,19 +278,14 @@ export default function ValueHistoryModal({
       ctx.arc(xx, yy, 3, 0, Math.PI * 2);
       ctx.fill();
 
-      const tip = `Beat ${p.t.toFixed(
-        6
-      )}  •  ${p.v.toLocaleString(undefined, {
+      const tip = `Beat ${p.t.toFixed(6)}  •  ${p.v.toLocaleString(undefined, {
         maximumFractionDigits: 6,
       })} Φ`;
+
       const pad = 8;
-      ctx.font =
-        "12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Inter";
+      ctx.font = "12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Inter";
       const tw = ctx.measureText(tip).width;
-      const bx = Math.min(
-        Math.max(xx - tw / 2 - pad, 8),
-        W - tw - pad * 2 - 8
-      );
+      const bx = Math.min(Math.max(xx - tw / 2 - pad, 8), W - tw - pad * 2 - 8);
       const by = Math.max(yy - 34, 8);
 
       const r = 8;
@@ -338,39 +294,20 @@ export default function ValueHistoryModal({
       const x0 = bx;
       const y0 = by;
       const r2 = Math.min(r, w / 2, h / 2);
+
       ctx.fillStyle = "rgba(0,0,0,.6)";
       ctx.strokeStyle = "rgba(255,255,255,.18)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x0 + r2, y0);
       ctx.lineTo(x0 + w - r2, y0);
-      ctx.quadraticCurveTo(
-        x0 + w,
-        y0,
-        x0 + w,
-        y0 + r2
-      );
+      ctx.quadraticCurveTo(x0 + w, y0, x0 + w, y0 + r2);
       ctx.lineTo(x0 + w, y0 + h - r2);
-      ctx.quadraticCurveTo(
-        x0 + w,
-        y0 + h,
-        x0 + w - r2,
-        y0 + h
-      );
+      ctx.quadraticCurveTo(x0 + w, y0 + h, x0 + w - r2, y0 + h);
       ctx.lineTo(x0 + r2, y0 + h);
-      ctx.quadraticCurveTo(
-        x0,
-        y0 + h,
-        x0,
-        y0 + h - r2
-      );
+      ctx.quadraticCurveTo(x0, y0 + h, x0, y0 + h - r2);
       ctx.lineTo(x0, y0 + r2);
-      ctx.quadraticCurveTo(
-        x0,
-        y0,
-        x0 + r2,
-        y0
-      );
+      ctx.quadraticCurveTo(x0, y0, x0 + r2, y0);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
@@ -378,18 +315,7 @@ export default function ValueHistoryModal({
       ctx.fillStyle = "#e7fbf7";
       ctx.fillText(tip, bx + pad, by + 16);
     }
-  }, [
-    open,
-    filtered,
-    minT,
-    maxT,
-    minV,
-    maxV,
-    hoverX,
-    hoverY,
-    hoverIdx,
-    sizeTick,
-  ]);
+  }, [open, filtered, minT, maxT, minV, maxV, hoverX, hoverY, hoverIdx, sizeTick]);
 
   // pointer interactivity
   useEffect(() => {
@@ -399,14 +325,10 @@ export default function ValueHistoryModal({
 
     const onMove = (ev: PointerEvent) => {
       const rect = el.getBoundingClientRect();
-      const DPR = Math.max(
-        1,
-        Math.floor(window.devicePixelRatio || 1)
-      );
-      const cx =
-        (ev.clientX - rect.left) * DPR;
-      const cy =
-        (ev.clientY - rect.top) * DPR;
+      const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+      const cx = (ev.clientX - rect.left) * DPR;
+      const cy = (ev.clientY - rect.top) * DPR;
+
       setHoverX(cx / DPR);
       setHoverY(cy / DPR);
 
@@ -415,16 +337,13 @@ export default function ValueHistoryModal({
         const W = rect.width;
         const minX = padX;
         const maxX = W - padX;
+
         const x01 = Math.min(
           1,
-          Math.max(
-            0,
-            (cx / DPR - minX) /
-              Math.max(1, maxX - minX)
-          )
+          Math.max(0, (cx / DPR - minX) / Math.max(1, maxX - minX))
         );
-        const tGuess =
-          minT + x01 * (maxT - minT);
+        const tGuess = minT + x01 * (maxT - minT);
+
         let lo = 0;
         let hi = filtered.length - 1;
         while (hi - lo > 1) {
@@ -433,12 +352,7 @@ export default function ValueHistoryModal({
           else hi = mid;
         }
         const pick =
-          Math.abs(
-            filtered[lo].t - tGuess
-          ) <
-          Math.abs(
-            filtered[hi].t - tGuess
-          )
+          Math.abs(filtered[lo].t - tGuess) < Math.abs(filtered[hi].t - tGuess)
             ? lo
             : hi;
         setHoverIdx(pick);
@@ -451,80 +365,45 @@ export default function ValueHistoryModal({
       setHoverIdx(null);
     };
 
-    el.addEventListener("pointermove", onMove, {
-      passive: true,
-    });
-    el.addEventListener("pointerleave", onLeave, {
-      passive: true,
-    });
+    el.addEventListener("pointermove", onMove, { passive: true });
+    el.addEventListener("pointerleave", onLeave, { passive: true });
     return () => {
-      el.removeEventListener(
-        "pointermove",
-        onMove
-      );
-      el.removeEventListener(
-        "pointerleave",
-        onLeave
-      );
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerleave", onLeave);
     };
   }, [open, filtered, minT, maxT]);
 
   if (!open) return null;
 
   const latestText = Number.isFinite(latestValue)
-    ? latestValue.toLocaleString(undefined, {
-        maximumFractionDigits: 6,
-      })
+    ? latestValue.toLocaleString(undefined, { maximumFractionDigits: 6 })
     : "—";
 
   return (
-    <div
-      className="valuehist-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Value History"
-    >
-      <button
-        className="valuehist-exit"
-        onClick={onClose}
-        title="Close"
-      >
+    <div className="valuehist-overlay" role="dialog" aria-modal="true" aria-label="Value History">
+      <button className="valuehist-exit" onClick={onClose} title="Close">
         ✕
       </button>
 
-      <div
-        className="valuehist-stage"
-        style={{ alignItems: "stretch" }}
-      >
+      <div className="valuehist-stage" style={{ alignItems: "stretch" }}>
         <div className="valuehist-panel">
           <div className="valuehist-head">
-            <h3 className="valuehist-title">
-              {label} — history
-            </h3>
+            <h3 className="valuehist-title">{label} — history</h3>
 
             <span
               className={`badge badge--ok ${
-                latestDir === "up"
-                  ? "flash-up"
-                  : latestDir === "down"
-                  ? "flash-down"
-                  : ""
+                latestDir === "up" ? "flash-up" : latestDir === "down" ? "flash-down" : ""
               }`}
               aria-label="latest value"
             >
-              Latest:&nbsp;
-              <strong>{latestText} Φ</strong>
+              Latest:&nbsp;<strong>{latestText} Φ</strong>
             </span>
 
             <div className="valuehist-ranges">
-              {(
-                ["1B", "1D", "6D", "42D", "ALL"] as RangeKey[]
-              ).map((k) => (
+              {(["1B", "1D", "6D", "42D", "ALL"] as RangeKey[]).map((k) => (
                 <button
                   key={k}
-                  className={`btn-ghost${
-                    k === range ? " btn-primary" : ""
-                  }`}
+                  className={`btn-ghost${k === range ? " btn-primary" : ""}`}
                   onClick={() => setRange(k)}
                   aria-pressed={k === range}
                 >
@@ -534,15 +413,8 @@ export default function ValueHistoryModal({
             </div>
           </div>
 
-          <div
-            ref={wrapRef}
-            className="valuehist-frame"
-          >
-            {filtered.length === 0 && (
-              <div className="valuehist-empty">
-                Waiting for live samples…
-              </div>
-            )}
+          <div ref={wrapRef} className="valuehist-frame">
+            {filtered.length === 0 && <div className="valuehist-empty">Waiting for live samples…</div>}
             <canvas ref={canvasRef} />
           </div>
 
@@ -550,34 +422,19 @@ export default function ValueHistoryModal({
             <button
               className="btn-ghost"
               onClick={() => {
-                const rows = filtered.map(
-                  (p) => `${p.t},${p.v}`
-                );
-                const blob = new Blob(
-                  [
-                    `beat,value\n${rows.join(
-                      "\n"
-                    )}`,
-                  ],
-                  { type: "text/csv" }
-                );
-                const url =
-                  URL.createObjectURL(blob);
-                const a =
-                  document.createElement("a");
+                const rows = filtered.map((p) => `${p.t},${p.v}`);
+                const blob = new Blob([`beat,value\n${rows.join("\n")}`], { type: "text/csv" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
                 a.href = url;
-                a.download =
-                  "phi-history-kai.csv";
+                a.download = "phi-history-kai.csv";
                 a.click();
-                setTimeout(
-                  () =>
-                    URL.revokeObjectURL(url),
-                  300
-                );
+                setTimeout(() => URL.revokeObjectURL(url), 300);
               }}
             >
               Download CSV
             </button>
+
             <button
               className="btn-ghost"
               onClick={() => {
@@ -585,19 +442,12 @@ export default function ValueHistoryModal({
                 if (!el2) return;
                 el2.toBlob((b) => {
                   if (!b) return;
-                  const url =
-                    URL.createObjectURL(b);
-                  const a =
-                    document.createElement("a");
+                  const url = URL.createObjectURL(b);
+                  const a = document.createElement("a");
                   a.href = url;
-                  a.download =
-                    "phi-history.png";
+                  a.download = "phi-history.png";
                   a.click();
-                  setTimeout(
-                    () =>
-                      URL.revokeObjectURL(url),
-                    300
-                  );
+                  setTimeout(() => URL.revokeObjectURL(url), 300);
                 });
               }}
             >

@@ -2,6 +2,8 @@
 // Side-effect module (no exports). Import once on client pages.
 /* eslint-disable @typescript-eslint/consistent-type-assertions */
 
+import { kairosEpochNow } from "./kai_pulse";
+
 type AudioCtor = new () => AudioContext;
 
 type AudioWindow = Window & {
@@ -16,7 +18,9 @@ declare global {
 }
 
 let ctx: AudioContext | null = null;
-let lastFire = 0;
+
+// ✅ Kairos epoch is bigint (ms). Keep guard state bigint to avoid bigint-number ops.
+let lastFire = 0n;
 
 /* ─────────────── Core Audio Helpers ─────────────── */
 
@@ -86,7 +90,7 @@ function createPhiEarlyReflections(c: AudioContext): { input: AudioNode; output:
   const out = c.createGain();
   out.gain.value = 0.18;
 
-  const times = [0.123, 0.200, 0.323]; // φ-flavored taps (s)
+  const times = [0.123, 0.2, 0.323]; // φ-flavored taps (s)
   for (const t of times) {
     const d = c.createDelay(0.6);
     d.delayTime.value = t;
@@ -101,8 +105,8 @@ function createPhiEarlyReflections(c: AudioContext): { input: AudioNode; output:
     bus.connect(d);
     d.connect(lp);
     lp.connect(g);
-    g.connect(d);     // feedback loop
-    lp.connect(out);  // wet tap
+    g.connect(d); // feedback loop
+    lp.connect(out); // wet tap
   }
   return { input: bus, output: out };
 }
@@ -118,6 +122,7 @@ function createStereoAura(c: AudioContext): { input: AudioNode; output: AudioNod
   } catch {
     pan = null;
   }
+
   if (pan) {
     // Slow φ wobble of the stereo image
     const osc = c.createOscillator();
@@ -133,6 +138,7 @@ function createStereoAura(c: AudioContext): { input: AudioNode; output: AudioNod
     osc.stop(t0 + 12.0); // keep aura through the long tail
     return { input: pan, output: pan };
   }
+
   const g = c.createGain();
   return { input: g, output: g };
 }
@@ -184,7 +190,7 @@ function createExciterNoise(c: AudioContext, at: number, length = 0.35): AudioNo
     const t = i / frames;
     // Gentle decay and slight 1/f flavor
     const white = Math.random() * 2 - 1;
-    data[i] = (0.7 * white) * Math.exp(-4.2 * t);
+    data[i] = 0.7 * white * Math.exp(-4.2 * t);
   }
 
   const src = c.createBufferSource();
@@ -236,22 +242,22 @@ function createModalBank(
   baseHz: number,
   t0: number,
   dur: number,
-  vibBus: GainNode | null
+  vibBus: GainNode | null,
 ): { input: AudioNode; output: AudioNode } {
   const bus = c.createGain();
   const out = c.createGain();
 
   // Inharmonic gong-like mode set (empirical, musical)
   const modes: ReadonlyArray<ModalSpec> = [
-    { r: 1.00, q: 20, g: 0.70, drift: 0.986 },
+    { r: 1.0, q: 20, g: 0.7, drift: 0.986 },
     { r: 1.19, q: 18, g: 0.28, drift: 0.987 },
     { r: 1.47, q: 16, g: 0.24, drift: 0.985 },
-    { r: 1.70, q: 14, g: 0.20, drift: 0.986 },
-    { r: 2.00, q: 13, g: 0.16, drift: 0.988 },
+    { r: 1.7, q: 14, g: 0.2, drift: 0.986 },
+    { r: 2.0, q: 13, g: 0.16, drift: 0.988 },
     { r: 2.32, q: 11, g: 0.14, drift: 0.989 },
-    { r: 2.62, q: 10, g: 0.12, drift: 0.990 },
-    { r: 2.95, q:  9, g: 0.10, drift: 0.991 },
-    { r: 3.30, q:  8, g: 0.08, drift: 0.992 },
+    { r: 2.62, q: 10, g: 0.12, drift: 0.99 },
+    { r: 2.95, q: 9, g: 0.1, drift: 0.991 },
+    { r: 3.3, q: 8, g: 0.08, drift: 0.992 },
   ];
 
   for (const m of modes) {
@@ -268,7 +274,8 @@ function createModalBank(
     if (vibBus) {
       const vibToF = c.createGain();
       vibToF.gain.value = f0 * 0.004; // ~0.4% FM depth
-      vibBus.connect(vibToF).connect(bp.frequency);
+      vibBus.connect(vibToF);
+      vibToF.connect(bp.frequency);
     }
 
     const g = c.createGain();
@@ -303,7 +310,7 @@ function playSacredGong(): void {
   const amp = c.createGain();
   amp.gain.setValueAtTime(0.0001, t0);
   amp.gain.linearRampToValueAtTime(0.95, t0 + 0.025);
-  amp.gain.exponentialRampToValueAtTime(0.42, t0 + 1.20);
+  amp.gain.exponentialRampToValueAtTime(0.42, t0 + 1.2);
   amp.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
 
   // Subtle φ-breath amplitude motion
@@ -311,7 +318,7 @@ function playSacredGong(): void {
   const breathG = c.createGain();
   breath.type = "sine";
   breath.frequency.setValueAtTime(0.618, t0); // φ^-1 Hz
-  breathG.gain.setValueAtTime(0.10, t0);
+  breathG.gain.setValueAtTime(0.1, t0);
   breath.connect(breathG).connect(amp.gain);
   breath.start(t0);
   breath.stop(t0 + dur + 2);
@@ -373,7 +380,7 @@ function playSacredGong(): void {
   sub.type = "sine";
   sub.frequency.setValueAtTime(base / 2, t0); // 66 Hz
   const subG = c.createGain();
-  subG.gain.setValueAtTime(0.10, t0);
+  subG.gain.setValueAtTime(0.1, t0);
   subG.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   vibG.connect(sub.frequency); // gentle life
   sub.connect(subG).connect(mix);
@@ -399,8 +406,8 @@ function playSacredGong(): void {
 /* ─────────────── Orchestration & Install ─────────────── */
 
 function fireFeedback(): void {
-  const nowMs = Date.now();
-  if (nowMs - lastFire < 120) return; // guard double-clicks
+  const nowMs = kairosEpochNow(); // bigint (ms)
+  if (nowMs - lastFire < 120n) return; // guard double-clicks (120ms)
   lastFire = nowMs;
 
   resumeAudio();

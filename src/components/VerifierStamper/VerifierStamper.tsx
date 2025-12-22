@@ -75,7 +75,9 @@ import {
 import NotePrinter from "../ExhaleNote";
 import type { VerifierBridge, BanknoteInputs as NoteBanknoteInputs } from "../exhale-note/types";
 
-import { kaiPulseNow, SIGIL_CTX, SIGIL_TYPE, SEGMENT_SIZE } from "./constants";
+import { SIGIL_CTX, SIGIL_TYPE, SEGMENT_SIZE } from "./constants";
+import { GENESIS_TS, PULSE_MS, kairosEpochNow } from "../../utils/kai_pulse";
+
 import { sha256Hex, phiFromPublicKey } from "./crypto";
 import { loadOrCreateKeypair, signB64u, type Keypair } from "./keys";
 import { parseSvgFile, centrePixelSignature, embedMetadata, pngBlobFromSvgDataUrl } from "./svg";
@@ -362,6 +364,187 @@ function registerUrlForExplorer(url: string) {
     window.dispatchEvent(new CustomEvent("kai:registry:add", { detail: { url } }));
   } catch {}
 }
+/* ────────────────────────────────────────────────────────────────
+   KKS-1.0 fixed-point μpulse math (MATCHES SigilModal)
+────────────────────────────────────────────────────────────────── */
+const ONE_PULSE_MICRO = 1_000_000n; // 1 pulse = 1e6 μpulses
+const N_DAY_MICRO = 17_491_270_421n; // 17,491.270421 pulses/day (closure) × 1e6
+const PULSES_PER_STEP_MICRO = 11_000_000n; // 11 pulses/step => 11e6 μpulses
+const STEPS_PER_BEAT = 44;
+const BEATS_PER_DAY = 36;
+const DAYS_PER_WEEK = 6;
+
+const WEEKDAY = ["Solhara", "Aquaris", "Flamora", "Verdari", "Sonari", "Kaelith"] as const;
+type HarmonicDay = (typeof WEEKDAY)[number];
+
+const DAY_TO_CHAKRA: Record<HarmonicDay, ChakraDay> = {
+  Solhara: "Root",
+  Aquaris: "Sacral",
+  Flamora: "Solar Plexus",
+  Verdari: "Heart",
+  Sonari: "Throat",
+  Kaelith: "Crown",
+};
+
+/** round(N_DAY_MICRO / 36) using integer math (MATCHES SigilModal) */
+const MU_PER_BEAT_EXACT = (N_DAY_MICRO + 18n) / 36n;
+
+/* ── safe modulo + floorDiv for BigInt ─────────────────────────── */
+const imod = (n: bigint, m: bigint) => ((n % m) + m) % m;
+function floorDiv(n: bigint, d: bigint): bigint {
+  const q = n / d;
+  const r = n % d;
+  return r !== 0n && (r > 0n) !== (d > 0n) ? q - 1n : q;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   kairosEpochNow() → normalized “μpulses since Genesis”
+   (robust against common unit mixups: pulses vs μpulses vs epoch μs)
+────────────────────────────────────────────────────────────────── */
+function microPulsesSinceGenesisMs(epochMs: number): bigint {
+  const deltaMs = epochMs - GENESIS_TS;
+
+  // μpulses = round( deltaMs / PULSE_MS * 1e6 ) with ties-to-even.
+  const x = (deltaMs / PULSE_MS) * 1_000_000;
+  const s = x < 0 ? -1 : 1;
+  const ax = Math.abs(x);
+  const i = Math.trunc(ax);
+  const frac = ax - i;
+
+  let rounded = i;
+  if (frac > 0.5) rounded = i + 1;
+  else if (frac === 0.5) rounded = i % 2 === 0 ? i : i + 1;
+
+  return BigInt(s) * BigInt(rounded);
+}
+
+function normalizeKaiEpochRawToMicroPulses(raw: bigint): bigint {
+  // 1) raw looks like *pulse count* (small) → promote to μpulses.
+  if (raw >= 0n && raw < 500_000_000n) return raw * ONE_PULSE_MICRO;
+
+  // 2) raw already looks like μpulses since Genesis.
+  const pulseGuess = floorDiv(raw, ONE_PULSE_MICRO);
+  if (pulseGuess >= 0n && pulseGuess < 500_000_000n) return raw;
+
+  // 3) fallback: treat as epoch microseconds → epoch ms → μpulses since Genesis
+  const epochMsBI = raw / 1000n;
+  const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+  const minSafe = BigInt(Number.MIN_SAFE_INTEGER);
+  if (epochMsBI > maxSafe || epochMsBI < minSafe) return raw;
+
+  const epochMs = Number(epochMsBI);
+  if (!Number.isFinite(epochMs)) return raw;
+
+  return microPulsesSinceGenesisMs(epochMs);
+}
+
+function readKaiNowMicro(): { pμ: bigint; pulse: number; μInPulse: bigint; msToNext: number } {
+  const raw = kairosEpochNow();
+  const pμ = normalizeKaiEpochRawToMicroPulses(raw);
+
+  const pulseBI = floorDiv(pμ, ONE_PULSE_MICRO);
+  const pulse =
+    pulseBI <= 0n ? 0 : pulseBI > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(pulseBI);
+
+  const μInPulse = imod(pμ, ONE_PULSE_MICRO); // 0..999,999
+  const μToNext = ONE_PULSE_MICRO - μInPulse; // 1..1,000,000
+  const msToNext = Math.max(0, Math.ceil((Number(μToNext) * PULSE_MS) / 1_000_000));
+
+  return { pμ, pulse, μInPulse, msToNext };
+}
+
+function computeLiveKaiFromMicro(pμ: bigint): {
+  pulse: number;
+  beat: number;
+  stepIndex: number;
+  harmonicDay: HarmonicDay;
+  chakraDay: ChakraDay;
+} {
+  const pulseBI = floorDiv(pμ, ONE_PULSE_MICRO);
+  const pulse =
+    pulseBI <= 0n ? 0 : pulseBI > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(pulseBI);
+
+  const pμ_in_day = imod(pμ, N_DAY_MICRO);
+  const dayIndex = floorDiv(pμ, N_DAY_MICRO);
+
+  const beatRaw = Number(floorDiv(pμ_in_day, MU_PER_BEAT_EXACT));
+  const beat = Math.min(Math.max(beatRaw, 0), BEATS_PER_DAY - 1);
+
+  const pμ_in_beat = pμ_in_day - BigInt(beat) * MU_PER_BEAT_EXACT;
+
+  const rawStep = Number(pμ_in_beat / PULSES_PER_STEP_MICRO);
+  const stepIndex = Math.min(Math.max(rawStep, 0), STEPS_PER_BEAT - 1);
+
+  const harmonicDayIndex = Number(imod(dayIndex, BigInt(DAYS_PER_WEEK)));
+  const harmonicDay = WEEKDAY[harmonicDayIndex];
+  const chakraDay = DAY_TO_CHAKRA[harmonicDay];
+
+  return { pulse, beat, stepIndex, harmonicDay, chakraDay };
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Deterministic boundary ticker: updates ONLY when pulse boundary passes
+────────────────────────────────────────────────────────────────── */
+function useKaiBoundaryTicker(active: boolean) {
+  const [snap, setSnap] = useState(() => readKaiNowMicro());
+  const tRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (tRef.current !== null) {
+      window.clearTimeout(tRef.current);
+      tRef.current = null;
+    }
+    if (!active) return;
+
+    const tick = () => {
+      const s = readKaiNowMicro();
+      setSnap((prev) => (prev.pulse === s.pulse ? prev : s));
+      tRef.current = window.setTimeout(tick, s.msToNext);
+    };
+
+    tick();
+    return () => {
+      if (tRef.current !== null) window.clearTimeout(tRef.current);
+      tRef.current = null;
+    };
+  }, [active]);
+
+  return snap;
+}
+
+/* 6-decimal countdown (derived ONLY from μpulse remainder) */
+function useKaiPulseCountdown(active: boolean) {
+  const [secsLeft, setSecsLeft] = useState<number>(PULSE_MS / 1000);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (!active) return;
+
+    const loop = () => {
+      const s = readKaiNowMicro();
+      const μToNext = ONE_PULSE_MICRO - s.μInPulse;
+      const msLeft = (Number(μToNext) * PULSE_MS) / 1_000_000;
+      setSecsLeft(Math.max(0, msLeft / 1000));
+      rafRef.current = requestAnimationFrame(loop);
+    };
+
+    rafRef.current = requestAnimationFrame(loop);
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+  }, [active]);
+
+  return active ? secsLeft : null;
+}
+// Deterministic pulse "now" accessor (used by legacy call-sites)
+function kaiPulseNow(): number {
+  return readKaiNowMicro().pulse;
+}
 
 /* ═════════════ Component ═════════════ */
 const VerifierStamperInner: React.FC = () => {
@@ -370,11 +553,18 @@ const VerifierStamperInner: React.FC = () => {
   const dlgRef = useRef<HTMLDialogElement>(null);
   const noteDlgRef = useRef<HTMLDialogElement>(null);
 
-  const [pulseNow, setPulseNow] = useState<number>(kaiPulseNow());
-  useEffect(() => {
-    const id = window.setInterval(() => setPulseNow(kaiPulseNow()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
+ // ✅ Deterministic Kai “NOW” — updates only on pulse boundaries (NO Date / NO 1s polling)
+const snap = useKaiBoundaryTicker(true);
+const live = useMemo(() => computeLiveKaiFromMicro(snap.pμ), [snap.pμ]);
+const secsLeft = useKaiPulseCountdown(true);
+
+const pulseNow = live.pulse;
+
+const headerBeatStep = useMemo(
+  () => `${live.beat}:${String(live.stepIndex).padStart(2, "0")}`,
+  [live.beat, live.stepIndex]
+);
+
 
   const [svgURL, setSvgURL] = useState<string | null>(null);
   const [sourceFilename, setSourceFilename] = useState<string | null>(null);
@@ -824,7 +1014,7 @@ const VerifierStamperInner: React.FC = () => {
     const claim = {
       steps: CLAIM_STEPS,
       expireAtPulse: startPulse + CLAIM_PULSES,
-      stepsPerBeat: (m as SigilMetadataWithOptionals).stepsPerBeat ?? 12,
+      stepsPerBeat: (m as SigilMetadataWithOptionals).stepsPerBeat ?? 44,
     };
 
     let preview: { unit?: "USD" | "PHI"; amountPhi?: string; amountUsd?: string; usdPerPhi?: number } | undefined;

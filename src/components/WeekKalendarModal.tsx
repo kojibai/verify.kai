@@ -1,28 +1,32 @@
 // src/components/WeekKalendarModal.tsx
 /* ────────────────────────────────────────────────────────────────
    WeekKalendarModal.tsx · Atlantean Lumitech “Kairos Kalendar”
-   v10.1.1 · INSTANT OPEN (Zero-Fade) + Determinism + DOM-Safe Timers
+   v10.1.2 · BIGINT-SAFE (no unions) + Deterministic μpulse boundaries
    ────────────────────────────────────────────────────────────────
-   ✅ Fix: NO conditional hook calls (SSR-safe without early-return-before-hooks)
-   ✅ CSS-ONLY visuals: no inline style props (darkness/mesh/opacity/transition in CSS)
-   ✅ PointerDown opens instantly (day rings / add memory / tabs)
-   ✅ Topmost-first close: DayDetail → NoteModal → Month → Week
+   ✅ Fix: NO bigint leaks into React state / objects typed as number
+   ✅ Uses canonical GENESIS_TS / PULSE_MS from kai_pulse.ts
+   ✅ Boundary scheduling derived from μpulse rounding (ties-to-even)
    ✅ DOM timer typing: timeoutRef is always number | null
-   ✅ No setState synchronously in effect bodies (only callbacks)
-   ✅ Keyboard accessible day rings (Enter/Space)
-   ✅ Unique SVG ids (no filter/gradient collisions)
-   ✅ Notes dock is fully class-driven (CSS owns layout)
+   ✅ No early-return before hooks (rules-of-hooks safe)
 ───────────────────────────────────────────────────────────────── */
 
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { FC, KeyboardEvent, SyntheticEvent } from "react";
 import { createPortal, flushSync } from "react-dom";
+
+import { GENESIS_TS, PULSE_MS, kairosEpochNow } from "../utils/kai_pulse";
 
 import "./WeekKalendarModal.css";
 
 import DayDetailModal from "./DayDetailModal";
-import type { HarmonicDayInfo } from "./DayDetailModal";
-
 import MonthKalendarModal from "./MonthKalendarModal";
 
 import NoteModal from "./NoteModal";
@@ -31,16 +35,22 @@ import type { Note as EnrichedNote } from "./NoteModal";
 /* ── isomorphic layout effect (no SSR warning) ── */
 const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
-/* ══════════════ constants ══════════════ */
-const GENESIS_TS = Date.UTC(2024, 4, 10, 6, 45, 41, 888);
-const KAI_PULSE_SEC = 3 + Math.sqrt(5);
-const PULSE_MS_EXACT = KAI_PULSE_SEC * 1000;
-
 /* day pulses (whole pulses, not μpulses) */
 const DAY_PULSES = 17_491.270_421;
 
 const NOTES_KEY = "kairosNotes";
 const HIDDEN_IDS_KEY = "kairosNotesHiddenIds";
+
+/* kairosEpochNow returns bigint → this modal uses epoch-ms as number for Date/timers */
+const epochMsNow = (): number => {
+  const msB = kairosEpochNow();
+  const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+  const minSafe = BigInt(Number.MIN_SAFE_INTEGER);
+  if (msB > maxSafe) return Number.MAX_SAFE_INTEGER;
+  if (msB < minSafe) return Number.MIN_SAFE_INTEGER;
+  const n = Number(msB);
+  return Number.isFinite(n) ? n : 0;
+};
 
 /* ───────── Spiral → palette (Root-►Krown) ───────── */
 const Spiral_COLOR = {
@@ -83,6 +93,13 @@ const DAY_COLOR: Record<Day, string> = {
   Kaelith: "#c186ff",
 };
 
+/* local structural type (avoids needing a named export from DayDetailModal) */
+type HarmonicDayInfo = {
+  name: Day;
+  kaiTimestamp: string;
+  startPulse: number;
+};
+
 /* ══════════════ helpers ══════════════ */
 const stop = (e: SyntheticEvent) => e.stopPropagation();
 
@@ -96,10 +113,10 @@ const squashSeal = (seal: string) =>
 
 const rgba = (hex: string, a: number) => {
   const h = hex.replace("#", "");
-  const bigint = Number.parseInt(h, 16);
-  const r = (bigint >> 16) & 255;
-  const g = (bigint >> 8) & 255;
-  const b = bigint & 255;
+  const bi = Number.parseInt(h, 16);
+  const r = (bi >> 16) & 255;
+  const g = (bi >> 8) & 255;
+  const b = bi & 255;
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 };
 
@@ -142,11 +159,18 @@ function roundTiesToEvenBigInt(x: number): bigint {
   return BigInt(s * (i % 2 === 0 ? i : i + 1));
 }
 
-function microPulsesSinceGenesis(date: Date): bigint {
-  const deltaSec = (date.getTime() - GENESIS_TS) / 1000;
-  const pulses = deltaSec / KAI_PULSE_SEC;
-  const micro = pulses * 1_000_000;
-  return roundTiesToEvenBigInt(micro);
+function microPulsesSinceGenesisMs(msUTC: number): bigint {
+  const deltaMs = msUTC - GENESIS_TS;
+  const pulses = deltaMs / PULSE_MS;
+  return roundTiesToEvenBigInt(pulses * 1_000_000);
+}
+
+/* next φ-boundary in epoch-ms (number) — derived from μpulse rounding */
+function computeNextBoundary(nowEpochMs: number): number {
+  const pμ = microPulsesSinceGenesisMs(nowEpochMs);
+  const pulseIdx = floorDiv(pμ, ONE_PULSE_MICRO);
+  const nextPulseIdx = pulseIdx + 1n;
+  return GENESIS_TS + Number(nextPulseIdx) * PULSE_MS;
 }
 
 /* ══════════════ types ══════════════ */
@@ -171,7 +195,7 @@ type LocalKai = {
 };
 
 function computeLocalKai(now: Date): LocalKai {
-  const pμ_total = microPulsesSinceGenesis(now);
+  const pμ_total = microPulsesSinceGenesisMs(now.getTime());
   const pμ_in_day = imod(pμ_total, N_DAY_MICRO);
   const dayIndex = floorDiv(pμ_total, N_DAY_MICRO);
 
@@ -276,7 +300,7 @@ function downloadBlob(filename: string, mime: string, data: string): void {
 /* ══════════════ Sovereign snapshot builder ══════════════ */
 function buildKaiSnapshot(now: Date): KaiKlock {
   const lk = computeLocalKai(now);
-  const pμ_total = microPulsesSinceGenesis(now);
+  const pμ_total = microPulsesSinceGenesisMs(now.getTime());
   const wholePulses = Number(floorDiv(pμ_total, ONE_PULSE_MICRO));
   const seal = `${lk.chakraStepString} — D${lk.dayOfMonth}/M${lk.monthIndex1}`;
   const arc = DAY_TO_ARC[lk.harmonicDay];
@@ -318,12 +342,15 @@ function toSavedNote(u: unknown): SavedNote | null {
 
   const beat = isNum(r.beat) ? r.beat : undefined;
   const step = isNum(r.step) ? r.step : undefined;
-  const createdAt = isNum(r.createdAt) ? r.createdAt : Date.now();
+
+  // createdAt MUST be number
+  const createdAt: number = isNum(r.createdAt) ? r.createdAt : epochMsNow();
 
   if (beat === undefined || step === undefined) {
     const d = deriveBeatStepFromPulse(r.pulse);
     return { id: r.id, text: r.text, pulse: r.pulse, beat: d.beat, step: d.step, createdAt };
   }
+
   return { id: r.id, text: r.text, pulse: r.pulse, beat, step, createdAt };
 }
 
@@ -371,7 +398,7 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
   const canUseDOM = typeof window !== "undefined" && typeof document !== "undefined";
 
   /* ── time state (pulse-bound) ── */
-  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [nowMs, setNowMs] = useState<number>(() => epochMsNow());
 
   const nowDate = useMemo(() => new Date(nowMs), [nowMs]);
   const localKai = useMemo<LocalKai>(() => computeLocalKai(nowDate), [nowDate]);
@@ -405,14 +432,6 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
   /* ── μpulse-aligned scheduler (NO NodeJS.Timeout) ── */
   const timeoutRef = useRef<number | null>(null);
 
-  const epochNow = () => performance.timeOrigin + performance.now();
-
-  const computeNextBoundary = (nowEpochMs: number) => {
-    const elapsed = nowEpochMs - GENESIS_TS;
-    const periods = Math.ceil(elapsed / PULSE_MS_EXACT);
-    return GENESIS_TS + periods * PULSE_MS_EXACT;
-  };
-
   const clearAlignedTimer = useCallback(() => {
     const t = timeoutRef.current;
     if (t !== null) {
@@ -424,12 +443,12 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
   const armAlignedTimer = useCallback(() => {
     clearAlignedTimer();
 
-    const now = epochNow();
+    const now = epochMsNow();
     const target = computeNextBoundary(now);
     const delay = Math.max(0, target - now);
 
     timeoutRef.current = window.setTimeout(() => {
-      setNowMs(Date.now());
+      setNowMs(epochMsNow());
       armAlignedTimer();
     }, delay);
   }, [clearAlignedTimer]);
@@ -440,7 +459,7 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
 
     const onVis = () => {
       if (document.visibilityState === "visible") {
-        setNowMs(Date.now());
+        setNowMs(epochMsNow());
         armAlignedTimer();
       }
     };
@@ -455,7 +474,7 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
   /* ── notes persistence (sorted insert; no per-render sort) ── */
   const addNote = useCallback((note: EnrichedNote) => {
     setNotes((prev) => {
-      const saved: SavedNote = { ...note, createdAt: Date.now() };
+      const saved: SavedNote = { ...note, createdAt: epochMsNow() };
       const next = insertSortedByPulse(prev, saved);
       try {
         localStorage.setItem(NOTES_KEY, JSON.stringify(next));
@@ -622,7 +641,7 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
     });
   }, []);
 
-  // ✅ safe to return null AFTER hooks (fixes rules-of-hooks lint)
+  // ✅ safe to return null AFTER hooks (fixes rules-of-hooks)
   if (!portalRoot) return null;
 
   return createPortal(
@@ -640,8 +659,7 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
           }
         }}
       >
-<div className="wk-container" role="dialog" aria-modal="true">
-
+        <div className="wk-container" role="dialog" aria-modal="true">
           {/* ✕ close button (instant) */}
           <button
             ref={closeBtnRef}
@@ -715,12 +733,7 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
           </div>
 
           {/* WEEK rings */}
-          <svg
-            className="wk-stage"
-            viewBox="-50 -50 100 100"
-            preserveAspectRatio="xMidYMid meet"
-            aria-label="Week Rings"
-          >
+          <svg className="wk-stage" viewBox="-50 -50 100 100" preserveAspectRatio="xMidYMid meet" aria-label="Week Rings">
             <defs>
               <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%" filterUnits="userSpaceOnUse">
                 <feGaussianBlur stdDeviation="1.8" result="blur" />
@@ -807,14 +820,14 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
 
           {/* Day Detail overlay — TOPMOST */}
           {dayDetail && (
-<div className="wk-daydetail-overlay" onPointerDown={stop} onClick={stop} role="presentation">
+            <div className="wk-daydetail-overlay" onPointerDown={stop} onClick={stop} role="presentation">
               <DayDetailModal day={dayDetail} onClose={() => flushSync(() => setDayDetail(null))} />
             </div>
           )}
 
           {/* NoteModal overlay — below Day, above dock */}
           {noteModal.open && (
-<div className="wk-notemodal-overlay" onPointerDown={stop} onClick={stop} role="presentation">
+            <div className="wk-notemodal-overlay" onPointerDown={stop} onClick={stop} role="presentation">
               <NoteModal
                 pulse={noteModal.pulse}
                 initialText={noteModal.initialText}
@@ -828,7 +841,7 @@ const WeekKalendarModal: FC<Props> = ({ onClose, container }) => {
           )}
 
           {/* Persistent Notes Dock */}
-<aside className="wk-notes-dock" onPointerDown={stop} onClick={stop}>
+          <aside className="wk-notes-dock" onPointerDown={stop} onClick={stop}>
             <div className="wk-notes-list">
               <div className="wk-notes-header">
                 <h3>Memories</h3>

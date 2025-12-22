@@ -2,7 +2,6 @@
 /* eslint-disable no-empty -- benign lifecycle errors are silenced */
 "use client";
 
-import type * as React from "react";
 import {
   useState,
   useEffect,
@@ -11,7 +10,11 @@ import {
   useCallback,
   useDeferredValue,
   useLayoutEffect,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type SyntheticEvent,
 } from "react";
+
 import {useParams, useLocation, useNavigate } from "react-router-dom";
 import html2canvas from "html2canvas";
 import { createPortal } from "react-dom";
@@ -36,9 +39,11 @@ import {
   ETERNAL_STEPS_PER_BEAT as STEPS_PER_BEAT,
   stepIndexFromPulse,
   percentIntoStepFromPulse,
-  getKaiPulseEternalInt,
   beatIndexFromPulse,
 } from "../../SovereignSolar";
+
+import { kairosEpochNow, GENESIS_TS } from "../../utils/kai_pulse";
+
 import { DEFAULT_ISSUANCE_POLICY, quotePhiForUsd } from "../../utils/phi-issuance";
 import { usd as fmtUsd } from "../../components/valuation/display";
 import type { SigilMetadataLite } from "../../utils/valuation";
@@ -61,7 +66,6 @@ import { decodeSigilHistory } from "../../utils/sigilUrl";
 import { CHAKRA_THEME, isIOS } from "../../components/sigil/theme";
 
 /* ——— Hooks ——— */
-import { useKaiTicker } from "../../hooks/useKaiTicker";
 import { useFastPress } from "../../hooks/useFastPress";
 import { useSigilPayload } from "../../utils/useSigilPayload";
 
@@ -148,25 +152,24 @@ import {
 
 import { enableMobileDismissals } from "../../lib/mobilePopoverFix";
 
-
 /* ——— v48: deterministic debit-cap + atomic send lock ——— */
 const EPS = 1e-9;
 const SEND_LOCK_CH = "sigil-sendlock-v1";
 const sendLockKey = (canonical: string, token: string) =>
   `sigil:sendlock:${canonical}:t:${token}`;
 const SEND_LOCK_TTL_MS = 15_000;
+const SEND_LOCK_TTL_PULSES = Math.max(1, Math.ceil(SEND_LOCK_TTL_MS / 5_236)); // ~1 pulse per 5.236ms
 
 type SendLockWire = {
   type: "lock" | "unlock";
   canonical: string;
   token: string;
   id: string;
-  at: number;
+  atPulse: number;
 };
 
-type SendLockRecord = { id: string; at: number };
+type SendLockRecord = { id: string; atPulse: number };
 
-const nowMs = (): number => Date.now();
 
 /** Local loose debit shape that's compatible with SigilPayload['debits'] and DebitRecord */
 type DebitLoose = {
@@ -175,8 +178,6 @@ type DebitLoose = {
   timestamp?: number;
   recipientPhiKey?: string;
 };
-// Allow CSS custom properties in style objects
-type CSSVars = React.CSSProperties & Record<`--${string}`, string | number>;
 
 const verifierVars: CSSVars = {
   "--phi-url": `url(${import.meta.env.BASE_URL}assets/phi.svg)`,
@@ -192,17 +193,27 @@ const toAbsUrl = (pathOrUrl: string): string => {
 
 const acquireSendLock = (
   canonical: string | null,
-  token: string | null
+  token: string | null,
+  nowPulse: number
 ): { ok: boolean; id: string } => {
   const id = crypto.getRandomValues(new Uint32Array(4)).join("");
   if (!canonical || !token) return { ok: false, id };
   const key = sendLockKey(canonical.toLowerCase(), token);
+
   try {
     const raw = localStorage.getItem(key);
     const rec: SendLockRecord | null = raw ? (JSON.parse(raw) as SendLockRecord) : null;
-    const stale = !rec || !Number.isFinite(rec.at) || nowMs() - rec.at > SEND_LOCK_TTL_MS;
+
+    const stale =
+      !rec ||
+      !Number.isFinite(rec.atPulse) ||
+      nowPulse - rec.atPulse > SEND_LOCK_TTL_PULSES;
+
     if (!rec || stale) {
-      localStorage.setItem(key, JSON.stringify({ id, at: nowMs() } satisfies SendLockRecord));
+      localStorage.setItem(
+        key,
+        JSON.stringify({ id, atPulse: nowPulse } satisfies SendLockRecord)
+      );
       try {
         const bc = new BroadcastChannel(SEND_LOCK_CH);
         const msg: SendLockWire = {
@@ -210,7 +221,7 @@ const acquireSendLock = (
           canonical: canonical.toLowerCase(),
           token,
           id,
-          at: nowMs(),
+          atPulse: nowPulse,
         };
         bc.postMessage(msg);
         bc.close();
@@ -218,13 +229,21 @@ const acquireSendLock = (
       return { ok: true, id };
     }
   } catch {}
+
   return { ok: false, id };
 };
 
 
-const releaseSendLock = (canonical: string | null, token: string | null, id: string): void => {
+
+const releaseSendLock = (
+  canonical: string | null,
+  token: string | null,
+  id: string,
+  nowPulse: number
+): void => {
   if (!canonical || !token) return;
   const key = sendLockKey(canonical.toLowerCase(), token);
+
   try {
     const raw = localStorage.getItem(key);
     const rec: SendLockRecord | null = raw ? (JSON.parse(raw) as SendLockRecord) : null;
@@ -237,7 +256,7 @@ const releaseSendLock = (canonical: string | null, token: string | null, id: str
           canonical: canonical.toLowerCase(),
           token,
           id,
-          at: nowMs(),
+          atPulse: nowPulse,
         };
         bc.postMessage(msg);
         bc.close();
@@ -245,6 +264,7 @@ const releaseSendLock = (canonical: string | null, token: string | null, id: str
     }
   } catch {}
 };
+
 
 const isValidDebit = (d: unknown): d is DebitLoose => {
   if (!d || typeof d !== "object") return false;
@@ -323,6 +343,129 @@ const capDebitsQS = (qs: DebitQS): DebitQS => {
     debits: kept.length ? (kept as unknown as DebitRecord[]) : undefined,
   };
 };
+// ──────────────────────────────────────────────────────────────────────────────
+// Kai NOW (deterministic) — SINGLE SOURCE OF TRUTH (NO Chronos sampling)
+//   - NOW micro-pulses come ONLY from kairosEpochNow() in kai_pulse.ts
+//   - All conversions use exact integer Kai-day math (no float accumulation)
+// ──────────────────────────────────────────────────────────────────────────────
+
+const MICRO_PER_PULSE = 1_000_000n;
+
+/**
+ * Kai-Klok canon:
+ * - Day length = 25:25:36 = 91,536 seconds = 91,536,000 ms (exact integer)
+ * - Pulses/day = 17,491.270421 (exact, millionths)
+ * - Therefore μpulses/day = 17,491,270,421 (integer)
+ */
+const KAI_DAY_MS = 91_536_000n;
+const MICRO_PULSES_PER_DAY = 17_491_270_421n;
+
+const absBig = (n: bigint): bigint => (n < 0n ? -n : n);
+
+/** Banker’s rounding (ties-to-even) for non-negative numerators */
+const divRoundTiesToEvenPos = (num: bigint, den: bigint): bigint => {
+  const q = num / den;
+  const r = num % den;
+  const twice = r * 2n;
+  if (twice < den) return q;
+  if (twice > den) return q + 1n;
+  return q % 2n === 0n ? q : q + 1n;
+};
+
+/** Banker’s rounding (ties-to-even) supporting signed numerators */
+const divRoundTiesToEven = (num: bigint, den: bigint): bigint => {
+  if (den <= 0n) throw new Error("divRoundTiesToEven: den must be > 0");
+  if (num === 0n) return 0n;
+  const sign = num < 0n ? -1n : 1n;
+  const q = divRoundTiesToEvenPos(absBig(num), den);
+  return sign * q;
+};
+
+/** Convert Δμpulses -> Δms (deterministic; integer exact) */
+const microPulsesDeltaToMs = (deltaMicro: bigint): bigint =>
+  divRoundTiesToEven(deltaMicro * KAI_DAY_MS, MICRO_PULSES_PER_DAY);
+
+/** Convert μpulses since GENESIS -> Unix ms (deterministic; integer exact) */
+const microPulsesToUnixMs = (microSinceGenesis: bigint): bigint => {
+  const deltaMs = microPulsesDeltaToMs(microSinceGenesis);
+  return BigInt(GENESIS_TS) + deltaMs;
+};
+
+/** Convert Unix ms -> μpulses since GENESIS (deterministic; integer exact) */
+const unixMsToMicroPulses = (unixMs: bigint): bigint => {
+  const deltaMs = unixMs - BigInt(GENESIS_TS);
+  return divRoundTiesToEven(deltaMs * MICRO_PULSES_PER_DAY, KAI_DAY_MS);
+};
+
+/** ✅ NOW pulse (integer) derived ONLY from kairosEpochNow() */
+const kaiNowPulseInt = (): number => {
+  const micro = kairosEpochNow(); // μpulses since GENESIS (seeded + monotonic)
+  return Number(micro / MICRO_PER_PULSE);
+};
+
+/** ✅ NOW epoch-ms (deterministic) derived ONLY from kairosEpochNow() */
+const kaiNowEpochMs = (): number => {
+  const ms = microPulsesToUnixMs(kairosEpochNow());
+  return Number(ms); // safe (modern epoch ms range)
+};
+
+/**
+ * ✅ Bridge Date -> Kai pulse int (ONLY for functions that demand Date signatures).
+ * No Date.now usage here; we only read the provided Date.
+ */
+const getKaiPulseEternalInt = (d: Date): number => {
+  const micro = unixMsToMicroPulses(BigInt(d.getTime()));
+  return Number(micro / MICRO_PER_PULSE);
+};
+
+/**
+ * Local deterministic ticker:
+ * - Reads kairosEpochNow()
+ * - Computes ms to next pulse boundary using exact Kai-day ratio
+ * - Schedules with setTimeout (timer is not a data source, only a wake-up)
+ */
+function useKaiTickerDeterministic(): { pulse: number; msToNextPulse: number } {
+  const [pulse, setPulse] = useState<number>(() => kaiNowPulseInt());
+  const [msToNextPulse, setMsToNextPulse] = useState<number>(0);
+
+  useEffect(() => {
+    let alive = true;
+    let t: number | null = null;
+
+    const tick = () => {
+      if (!alive) return;
+
+      const micro = kairosEpochNow();
+      const p = Number(micro / MICRO_PER_PULSE);
+
+      // Next integer pulse boundary in μpulses
+      const rem = micro % MICRO_PER_PULSE;
+      const toNextMicro = rem === 0n ? MICRO_PER_PULSE : (MICRO_PER_PULSE - rem);
+      const deltaMs = microPulsesDeltaToMs(toNextMicro);
+
+      const nextMs = Number(deltaMs);
+      setPulse(p);
+      setMsToNextPulse(nextMs);
+
+      // Wake up slightly after boundary; clamp for safety
+      const wait = Math.max(1, Math.min(60_000, nextMs));
+      t = window.setTimeout(tick, wait);
+    };
+
+    tick();
+    return () => {
+      alive = false;
+      if (t != null) window.clearTimeout(t);
+    };
+  }, []);
+
+  return { pulse, msToNextPulse };
+}
+
+// Allow CSS custom properties in style objects (no React namespace needed)
+type CSSVars = CSSProperties & Record<`--${string}`, string | number>;
+
+
 
 /* ——— Local CSS var typing for the phi.svg mask ——— */
 /* Narrower unit guard (no 'any') */
@@ -373,7 +516,7 @@ const publishRotation = (keys: string[], token: string) => {
   const uniq = Array.from(new Set(keys.map((k) => k.toLowerCase()).filter(Boolean)));
   uniq.forEach((canonical) => {
     try {
-      localStorage.setItem(rotationKey(canonical), `${token}@${Date.now()}`);
+     localStorage.setItem(rotationKey(canonical), `${token}@${kaiNowEpochMs()}`);
     } catch {}
     try {
       const bc = new BroadcastChannel(ROTATE_CH);
@@ -427,7 +570,7 @@ function broadcastDescendants(canonical: string, token: string, list: Descendant
       canonical: canonical.toLowerCase(),
       token,
       list,
-      stamp: Date.now(),
+      stamp: kaiNowEpochMs(),
     };
     bc.postMessage(msg);
     bc.close();
@@ -460,8 +603,8 @@ export default function SigilPage() {
   void setLoading;
   const payload = payloadState;
 
-  // live Kai (eternal)
-  const { pulse: currentPulse, msToNextPulse } = useKaiTicker();
+const { pulse: currentPulse, msToNextPulse } = useKaiTickerDeterministic();
+  
 
   // Sovereign additions
   const [uploadedMeta, setUploadedMeta] = useState<SigilMetaLoose | null>(null);
@@ -748,10 +891,10 @@ useEffect(() => {
   }, [absUrl, copy]);
 
 useEffect(() => {
-  const now = Date.now();
+  const now = kaiNowEpochMs();
   const route = (routeHash || "").toLowerCase();
 
-  if (suppressAuthUntil > now) return;
+ if (suppressAuthUntil > now) return;
   if (!route) return;
   if (expectedCanonCandidates.length === 0) return;
 
@@ -794,7 +937,7 @@ useEffect(() => {
       : `Sealed Sigil-Glyph`;
     return { title: t, desc: d };
   }, [deferredPayload, hash]);
-
+const { series } = useValueHistory();
   /* Basic meta + JSON-LD */
   useEffect(() => {
     const abs = absUrl;
@@ -1389,14 +1532,23 @@ const openHistoryPress = useFastPress<HTMLButtonElement>(() => setHistoryOpen(tr
         stepIndexFromPulse,
       });
 
-      let finalUrl = out?.url || `/s/${canonical}`;
+  let finalUrl = out?.url || `/s/${canonical}`;
+
 try {
   const u = new URL(finalUrl, window.location.origin);
   u.pathname = `/s/${canonical}`;
+
   const currentD = new URLSearchParams(window.location.search).get("d");
   if (currentD) u.searchParams.set("d", currentD);
-  finalUrl = u.toString();                 // keep origin+protocol
+
+  const current = new URL(window.location.href);
+  current.searchParams.forEach((v, k) => {
+    if (k !== "d") u.searchParams.set(k, u.searchParams.get(k) ?? v);
+  });
+
+  finalUrl = u.toString();
 } catch {}
+
 
 const u = new URL(finalUrl, window.location.origin);
 u.pathname = `/s/${canonical}`;
@@ -1773,10 +1925,10 @@ useEffect(() => {
         return;
       }
       const canon = (payload.canonicalHash || localHash || "").toLowerCase();
-      const nowPulseVal = getKaiPulseEternalInt(new Date());
+     const nowPulseVal = currentPulse || kaiNowPulseInt();
       const nowBeatIdx = beatIndexFromPulse(nowPulseVal);
       const stepsNum = (payload.stepsPerBeat ?? STEPS_PER_BEAT) as number;
-      const nowStepIdx = stepIndexFromPulse(nowPulseVal, stepsNum);
+const nowStepIdx = stepIndexFromPulse(nowPulseVal, stepsNum);
 
       const d = await deriveMomentKeys(payload, canon, nowPulseVal, nowBeatIdx, nowStepIdx);
       if (alive) {
@@ -1790,14 +1942,15 @@ useEffect(() => {
   }, [payload, localHash]);
 
   const handleSeal = useCallback(
-    async (e?: React.SyntheticEvent) => {
+    async (e?: SyntheticEvent) => {
       e?.preventDefault?.();
       e?.stopPropagation?.();
       if (!payload || !localHash || isFutureSealed || isArchived) return;
 
       const canon = (payload.canonicalHash || localHash || "").toLowerCase();
 
-      const nowPulseVal = getKaiPulseEternalInt(new Date());
+      const nowPulseVal = currentPulse || kaiNowPulseInt();
+
       const nowBeatIdx = beatIndexFromPulse(nowPulseVal);
       const stepsNum = (payload.stepsPerBeat ?? STEPS_PER_BEAT) as number;
       const nowStepIdx = stepIndexFromPulse(nowPulseVal, stepsNum);
@@ -1870,9 +2023,9 @@ const sealClass =
 
     const amount = Math.max(0, Math.floor(expiryAmount || 0));
     const addPulses = expiryUnit === "breaths" ? breathsToPulses(amount) : stepsToPulses(amount);
-    const nowPulse = getKaiPulseEternalInt(new Date());
+    const nowPulse = currentPulse || kaiNowPulseInt();
     const expiresAtPulse = nowPulse + addPulses;
-
+    
     const canonical = localHash.toLowerCase();
     const freshNonce = crypto.getRandomValues(new Uint32Array(4)).join("");
 
@@ -1926,7 +2079,8 @@ const sealClass =
       );
       if (burnKeys.length) publishRotation(burnKeys, freshNonce);
       setLinkStatus("archived");
-      setSuppressAuthUntil(Date.now() + 250);
+      setSuppressAuthUntil(kaiNowEpochMs() + 250);
+
 
 putMetadata(svg, nextMeta);
 ensureCanonicalMetadataFirst(svg);
@@ -1998,9 +2152,9 @@ const issuancePolicy = DEFAULT_ISSUANCE_POLICY;
 
 const { usdPerPhi, phiPerUsd } = useMemo(() => {
   try {
-    const nowKai = currentPulse ?? getKaiPulseEternalInt(new Date());
+    const nowKai = currentPulse || currentPulse;
 
-    // Safely coerce payload to SigilMetadataLite without using `any`
+    // Safely coerce payload to SigilMe tadataLite without using `any`
     const meta: SigilMetadataLite = payload
       ? (payload as unknown as SigilMetadataLite)
       : ({} as unknown as SigilMetadataLite);
@@ -2101,7 +2255,7 @@ const mintChildSigil = useCallback(
   async (amount: number, parentTokOverride?: string | null) => {
     if (!payload) return null;
 
-    const nowPulse = getKaiPulseEternalInt(new Date());
+    const nowPulse = currentPulse || kaiNowPulseInt();
     const freshNonce = crypto.getRandomValues(new Uint32Array(4)).join("");
 
     const stepsNum = (payload.stepsPerBeat ?? STEPS_PER_BEAT) as number;
@@ -2234,7 +2388,7 @@ try {
         if (localHash) void copy(localHash, "Hash copied");
       } else if (k === "z") {
         claimPress.onClick?.(
-          new MouseEvent("click") as unknown as React.MouseEvent<HTMLButtonElement>
+         new MouseEvent("click") as unknown as ReactMouseEvent<HTMLButtonElement>
         );
       } else if (k === "p") {
         posterPress.onClick?.(
@@ -2244,6 +2398,7 @@ try {
         void openStargate();
       }
     };
+    
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [share, copy, absUrl, localHash, claimPress, posterPress, openStargate]);
@@ -2294,7 +2449,8 @@ const ensureParentTokenActive = useCallback(
     if (!ownerVerified) return signal(setToast, "Verify Stewardship first");
     if (!payload) return signal(setToast, "No payload");
     if (sendInFlight) return;
-  
+  const nowP = currentPulse || kaiNowPulseInt();
+
     const amt = Number(sendAmount) || 0;
     if (amt <= 0) return signal(setToast, "Enter an amount > 0");
   
@@ -2311,7 +2467,7 @@ const ensureParentTokenActive = useCallback(
     }
   
     setSendInFlight(true);
-    const { ok: gotLock, id: lockId } = acquireSendLock(h, tok);
+    const { ok: gotLock, id: lockId } = acquireSendLock(h, tok, nowP);
     sendLockIdRef.current = lockId;
     if (!gotLock) {
       setSendInFlight(false);
@@ -2353,7 +2509,7 @@ const ensureParentTokenActive = useCallback(
         amount: Number(amt.toFixed(6)),
         nonce: crypto.getRandomValues(new Uint32Array(4)).join(""),
         recipientPhiKey: autoRecipientPhiKey,
-        timestamp: getKaiPulseEternalInt(new Date()),
+       timestamp: currentPulse || kaiNowPulseInt(),
       };
   
       const proposed = capDebitsQS({
@@ -2400,10 +2556,11 @@ const ensureParentTokenActive = useCallback(
   
       // ✅ pass the fresh token so modal opens & stays open on first send
       void mintChildSigil(debit.amount, tok);
-    } finally {
-      releaseSendLock(h, tok, sendLockIdRef.current);
-      setSendInFlight(false);
-    }
+} finally {
+  releaseSendLock(h, tok, sendLockIdRef.current, currentPulse
+  );
+  setSendInFlight(false);
+}
   }, [
     ownerVerified,
     payload,
@@ -2544,34 +2701,6 @@ const onSealModalClose = useCallback((ev?: unknown, reason?: string) => {
 }, []);
 
 
-// ✅ keep last 42 Kai days (42 × 36 beats), with plenty of samples buffered
-const { series, pushSample } = useValueHistory({
-  maxPoints: 36 * 42 * 8, // buffer size (samples), tune as you like
-  maxBeats: 36 * 42,      // retention window in Kai beats
-});
-// wherever you have displayedChipPhi and pushSample
-useEffect(() => {
-  const BREATH_MS = (3 + Math.sqrt(5)) * 1000; // ≈ 5236.0679 ms
-  let raf: number | null = null;
-  let tid: number | null = null;
-
-  const tick = () => {
-    const v = displayedChipPhi;
-    if (Number.isFinite(v)) {
-      // push with legacy ms; the chart normalizes to Kai beats (fractional)
-      pushSample({ t: Date.now(), v });
-    }
-    tid = window.setTimeout(() => {
-      raf = requestAnimationFrame(tick);
-    }, BREATH_MS);
-  };
-
-  tick();
-  return () => {
-    if (tid) clearTimeout(tid);
-    if (raf) cancelAnimationFrame(raf);
-  };
-}, [displayedChipPhi, pushSample]);
 
 
   return (

@@ -9,6 +9,12 @@
    - Homepage splash killer: remove any boot/splash overlays on "/" immediately.
    - SW warming: idle-only + focus rewarm, abort-safe, respects Save-Data/2G.
    - Zero “loading splash” fallbacks: Suspense fallback is null/blank spacer.
+
+   ✅ UPDATE (drop-in):
+   - Deterministic Kai seed now follows μpulse-first:
+       localStorage μpulse checkpoint > build-injected μpulse checkpoint > kairosEpochNow() fallback
+   - App.tsx still never uses Date APIs.
+   - While running, we continuously refresh the stored μpulse checkpoint (so reload/SW-refresh won’t “jump”).
 ────────────────────────────────────────────────────────────────────────────── */
 
 import React, {
@@ -30,6 +36,9 @@ import {
   DAYS_PER_MONTH,
   DAYS_PER_YEAR,
   MONTHS_PER_YEAR,
+  GENESIS_TS,
+  PULSE_MS,
+  kairosEpochNow,
   type ChakraDay,
 } from "./utils/kai_pulse";
 import { fmt2, formatPulse, modPos, readNum } from "./utils/kaiTimeDisplay";
@@ -59,8 +68,6 @@ const SigilModal = lazy(
 ) as React.LazyExoticComponent<
   React.ComponentType<{ initialPulse: number; onClose: () => void }>
 >;
-
-
 
 const HomePriceChartCard = lazy(
   () => import("./components/HomePriceChartCard"),
@@ -196,6 +203,230 @@ type KlockNavState = { openDetails?: boolean };
 
 type KaiMoment = ReturnType<typeof momentFromUTC>;
 
+/* ──────────────────────────────────────────────────────────────────────────────
+   Deterministic "NOW" (KKS-1.0, μpulse-first)
+   - App.tsx never touches Date APIs.
+   - Bootstrap coordinate from:
+       1) localStorage μpulse checkpoint (fast reloads / SW refresh)
+       2) build-injected μpulse checkpoint (VITE_KAI_ANCHOR_PMICRO or legacy VITE_KAI_ANCHOR_MICRO)
+       3) kairosEpochNow() (kai_pulse.ts handles checkpoint > signed anchor > RTC fallback)
+   - After bootstrap, advance deterministically with performance.now() only.
+────────────────────────────────────────────────────────────────────────────── */
+type TimeoutHandle = number;
+
+const ONE_PULSE_MICRO = 1_000_000n;
+
+// ✅ NEW canonical key (μpulses since Genesis)
+const KAI_ANCHOR_PMICRO_KEY = "phi_kai_anchor_pmicro_v1";
+
+// ✅ legacy key you previously wrote (epoch ms)
+const KAI_ANCHOR_MSUTC_LEGACY_KEY = "phi_kai_anchor_msutc_v1";
+
+// Vite env typing (no `any`)
+type ViteEnv = {
+  VITE_KAI_ANCHOR_PMICRO?: string; // preferred: μpulses since Genesis
+  VITE_KAI_ANCHOR_MICRO?: string; // legacy name; treat same as above
+};
+
+type KaiAnchorSource = "storage" | "env" | "kpp"; // kpp = kai_pulse.ts
+type KaiAnchor = { pμ0: bigint; perf0: number; source: KaiAnchorSource };
+
+const kaiAnchorStore: { anchor: KaiAnchor | null } = { anchor: null };
+
+function floorDiv(n: bigint, d: bigint): bigint {
+  const q = n / d;
+  const r = n % d;
+  return r !== 0n && (r > 0n) !== (d > 0n) ? q - 1n : q;
+}
+
+/* ties-to-even rounding Number→BigInt */
+function roundTiesToEvenBigInt(x: number): bigint {
+  if (!Number.isFinite(x)) return 0n;
+  const s = x < 0 ? -1 : 1;
+  const ax = Math.abs(x);
+  const i = Math.trunc(ax);
+  const frac = ax - i;
+  if (frac < 0.5) return BigInt(s * i);
+  if (frac > 0.5) return BigInt(s * (i + 1));
+  return BigInt(s * (i % 2 === 0 ? i : i + 1));
+}
+
+function readLocalStorageBigInt(key: string): bigint | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    if (!/^-?\d+$/.test(raw.trim())) return null;
+    return BigInt(raw.trim());
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalStorageBigInt(key: string, v: bigint): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, v.toString());
+  } catch {
+    /* ignore */
+  }
+}
+
+function readLocalStorageMsUTC(key: string): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return Math.floor(n);
+  } catch {
+    return null;
+  }
+}
+
+/* epoch-ms → μpulses since Genesis (bridge uses canonical GENESIS_TS / PULSE_MS) */
+function microPulsesSinceGenesisMs(msUTC: number): bigint {
+  const deltaMs = msUTC - GENESIS_TS;
+  const pulses = deltaMs / PULSE_MS;
+  return roundTiesToEvenBigInt(pulses * 1_000_000);
+}
+
+/* Normalize kairosEpochNow() raw → μpulses since Genesis (BigInt) */
+function normalizeKaiEpochRawToMicroPulses(raw: bigint): bigint {
+  // If raw is already μpulses since Genesis, pulses = raw/1e6 should be "reasonable".
+  const pulseGuess = floorDiv(raw, ONE_PULSE_MICRO);
+
+  // If raw is epoch microseconds, raw/1e6 ≈ epoch seconds (~1.7e9) → too large → convert.
+  if (pulseGuess >= 0n && pulseGuess < 500_000_000n) return raw;
+
+  // Fallback: treat raw as epoch microseconds → epoch ms → μpulses since Genesis
+  const epochMsBI = raw / 1000n;
+  const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+  const minSafe = BigInt(Number.MIN_SAFE_INTEGER);
+  if (epochMsBI > maxSafe || epochMsBI < minSafe) return raw;
+
+  const epochMs = Number(epochMsBI);
+  if (!Number.isFinite(epochMs)) return raw;
+
+  return microPulsesSinceGenesisMs(epochMs);
+}
+
+function readInjectedEnvAnchorMicroPulses(): bigint | null {
+  try {
+    const env = (import.meta as unknown as { env?: ViteEnv }).env;
+    const raw = (env?.VITE_KAI_ANCHOR_PMICRO ?? env?.VITE_KAI_ANCHOR_MICRO)?.trim();
+    if (!raw) return null;
+
+    // Accept integer strings only (μpulses checkpoint).
+    if (!/^-?\d+$/.test(raw)) return null;
+
+    const bi = BigInt(raw);
+
+    // Heuristic support: if someone accidentally injects epoch-ms (< ~year 2096),
+    // convert it to μpulses since Genesis.
+    if (bi > 0n && bi < 4_000_000_000_000n) {
+      const ms = Number(bi);
+      if (Number.isFinite(ms)) return microPulsesSinceGenesisMs(ms);
+    }
+
+    return bi;
+  } catch {
+    return null;
+  }
+}
+
+function seedFromKaiPulseNow(): bigint {
+  // kairosEpochNow() is the canonical source (matches SigilModal)
+  const raw = kairosEpochNow();
+  return normalizeKaiEpochRawToMicroPulses(raw);
+}
+
+function ensureKaiAnchor(): KaiAnchor {
+  if (kaiAnchorStore.anchor) return kaiAnchorStore.anchor;
+
+  if (typeof window === "undefined") {
+    kaiAnchorStore.anchor = { pμ0: 0n, perf0: 0, source: "kpp" };
+    return kaiAnchorStore.anchor;
+  }
+
+  const perf0 = window.performance.now();
+
+  // 1) storage μpulse checkpoint
+  const stored = readLocalStorageBigInt(KAI_ANCHOR_PMICRO_KEY);
+  if (stored !== null && stored > 0n) {
+    kaiAnchorStore.anchor = { pμ0: stored, perf0, source: "storage" };
+    return kaiAnchorStore.anchor;
+  }
+
+  // migrate legacy msUTC checkpoint (if present)
+  const legacyMs = readLocalStorageMsUTC(KAI_ANCHOR_MSUTC_LEGACY_KEY);
+  if (legacyMs !== null && legacyMs > 0) {
+    const migrated = microPulsesSinceGenesisMs(legacyMs);
+    if (migrated > 0n) {
+      writeLocalStorageBigInt(KAI_ANCHOR_PMICRO_KEY, migrated);
+      kaiAnchorStore.anchor = { pμ0: migrated, perf0, source: "storage" };
+      return kaiAnchorStore.anchor;
+    }
+  }
+
+  // 2) build-injected checkpoint
+  const envPμ = readInjectedEnvAnchorMicroPulses();
+  if (envPμ !== null && envPμ > 0n) {
+    writeLocalStorageBigInt(KAI_ANCHOR_PMICRO_KEY, envPμ);
+    kaiAnchorStore.anchor = { pμ0: envPμ, perf0, source: "env" };
+    return kaiAnchorStore.anchor;
+  }
+
+  // 3) canonical now (kai_pulse.ts)
+  const pμ0 = seedFromKaiPulseNow();
+  if (pμ0 > 0n) writeLocalStorageBigInt(KAI_ANCHOR_PMICRO_KEY, pμ0);
+  kaiAnchorStore.anchor = { pμ0, perf0, source: "kpp" };
+  return kaiAnchorStore.anchor;
+}
+
+// Force-resync anchor from canonical now (eliminates stale-storage offsets)
+function hardResyncKaiAnchor(): void {
+  if (typeof window === "undefined") return;
+  const perf0 = window.performance.now();
+  const pμ0 = seedFromKaiPulseNow();
+  if (pμ0 > 0n) writeLocalStorageBigInt(KAI_ANCHOR_PMICRO_KEY, pμ0);
+  kaiAnchorStore.anchor = { pμ0, perf0, source: "kpp" };
+}
+
+// μpulses since Genesis “now” (deterministic after seed)
+function microPulsesNow(): bigint {
+  if (typeof window === "undefined") return 0n;
+  const a = ensureKaiAnchor();
+  const elapsedMs = window.performance.now() - a.perf0;
+  const deltaPμ = roundTiesToEvenBigInt((elapsedMs / PULSE_MS) * 1_000_000);
+  return a.pμ0 + deltaPμ;
+}
+
+// μpulses → epoch ms (number) — derived ONLY from GENESIS_TS + PULSE_MS
+function epochMsFromMicroPulses(pμ: bigint): number {
+  const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+  const minSafe = BigInt(Number.MIN_SAFE_INTEGER);
+  if (pμ > maxSafe || pμ < minSafe) return GENESIS_TS;
+
+  const pμN = Number(pμ);
+  if (!Number.isFinite(pμN)) return GENESIS_TS;
+
+  const deltaPulses = pμN / 1_000_000; // pulses since Genesis (float)
+  const msUTC = GENESIS_TS + deltaPulses * PULSE_MS;
+  return Number.isFinite(msUTC) ? Math.floor(msUTC) : GENESIS_TS;
+}
+
+function kaiMsUTCNow(): number {
+  return epochMsFromMicroPulses(microPulsesNow());
+}
+
+function kaiMomentNow(): KaiMoment {
+  return momentFromUTC(kaiMsUTCNow());
+}
+
+
+
 function isInteractiveTarget(t: EventTarget | null): boolean {
   const el = t instanceof Element ? t : null;
   if (!el) return false;
@@ -280,7 +511,9 @@ function computeBeatStepDMY(m: KaiMoment): BeatStepDMY {
 
   const eps = 1e-9;
   const dayIndex =
-    dayIndexFromMoment !== null ? Math.floor(dayIndexFromMoment) : Math.floor((pulse + eps) / PULSES_PER_DAY);
+    dayIndexFromMoment !== null
+      ? Math.floor(dayIndexFromMoment)
+      : Math.floor((pulse + eps) / PULSES_PER_DAY);
 
   const daysPerYear = Number.isFinite(DAYS_PER_YEAR) ? DAYS_PER_YEAR : 336;
   const daysPerMonth = Number.isFinite(DAYS_PER_MONTH) ? DAYS_PER_MONTH : 42;
@@ -639,15 +872,12 @@ function ExplorerPopover({
     };
   }, [open, isClient, vvSize]);
 
-  const onBackdropPointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>): void => {
-      if (e.target === e.currentTarget) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    },
-    [],
-  );
+  const onBackdropPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>): void => {
+    if (e.target === e.currentTarget) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, []);
 
   const onBackdropClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>): void => {
@@ -660,13 +890,10 @@ function ExplorerPopover({
     [onClose],
   );
 
-  const onClosePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>): void => {
-      e.preventDefault();
-      e.stopPropagation();
-    },
-    [],
-  );
+  const onClosePointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>): void => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
 
   if (!open || !isClient || !portalHost) return null;
 
@@ -758,15 +985,12 @@ function KlockPopover({ open, onClose, children }: KlockPopoverProps): React.JSX
     };
   }, [open, isClient, vvSize]);
 
-  const onBackdropPointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>): void => {
-      if (e.target === e.currentTarget) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    },
-    [],
-  );
+  const onBackdropPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>): void => {
+    if (e.target === e.currentTarget) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, []);
 
   const onBackdropClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>): void => {
@@ -779,13 +1003,10 @@ function KlockPopover({ open, onClose, children }: KlockPopoverProps): React.JSX
     [onClose],
   );
 
-  const onClosePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>): void => {
-      e.preventDefault();
-      e.stopPropagation();
-    },
-    [],
-  );
+  const onClosePointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>): void => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
 
   if (!open || !isClient || !portalHost) return null;
 
@@ -859,7 +1080,11 @@ export function SigilMintRoute(): React.JSX.Element {
   const navigate = useNavigate();
   const [open, setOpen] = useState<boolean>(true);
 
-  const initialPulse = useMemo<number>(() => momentFromUTC(new Date()).pulse, []);
+  const initialPulse = useMemo<number>(() => {
+    const m = kaiMomentNow();
+    const p = readNum(m, "pulse") ?? 0;
+    return p;
+  }, []);
 
   const handleClose = useCallback((): void => {
     setOpen(false);
@@ -954,7 +1179,7 @@ function LiveKaiButton({
     dmyLabel: string;
     chakraDay: ChakraDay;
   }>(() => {
-    const m = momentFromUTC(new Date());
+    const m = kaiMomentNow();
     const pulse = readNum(m, "pulse") ?? 0;
     const pulseStr = formatPulse(pulse);
     const bsd = computeBeatStepDMY(m);
@@ -1015,44 +1240,99 @@ function LiveKaiButton({
     [arcColor, chakraColor, monthColor],
   );
 
-  useEffect(() => {
-    let alive = true;
+// ✅ μpulse-aligned ticker (same determinism pattern as VerifierStamper)
+useEffect(() => {
+  let alive = true;
+  let t: TimeoutHandle | null = null;
 
-    const tick = (): void => {
-      if (!alive) return;
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+  const clear = (): void => {
+    if (t !== null) {
+      window.clearTimeout(t);
+      t = null;
+    }
+  };
 
-      const m = momentFromUTC(new Date());
-      const pulse = readNum(m, "pulse") ?? 0;
-      const pulseStr = formatPulse(pulse);
+  const applyMicro = (pμ: bigint): void => {
+    const msUTC = epochMsFromMicroPulses(pμ);
+    const m = momentFromUTC(msUTC);
 
-      const bsd = computeBeatStepDMY(m);
-      const beatStepLabel = formatBeatStepLabel(bsd);
-      const dmyLabel = formatDMYLabel(bsd);
+    // Pulse MUST come from μpulses (source of truth), not from any derived ms math.
+    const pulseBI = floorDiv(pμ, ONE_PULSE_MICRO);
+    const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+    const pulse =
+      pulseBI > maxSafe ? Number.MAX_SAFE_INTEGER : pulseBI < 0n ? 0 : Number(pulseBI);
 
-      setSnap((prev) => {
-        if (prev.pulseStr === pulseStr && prev.beatStepLabel === beatStepLabel && prev.dmyLabel === dmyLabel) {
-          return prev;
-        }
-        return {
-          pulse,
-          pulseStr,
-          beatStepDMY: bsd,
-          beatStepLabel,
-          dmyLabel,
-          chakraDay: m.chakraDay,
-        };
-      });
-    };
+    const pulseStr = formatPulse(pulse);
 
-    tick();
-    const id = window.setInterval(tick, 250);
+    // keep KaiMoment-derived fields (chakra/dayIndex), but drive pulse from μpulses
+    const m2 = { ...m, pulse } as KaiMoment;
 
-    return () => {
-      alive = false;
-      window.clearInterval(id);
-    };
-  }, []);
+    const bsd = computeBeatStepDMY(m2);
+    const beatStepLabel = formatBeatStepLabel(bsd);
+    const dmyLabel = formatDMYLabel(bsd);
+
+    setSnap((prev) => {
+      if (
+        prev.pulseStr === pulseStr &&
+        prev.beatStepLabel === beatStepLabel &&
+        prev.dmyLabel === dmyLabel
+      ) {
+        return prev;
+      }
+      return {
+        pulse,
+        pulseStr,
+        beatStepDMY: bsd,
+        beatStepLabel,
+        dmyLabel,
+        chakraDay: m2.chakraDay,
+      };
+    });
+  };
+
+  const scheduleNext = (): void => {
+    if (!alive) return;
+
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      clear();
+      return;
+    }
+
+    const pμ = microPulsesNow();
+    applyMicro(pμ);
+
+    // schedule exactly to next μpulse boundary
+    let into = pμ % ONE_PULSE_MICRO;
+    if (into < 0n) into += ONE_PULSE_MICRO;
+    const remainMicro = ONE_PULSE_MICRO - into; // <= 1e6
+    const remainMicroN = Number(remainMicro); // safe (<= 1,000,000)
+    const delayMs = Math.max(0, Math.floor((remainMicroN / 1_000_000) * PULSE_MS));
+
+    clear();
+    t = window.setTimeout(scheduleNext, delayMs);
+  };
+
+  // initial sync (seed+catch-up happens inside ensureKaiAnchor)
+  scheduleNext();
+
+  const onVis = (): void => {
+    if (!alive) return;
+    if (typeof document !== "undefined" && document.visibilityState === "visible") {
+      hardResyncKaiAnchor();
+      scheduleNext();
+    }
+  };
+
+  document.addEventListener("visibilitychange", onVis);
+  window.addEventListener("focus", onVis);
+
+  return () => {
+    alive = false;
+    document.removeEventListener("visibilitychange", onVis);
+    window.removeEventListener("focus", onVis);
+    clear();
+  };
+}, []);
 
   const liveTitle = useMemo(() => {
     return `LIVE • NOW PULSE ${snap.pulseStr} • ${snap.beatStepLabel} • ${snap.dmyLabel} • Breath ${breathS.toFixed(
@@ -1140,6 +1420,36 @@ export function AppChrome(): React.JSX.Element {
     return () => window.removeEventListener(SW_VERSION_EVENT, onVersion);
   }, []);
 
+  // ✅ keep μpulse checkpoint fresh + hard-resync on boot (prevents stale offsets)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Hard resync once on boot so App.tsx matches SigilModal immediately.
+    hardResyncKaiAnchor();
+
+    const writeAnchor = (): void => {
+      const pμ = microPulsesNow();
+      if (pμ > 0n) writeLocalStorageBigInt(KAI_ANCHOR_PMICRO_KEY, pμ);
+    };
+
+    const onVis = (): void => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") writeAnchor();
+    };
+
+    writeAnchor();
+    const id = window.setInterval(writeAnchor, 15_000);
+
+    window.addEventListener("pagehide", writeAnchor);
+    document.addEventListener("visibilitychange", onVis);
+
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("pagehide", writeAnchor);
+      document.removeEventListener("visibilitychange", onVis);
+      writeAnchor();
+    };
+  }, []);
+
   // Warm timers (fix: no global warmTimer)
   const warmTimerRef = useRef<number | null>(null);
 
@@ -1160,8 +1470,8 @@ export function AppChrome(): React.JSX.Element {
         : window.setTimeout(() => setHeavyUiReady(true), 220);
 
     return () => {
-      if (typeof idleWin.cancelIdleCallback === "function") idleWin.cancelIdleCallback(handle as number);
-      else window.clearTimeout(handle as number);
+      if (typeof idleWin.cancelIdleCallback === "function") idleWin.cancelIdleCallback(handle);
+      else window.clearTimeout(handle);
     };
   }, []);
 
@@ -1246,9 +1556,9 @@ export function AppChrome(): React.JSX.Element {
       }
 
       if (typeof idleWin.cancelIdleCallback === "function") {
-        idleWin.cancelIdleCallback(idleHandle as number);
+        idleWin.cancelIdleCallback(idleHandle);
       } else {
-        window.clearTimeout(idleHandle as number);
+        window.clearTimeout(idleHandle);
       }
 
       window.removeEventListener("focus", onFocus);
@@ -1554,7 +1864,12 @@ export function AppChrome(): React.JSX.Element {
                   <div className="nav-head__sub">Breath-Sealed Identity · Kairos-ZK Proof</div>
                 </div>
 
-                <div ref={navListRef} className="nav-list" role="list" aria-label="Atrium navigation tiles">
+                <div
+                  ref={navListRef}
+                  className="nav-list"
+                  role="list"
+                  aria-label="Atrium navigation tiles"
+                >
                   {navItems.map((item) => (
                     <NavLink
                       key={item.to}

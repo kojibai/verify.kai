@@ -2,8 +2,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { kairosEpochNow } from "../../../utils/kai_pulse";
 import { computeLocalKai, GENESIS_TS, PULSE_MS, KAI_PULSE_SEC } from "./kai_time";
 import type { LocalKai } from "./types";
+
+/* ──────────────────────────
+   Kai-time (number ms) wrapper
+   kairosEpochNow() returns bigint in your canon.
+   This module does UI scheduling in number-ms (safe at epoch scale).
+────────────────────────── */
+const nowMs = (): number => {
+  const bi = kairosEpochNow();
+  if (bi <= 0n) return 0;
+  const max = BigInt(Number.MAX_SAFE_INTEGER);
+  if (bi > max) return Number.MAX_SAFE_INTEGER;
+  return Number(bi);
+};
 
 /**
  * Returns seconds (float) until the next Kai pulse boundary, or null if inactive.
@@ -16,8 +30,9 @@ export function useKaiPulseCountdown(active: boolean): number | null {
   const targetRef = useRef<number | null>(null);
 
   const scheduleNextBoundary = () => {
-    const now = Date.now();
-    const periods = Math.ceil((now - GENESIS_TS) / PULSE_MS);
+    const now = nowMs();
+    const elapsed = now - GENESIS_TS;
+    const periods = Math.max(0, Math.ceil(elapsed / PULSE_MS));
     targetRef.current = GENESIS_TS + periods * PULSE_MS;
   };
 
@@ -37,7 +52,7 @@ export function useKaiPulseCountdown(active: boolean): number | null {
       if (target == null) {
         setSecsLeft(null);
       } else {
-        const now = Date.now();
+        const now = nowMs();
 
         // If we crossed the boundary, immediately align to the next one instead of sitting at 0.
         if (now >= target) {
@@ -78,13 +93,13 @@ export function useKaiPulseCountdown(active: boolean): number | null {
  * - Reschedules on visibility change to stay in lockstep after backgrounding.
  */
 export function useAlignedKaiTicker(): LocalKai {
-  const [kai, setKai] = useState<LocalKai>(() => computeLocalKai(new Date()));
+  const [kai, setKai] = useState<LocalKai>(() => computeLocalKai(new Date(nowMs())));
   const timerRef = useRef<number | null>(null);
 
   const setCssPhaseVars = () => {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
-    const now = Date.now();
+    const now = nowMs();
     const lag = (PULSE_MS - ((now - GENESIS_TS) % PULSE_MS)) % PULSE_MS; // ms until boundary
     root.style.setProperty("--pulse-dur", `${PULSE_MS}ms`);
     // Negative delay causes CSS animations to appear already in-progress by `lag`
@@ -92,11 +107,11 @@ export function useAlignedKaiTicker(): LocalKai {
   };
 
   const schedule = () => {
-    if (timerRef.current) window.clearTimeout(timerRef.current);
+    if (timerRef.current != null) window.clearTimeout(timerRef.current);
 
-    const now = Date.now();
+    const now = nowMs();
     const elapsed = now - GENESIS_TS;
-    const next = GENESIS_TS + Math.ceil(elapsed / PULSE_MS) * PULSE_MS;
+    const next = GENESIS_TS + Math.max(0, Math.ceil(elapsed / PULSE_MS)) * PULSE_MS;
     const delay = Math.max(0, next - now);
 
     // Keep CSS phase vars fresh (useful for pure-CSS progress)
@@ -104,7 +119,7 @@ export function useAlignedKaiTicker(): LocalKai {
 
     timerRef.current = window.setTimeout(() => {
       // Update state exactly at boundary, then immediately schedule the next one
-      setKai(computeLocalKai(new Date()));
+      setKai(computeLocalKai(new Date(nowMs())));
       schedule();
     }, delay) as unknown as number;
   };
@@ -115,14 +130,14 @@ export function useAlignedKaiTicker(): LocalKai {
     const onVis = () => {
       if (document.visibilityState === "visible") {
         // Recompute immediately and reschedule to avoid any drift after background throttling.
-        setKai(computeLocalKai(new Date()));
+        setKai(computeLocalKai(new Date(nowMs())));
         schedule();
       }
     };
     document.addEventListener("visibilitychange", onVis);
 
     return () => {
-      if (timerRef.current) window.clearTimeout(timerRef.current);
+      if (timerRef.current != null) window.clearTimeout(timerRef.current);
       timerRef.current = null;
       document.removeEventListener("visibilitychange", onVis);
     };

@@ -2,10 +2,43 @@
 // 🜄 Harmonic Glyph Operations — Recursive Sovereign Execution Layer
 
 import type { Glyph } from "./types";
+import { kairosEpochNow } from "../utils/kai_pulse";
 
+// ─────────────────────────────────────────────────────────────
 // Constants
+// ─────────────────────────────────────────────────────────────
+
 const DEFAULT_GROWTH_RATE = 0.000777; // Optional growth per pulse
-const DEFAULT_PULSE_NOW = () => Math.floor(Date.now() / 5236); // fallback Kai pulse if Kai-Klok not injected
+
+// Kai anchor (same as GENESIS_TS used elsewhere)
+const GENESIS_TS = 1715323541888; // 2024-05-10T06:45:41.888Z (epoch-ms)
+
+// φ pulse length
+const KAI_PULSE_SEC = 3 + Math.sqrt(5);
+const PULSE_MS_EXACT = KAI_PULSE_SEC * 1000;
+
+// ─────────────────────────────────────────────────────────────
+// Time helpers (NO missing exports, NO bigint leakage)
+// ─────────────────────────────────────────────────────────────
+
+function epochMsNowNumber(): number {
+  // kairosEpochNow(): bigint → convert to number (epoch-ms is safely < 2^53 today)
+  const ms = Number(kairosEpochNow());
+  return Number.isFinite(ms) ? ms : GENESIS_TS;
+}
+
+/**
+ * Fallback "live pulse" ONLY when caller didn’t inject a pulse clock.
+ * Returns whole pulses since GENESIS_TS.
+ */
+export function getLiveKaiPulseFallback(): number {
+  const nowMs = epochMsNowNumber();
+  const delta = nowMs - GENESIS_TS;
+  if (!Number.isFinite(delta) || delta <= 0) return 0;
+  return Math.floor(delta / PULSE_MS_EXACT);
+}
+
+const DEFAULT_PULSE_NOW = (): number => getLiveKaiPulseFallback();
 
 // ─────────────────────────────────────────────────────────────
 // 🫁 Get the currently available balance from a source glyph
@@ -50,6 +83,8 @@ export function inhaleGlyphIntoTarget(
   amount: number,
   pulseNow: number = DEFAULT_PULSE_NOW()
 ): Glyph {
+  if (amount <= 0) throw new Error("Amount must be positive.");
+
   if (!target.inhaled) target.inhaled = {};
 
   const existing = target.inhaled[source.hash];
@@ -76,9 +111,8 @@ export function sendGlyphFromSource(
   recipientHash?: string,
   message?: string
 ): Glyph {
-  if (amount > source.value) {
-    throw new Error("Attempted to send more Φ than available.");
-  }
+  if (amount <= 0) throw new Error("Amount must be positive.");
+  if (amount > source.value) throw new Error("Attempted to send more Φ than available.");
 
   const newGlyph: Glyph = {
     hash: generateHash(source.hash, pulseNow),
@@ -91,7 +125,8 @@ export function sendGlyphFromSource(
       name: "Derivative Glyph",
       message,
       creator: recipientHash,
-      timestamp: Date.now(),
+      // ✅ number, not bigint — stamp as Kai pulse (coherent + deterministic)
+      timestamp: pulseNow,
     },
   };
 
@@ -121,8 +156,7 @@ export function applyGrowth(
 }
 
 // ─────────────────────────────────────────────────────────────
-// 🧬 Hash generator — placeholder deterministic function
-// To be replaced with zk-bound sigil hash
+// 🧬 Hash generator — deterministic function
 // ─────────────────────────────────────────────────────────────
 function generateHash(base: string, pulse: number): string {
   return `${base.slice(0, 8)}::${pulse.toString(36)}`;

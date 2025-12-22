@@ -7,6 +7,37 @@ import { computeIntrinsicUnsigned } from "../utils/valuation";
 import type { SigilTransfer, SigilMetadataLite } from "../utils/valuation";
 
 // ─────────────────────────────────────────────────────────────
+// 🔒 Deterministic helpers (NO Math.random, NO Date.now)
+// ─────────────────────────────────────────────────────────────
+
+/** 32-bit FNV-1a → stable hex (deterministic, fast, pure) */
+function fnv1a32Hex(input: string): string {
+  let hash = 0x811c9dc5; // offset basis
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    // hash *= 16777619 (with 32-bit overflow)
+    hash = Math.imul(hash, 0x01000193);
+  }
+  // >>>0 to unsigned, pad to 8 hex chars
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+/** Deterministic “kaiSignature” for an evolution: stable for (parent, pulse, patch). */
+function deriveKaiSignature(
+  parent: Glyph,
+  pulse: number,
+  updates?: Partial<GlyphMetadata>
+): string {
+  const parentSig = parent.metadata?.kaiSignature ?? "";
+  const patchSig = typeof updates?.kaiSignature === "string" ? updates.kaiSignature : "";
+  const patchTs = typeof updates?.timestamp === "number" ? String(updates.timestamp) : "";
+
+  // NOTE: we intentionally avoid JSON.stringify(updates) to prevent key-order ambiguity.
+  const seed = `evolve|p=${pulse}|parentHash=${parent.hash}|parentSig=${parentSig}|patchSig=${patchSig}|patchTs=${patchTs}`;
+  return `glyph::${pulse}::${fnv1a32Hex(seed)}`;
+}
+
+// ─────────────────────────────────────────────────────────────
 // 🔁 Generate a new glyph based on an existing one (evolution step)
 // Adds lineage and recalculates value using intrinsic valuation
 // ─────────────────────────────────────────────────────────────
@@ -15,15 +46,21 @@ export function evolveGlyph(
   pulse: number,
   updates?: Partial<GlyphMetadata>
 ): Glyph {
-  // Mint a new kaiSignature for this derivative glyph (deterministic placeholder)
-  const kaiSignature = `glyph::${pulse}::${Math.random().toString(36).slice(2, 10)}`;
+  // ✅ deterministic kaiSignature (no randomness)
+  const kaiSignature = deriveKaiSignature(parent, pulse, updates);
+
+  // ✅ timestamp must be a number; keep it deterministic by default:
+  // - if caller provides updates.timestamp, respect it
+  // - else stamp with Kai pulse (stable + sortable + purely Kai-native)
+  const timestamp: number =
+    typeof updates?.timestamp === "number" ? updates.timestamp : pulse;
 
   // Merge metadata (parent ⊕ updates) and stamp with new signature + timestamp
   const metadata: GlyphMetadata = {
     ...(parent.metadata ?? {}),
     ...(updates ?? {}),
     kaiSignature,
-    timestamp: Date.now(),
+    timestamp,
   };
 
   // For now, use kaiSignature as the glyph hash
@@ -36,15 +73,12 @@ export function evolveGlyph(
     pulseGenesis: parent.pulseGenesis ?? parent.pulseCreated,
     parentHash: parent.hash,
     sentFrom: parent.hash,
-    value: 1,             // temporary placeholder; replaced after valuation
+    value: 1, // replaced after valuation
     inhaled: {},
     metadata,
   };
 
   // 🧩 Convert our minimal SentTransfer[] into valuation-layer SigilTransfer[]
-  // We only have: recipientHash, amount, pulseSent
-  // Map to: senderSignature (parent's signature or hash), senderStamp (use hash),
-  // senderKaiPulse (pulseSent), receiverSignature (recipientHash)
   const transfers: SigilTransfer[] = (parent.sentTo ?? []).map((t) => ({
     senderSignature: parent.metadata?.kaiSignature ?? parent.hash,
     senderStamp: parent.hash,
@@ -55,17 +89,14 @@ export function evolveGlyph(
 
   // Build a *typed* SigilMetadataLite for valuation
   const metaForValuation: SigilMetadataLite = {
-    pulse,                         // claim/creation pulse for this glyph
-    kaiSignature,                  // signature of the glyph being valued
-    // choose defaults to keep types tight and deterministic:
+    pulse, // claim/creation pulse for this glyph
+    kaiSignature, // signature of the glyph being valued
     seriesSize: 1,
     quality: "med",
     creatorVerified: false,
     creatorRep: 0,
     transfers,
     cumulativeTransfers: transfers.length,
-    // Optional rhythmic fields if you want to feed them later:
-    // beat, stepIndex, stepsPerBeat, frequencyHz, chakraGate, etc.
   };
 
   // Run deterministic intrinsic valuation at `pulse`

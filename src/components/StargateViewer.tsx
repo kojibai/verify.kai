@@ -1,6 +1,6 @@
 /* ────────────────────────────────────────────────────────────────
    StargateViewer.tsx · Atlantean Lumitech “Ω-Gate Viewer”
-   v6.0 — Eternal-Sigil Edition (mobile-perfect, a11y-polished)
+   v6.1 — Eternal-Sigil Edition (type-safe bigint bridge + canonical genesis)
 ────────────────────────────────────────────────────────────────── */
 
 import {
@@ -18,26 +18,28 @@ import {
 } from "react";
 import KaiSigil, { type KaiSigilProps } from "./KaiSigil";
 import "./StargateViewer.css";
+import { GENESIS_TS, PULSE_MS, kairosEpochNow } from "../utils/kai_pulse";
 
 /* ════════════ Public Props ═════════════════════════════════════ */
 export interface StargateViewerProps {
-  sigilUrl?: string;   // fallback static sigil
-  pulse?: number;      // override livePulse seed
+  sigilUrl?: string; // fallback static sigil
+  pulse?: number; // override livePulse seed
   showPulse?: boolean;
-  size?: number;       // px
-  baseHue?: number;    // base hue for gate chrome
+  size?: number; // px
+  baseHue?: number; // base hue for gate chrome
   controls?: boolean;
 }
 
 /* ════════════ Time maths (same as Kai-API) ═════════════════════ */
-const GENESIS_TS        = Date.UTC(2024, 4, 10, 6, 45, 40);
-const PULSE_MS          = 5_236;                 // Eternal Pulse
-const PULSES_PER_STEP   = 11;
-const STEPS_PER_BEAT    = 44;
-const PULSES_PER_BEAT   = PULSES_PER_STEP * STEPS_PER_BEAT; // 484
-const DIVISIONS         = 11;                    // micro-breaths
-const TICK_MS           = PULSE_MS / DIVISIONS / 4;          // ≈119 ms
-const PHI               = (1 + Math.sqrt(5)) / 2;
+// Canon lattice (keep local unless exported elsewhere)
+const PULSES_PER_STEP = 11;
+const STEPS_PER_BEAT = 44;
+const PULSES_PER_BEAT = PULSES_PER_STEP * STEPS_PER_BEAT; // 484
+const BEATS_PER_DAY = 36;
+
+const DIVISIONS = 11; // micro-breaths
+const TICK_MS = Math.max(16, Math.round(PULSE_MS / DIVISIONS / 4)); // ≈119 ms (clamped)
+const PHI = (1 + Math.sqrt(5)) / 2;
 
 /* ════════════ Chakra helpers ═══════════════════════════════════ */
 const CHAKRA_NAMES = [
@@ -48,10 +50,20 @@ const CHAKRA_NAMES = [
   "Throat",
   "Crown",
 ] as const satisfies KaiSigilProps["chakraDay"][];
-// Cross-browser fullscreen signatures without `any`
 
 /* ════════════ Utils ════════════════════════════════════════════ */
-const nowPulse = (): number => Math.floor((Date.now() - GENESIS_TS) / PULSE_MS);
+const epochNowMs = (): number => {
+  // kairosEpochNow may be bigint; Number() is safe for epoch-ms magnitude.
+  return Number(kairosEpochNow());
+};
+
+const livePulseNow = (): number => {
+  const now = epochNowMs();
+  const msSinceGenesis = now - GENESIS_TS;
+  // If somehow negative (shouldn’t be), keep it stable.
+  if (msSinceGenesis <= 0) return 0;
+  return Math.floor(msSinceGenesis / PULSE_MS);
+};
 
 const isIOS = (): boolean => {
   if (typeof navigator === "undefined") return false; // SSR/Node
@@ -69,30 +81,45 @@ const prefersReducedMotion = (): boolean => {
 
 /* ════════════ Component ════════════════════════════════════════ */
 const StargateViewer: FC<StargateViewerProps> = ({
-  sigilUrl:  initialUrl,
-  pulse:     initialPulse,
-  showPulse  = true,
-  size       = 320,
-  baseHue    = 180,
-  controls   = true,
+  sigilUrl: initialUrl,
+  pulse: initialPulse,
+  showPulse = true,
+  size = 320,
+  baseHue = 180,
+  controls = true,
 }) => {
   /* — state — */
-  const [sigilUrl,  setSigilUrl ] = useState<string | undefined>(initialUrl);
-  const [livePulse, setLivePulse] = useState<number>(initialPulse ?? nowPulse());
-  const [paused,    setPaused   ] = useState<boolean>(prefersReducedMotion());
-  const [isFull,    setIsFull   ] = useState<boolean>(false);
-  const [tilt,      setTilt     ] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [dragging,  setDragging ] = useState<boolean>(false);
+  const [sigilUrl, setSigilUrl] = useState<string | undefined>(initialUrl);
+  const [livePulse, setLivePulse] = useState<number>(initialPulse ?? livePulseNow());
+  const [paused, setPaused] = useState<boolean>(prefersReducedMotion());
+  const [isFull, setIsFull] = useState<boolean>(false);
+  const [tilt, setTilt] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState<boolean>(false);
 
   /* live-sigil derived state */
-  const [beat,     setBeat    ] = useState<number>(0);
-  const [stepPct,  setStepPct ] = useState<number>(0);
-  const [chakra,   setChakra  ] = useState<KaiSigilProps["chakraDay"]>("Root");
+  const [beat, setBeat] = useState<number>(0);
+  const [stepPct, setStepPct] = useState<number>(0);
+  const [chakra, setChakra] = useState<KaiSigilProps["chakraDay"]>("Root");
 
   /* refs */
-  const rootRef  = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const sigilRef = useRef<HTMLElement | null>(null); // img *or* svg wrapper
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // refs to avoid stale closures + avoid setState spam
+  const livePulseRef = useRef<number>(livePulse);
+  const beatRef = useRef<number>(beat);
+  const stepRef = useRef<number>(stepPct);
+
+  useEffect(() => {
+    livePulseRef.current = livePulse;
+  }, [livePulse]);
+  useEffect(() => {
+    beatRef.current = beat;
+  }, [beat]);
+  useEffect(() => {
+    stepRef.current = stepPct;
+  }, [stepPct]);
 
   /* ══ Upload / drag-drop ═══════════════════════════════════════ */
   const triggerBrowse = useCallback((): void => {
@@ -132,36 +159,38 @@ const StargateViewer: FC<StargateViewerProps> = ({
     const gate = rootRef.current;
     if (!gate) return;
 
-    let lastBeat = beat;
-    let lastStep = stepPct;
-
     const tick = (): void => {
-      /* time → sigil maths */
-      const now          = Date.now();
-      const msSinceGen   = now - GENESIS_TS;
-      const pulsePhase   = (msSinceGen % PULSE_MS) / PULSE_MS; // 0-1
-      const subPhase     = (msSinceGen % (PULSE_MS / DIVISIONS)) / (PULSE_MS / DIVISIONS);
-      const breath       = 0.5 + 0.5 * Math.sin(pulsePhase * 2 * Math.PI * PHI);
+      const now = epochNowMs();
+      const msSinceGen = now - GENESIS_TS;
 
-      const pulse        = nowPulse();
-      const inBeat       = pulse % PULSES_PER_BEAT;
-      const beatIdx      = Math.floor(pulse / PULSES_PER_BEAT) % 36;
+      // (all number math — no bigint ops)
+      const pulsePhase = ((msSinceGen % PULSE_MS) + PULSE_MS) % PULSE_MS / PULSE_MS; // 0..1 stable
+      const divMs = PULSE_MS / DIVISIONS;
+      const subPhase = (((msSinceGen % divMs) + divMs) % divMs) / divMs;
+
+      const breath = 0.5 + 0.5 * Math.sin(pulsePhase * 2 * Math.PI * PHI);
+
+      const pulse = livePulseNow();
+      const inBeat = pulse % PULSES_PER_BEAT;
+      const beatIdx = Math.floor(pulse / PULSES_PER_BEAT) % BEATS_PER_DAY;
       const pulsesInStep = inBeat % PULSES_PER_STEP;
-      const stepPercent  = pulsesInStep / PULSES_PER_STEP;
+      const stepPercent = pulsesInStep / PULSES_PER_STEP;
 
       /* CSS vars on the gate */
-      gate.style.setProperty("--kai-phase",  pulsePhase.toString());
+      gate.style.setProperty("--kai-phase", pulsePhase.toString());
       gate.style.setProperty("--kai-breath", breath.toString());
 
       /* animate the sigil wrapper/element */
       const tgt = sigilRef.current;
       if (tgt) {
-        const hue   = subPhase * 360;
+        const hue = subPhase * 360;
         const scale = 0.96 + 0.04 * Math.sin(subPhase * 2 * Math.PI);
-        const rot   = subPhase * 360 / DIVISIONS;
+        const rot = (subPhase * 360) / DIVISIONS;
+
         tgt.style.filter =
           `hue-rotate(${hue.toFixed(1)}deg) ` +
           `drop-shadow(0 0 12px hsl(${(baseHue + hue) % 360} 100% 80% / .5))`;
+
         tgt.style.transform =
           `perspective(800px) rotateX(${-tilt.y * 10}deg) ` +
           `rotateY(${tilt.x * 10}deg) rotate(${rot.toFixed(1)}deg) ` +
@@ -169,47 +198,61 @@ const StargateViewer: FC<StargateViewerProps> = ({
       }
 
       /* update counters only when they change */
-      if (pulse !== livePulse) setLivePulse(pulse);
-      if (beatIdx !== lastBeat) {
-        lastBeat = beatIdx;
-        setBeat(beatIdx);
-        setChakra(CHAKRA_NAMES[Math.floor(beatIdx / 6)]);
+      if (pulse !== livePulseRef.current) {
+        livePulseRef.current = pulse;
+        setLivePulse(pulse);
       }
-      if (Math.abs(stepPercent - lastStep) > 1e-4) {
-        lastStep = stepPercent;
+
+      if (beatIdx !== beatRef.current) {
+        beatRef.current = beatIdx;
+        setBeat(beatIdx);
+
+        // 36 beats/day, 6 chakra names => 6 beats per chakra bucket
+        const chakraIdx = Math.max(0, Math.min(5, Math.floor(beatIdx / 6)));
+        setChakra(CHAKRA_NAMES[chakraIdx]);
+      }
+
+      if (Math.abs(stepPercent - stepRef.current) > 1e-4) {
+        stepRef.current = stepPercent;
         setStepPct(stepPercent);
       }
     };
 
     /* battery-friendly interval; paused on tab hide */
     let id: number | null = window.setInterval(tick, TICK_MS);
+
     const onVis = () => {
       if (document.hidden) {
-        if (id !== null) { clearInterval(id); id = null; }
+        if (id !== null) {
+          window.clearInterval(id);
+          id = null;
+        }
       } else if (!paused && id === null) {
         tick();
         id = window.setInterval(tick, TICK_MS);
       }
     };
+
     document.addEventListener("visibilitychange", onVis);
     tick();
 
     return () => {
-      if (id !== null) clearInterval(id);
+      if (id !== null) window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVis);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paused, tilt.x, tilt.y, baseHue]);
 
   /* ══ Gyro + pointer parallax (mobile + desktop) ═══════════════ */
   useEffect(() => {
     const handleOri = (e: DeviceOrientationEvent): void => {
       const x = (e.gamma ?? 0) / 45; // left/right
-      const y = (e.beta ?? 0) / 45;  // up/down
+      const y = (e.beta ?? 0) / 45; // up/down
       setTilt({ x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)) });
     };
     window.addEventListener("deviceorientation", handleOri, true);
-    return () => { window.removeEventListener("deviceorientation", handleOri); };
+    return () => {
+      window.removeEventListener("deviceorientation", handleOri);
+    };
   }, []);
 
   const onPointerMove = (e: MouseEvent<HTMLDivElement>) => {
@@ -222,85 +265,89 @@ const StargateViewer: FC<StargateViewerProps> = ({
     const ny = (e.clientY - cy) / (rect.height / 2);
     setTilt({ x: Math.max(-1, Math.min(1, nx)), y: Math.max(-1, Math.min(1, ny)) });
   };
+
   const onPointerLeave = () => setTilt({ x: 0, y: 0 });
 
   /* ══ Full-screen helpers ══════════════════════════════════════ */
-// ── Cross-browser fullscreen types (no `any`)
-type RequestFs = () => Promise<void> | void;
-type ExitFs = () => Promise<void> | void;
+  // Cross-browser fullscreen types (no `any`)
+  type RequestFs = () => Promise<void> | void;
+  type ExitFs = () => Promise<void> | void;
 
-type FullscreenTarget = HTMLElement & {
-  requestFullscreen?: RequestFs;
-  webkitRequestFullscreen?: RequestFs;
-  msRequestFullscreen?: RequestFs;
-  mozRequestFullScreen?: RequestFs;
-};
+  type FullscreenTarget = HTMLElement & {
+    requestFullscreen?: RequestFs;
+    webkitRequestFullscreen?: RequestFs;
+    msRequestFullscreen?: RequestFs;
+    mozRequestFullScreen?: RequestFs;
+  };
 
-type FullscreenDoc = Document & {
-  exitFullscreen?: ExitFs;
-  webkitExitFullscreen?: ExitFs;
-  msExitFullscreen?: ExitFs;
-  mozCancelFullScreen?: ExitFs;
-};
+  type FullscreenDoc = Document & {
+    exitFullscreen?: ExitFs;
+    webkitExitFullscreen?: ExitFs;
+    msExitFullscreen?: ExitFs;
+    mozCancelFullScreen?: ExitFs;
+  };
 
-// ── Fullscreen helpers
-const enterFull = useCallback((): void => {
-  const el = rootRef.current as FullscreenTarget | null;
-  if (!el || isIOS()) return;
+  const enterFull = useCallback((): void => {
+    const el = rootRef.current as FullscreenTarget | null;
+    if (!el || isIOS()) return;
 
-  const req: RequestFs | undefined =
-    el.requestFullscreen ??
-    el.webkitRequestFullscreen ??
-    el.msRequestFullscreen ??
-    el.mozRequestFullScreen;
+    const req: RequestFs | undefined =
+      el.requestFullscreen ??
+      el.webkitRequestFullscreen ??
+      el.msRequestFullscreen ??
+      el.mozRequestFullScreen;
 
-  if (req) {
-    const out = req.call(el);
-    if (out && typeof (out as Promise<void>).catch === "function") {
-      (out as Promise<void>).catch(() => {});
+    if (req) {
+      const out = req.call(el);
+      if (out && typeof (out as Promise<void>).catch === "function") {
+        (out as Promise<void>).catch(() => {});
+      }
     }
-  }
-}, []);
+  }, []);
 
-const exitFull = useCallback((): void => {
-  if (isIOS()) return;
+  const exitFull = useCallback((): void => {
+    if (isIOS()) return;
 
-  const d = document as FullscreenDoc;
-  const exit: ExitFs | undefined =
-    d.exitFullscreen?.bind(d) ??
-    d.webkitExitFullscreen?.bind(d) ??
-    d.msExitFullscreen?.bind(d) ??
-    d.mozCancelFullScreen?.bind(d);
+    const d = document as FullscreenDoc;
+    const exit: ExitFs | undefined =
+      d.exitFullscreen?.bind(d) ??
+      d.webkitExitFullscreen?.bind(d) ??
+      d.msExitFullscreen?.bind(d) ??
+      d.mozCancelFullScreen?.bind(d);
 
-  if (exit) {
-    const out = exit();
-    if (out && typeof (out as Promise<void>).catch === "function") {
-      (out as Promise<void>).catch(() => {});
+    if (exit) {
+      const out = exit();
+      if (out && typeof (out as Promise<void>).catch === "function") {
+        (out as Promise<void>).catch(() => {});
+      }
     }
-  }
-}, []);
+  }, []);
 
-const toggleFull = useCallback((): void => {
-  if (document.fullscreenElement) exitFull();
-  else enterFull();
-}, [enterFull, exitFull]);
+  const toggleFull = useCallback((): void => {
+    if (document.fullscreenElement) exitFull();
+    else enterFull();
+  }, [enterFull, exitFull]);
 
-useEffect(() => { enterFull(); }, [enterFull]);
+  useEffect(() => {
+    enterFull();
+  }, [enterFull]);
 
-useEffect(() => {
-  const onChange = (): void => setIsFull(Boolean(document.fullscreenElement));
-  document.addEventListener("fullscreenchange", onChange);
-  return () => document.removeEventListener("fullscreenchange", onChange);
-}, []);
+  useEffect(() => {
+    const onChange = (): void => setIsFull(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
 
-const onDoubleTap = (e: MouseEvent | TouchEvent): void => {
-  e.stopPropagation();
-  toggleFull();
-};
-
+  const onDoubleTap = (e: MouseEvent | TouchEvent): void => {
+    e.stopPropagation();
+    toggleFull();
+  };
 
   /* ══ Pause / Resume & keys ═════════════════════════════════════ */
-  const togglePause = (): void => { setPaused((p) => !p); };
+  const togglePause = (): void => {
+    setPaused((p) => !p);
+  };
+
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
     if (e.key === " ") {
       e.preventDefault();
@@ -319,8 +366,10 @@ const onDoubleTap = (e: MouseEvent | TouchEvent): void => {
       navigator.clipboard.writeText(sigilUrl).catch(() => {});
     }
   };
+
   const downloadPng = (): void => {
     if (!sigilUrl) return;
+
     if (/^data:image\/(?:png|jpeg)/.test(sigilUrl)) {
       const a = document.createElement("a");
       a.href = sigilUrl;
@@ -328,13 +377,15 @@ const onDoubleTap = (e: MouseEvent | TouchEvent): void => {
       a.click();
       return;
     }
+
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
       const c = document.createElement("canvas");
-      c.width  = img.width;
+      c.width = img.width;
       c.height = img.height;
       c.getContext("2d")?.drawImage(img, 0, 0);
+
       const a = document.createElement("a");
       a.href = c.toDataURL("image/png");
       a.download = "sigil.png";
@@ -345,14 +396,15 @@ const onDoubleTap = (e: MouseEvent | TouchEvent): void => {
 
   /* ══ CSS vars (size / hue / tilt) ═════════════════════════════ */
   type GateCSS = CSSProperties & {
-    "--size":  string;
-    "--hue":   string;
+    "--size": string;
+    "--hue": string;
     "--tiltX": string;
     "--tiltY": string;
   };
+
   const style: GateCSS = {
-    "--size":  `${size}px`,
-    "--hue":   `${baseHue}`,
+    "--size": `${size}px`,
+    "--hue": `${baseHue}`,
     "--tiltX": `${tilt.x}`,
     "--tiltY": `${tilt.y}`,
   };
@@ -373,7 +425,10 @@ const onDoubleTap = (e: MouseEvent | TouchEvent): void => {
       onDoubleClick={onDoubleTap}
       onTouchEnd={onDoubleTap}
       onKeyDown={onKeyDown}
-      onDragOver={(e) => { e.preventDefault(); if (!dragging) setDragging(true); }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!dragging) setDragging(true);
+      }}
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
       onMouseMove={onPointerMove}
@@ -403,7 +458,9 @@ const onDoubleTap = (e: MouseEvent | TouchEvent): void => {
       {/* sigil content */}
       {sigilUrl ? (
         <img
-          ref={(el) => { sigilRef.current = el; }}
+          ref={(el) => {
+            sigilRef.current = el;
+          }}
           src={sigilUrl}
           alt="Kairos sigil"
           className="sigil-img"
@@ -412,7 +469,9 @@ const onDoubleTap = (e: MouseEvent | TouchEvent): void => {
         />
       ) : (
         <div
-          ref={(el) => { sigilRef.current = el; }}
+          ref={(el) => {
+            sigilRef.current = el;
+          }}
           className="sigil-svg-wrap"
           style={{
             position: "absolute",
@@ -432,7 +491,7 @@ const onDoubleTap = (e: MouseEvent | TouchEvent): void => {
             chakraDay={chakra}
             size={Math.floor(size * 0.76)}
             quality="high"
-            animate={false} /* we animate via wrapper CSS transforms */
+            animate={false} /* we animate via wrapper transforms */
           />
         </div>
       )}
@@ -457,34 +516,49 @@ const onDoubleTap = (e: MouseEvent | TouchEvent): void => {
             className="ctrl-btn"
             title={paused ? "Resume (Space)" : "Pause (Space)"}
             aria-label={paused ? "Resume animation" : "Pause animation"}
-            onClick={(e) => { e.stopPropagation(); togglePause(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePause();
+            }}
           >
             {paused ? "▶︎" : "❚❚"}
           </button>
+
           <button
             type="button"
             className="ctrl-btn"
             title="Save PNG"
             aria-label="Save PNG"
-            onClick={(e) => { e.stopPropagation(); downloadPng(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              downloadPng();
+            }}
           >
             ⬇︎
           </button>
+
           <button
             type="button"
             className="ctrl-btn"
             title="Copy data URI"
             aria-label="Copy data URI"
-            onClick={(e) => { e.stopPropagation(); copyDataUri(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              copyDataUri();
+            }}
           >
             📋
           </button>
+
           <button
             type="button"
             className="ctrl-btn"
             title={isFull ? "Exit full-screen (F)" : "Full-screen (F)"}
             aria-label={isFull ? "Exit full-screen" : "Full-screen"}
-            onClick={(e) => { e.stopPropagation(); toggleFull(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleFull();
+            }}
           >
             ⤢
           </button>

@@ -42,7 +42,7 @@ import {
   encodeTokenWithBudgets,
 } from "../../utils/feedPayload";
 
-import { momentFromUTC } from "../../utils/kai_pulse";
+import { kairosEpochNow, momentFromUTC } from "../../utils/kai_pulse";
 import { useSigilAuth } from "./SigilAuthContext";
 import StoryRecorder, { type CapturedStory } from "./StoryRecorder";
 import { registerSigilUrl } from "../../utils/sigilRegistry";
@@ -109,6 +109,7 @@ const short = (s: string, head = 8, tail = 6): string =>
 const isHttpUrl = (s: unknown): s is string => {
   if (typeof s !== "string" || !s) return false;
   try {
+    reminderIgnoreChronos();
     const u = new URL(s, globalThis.location?.origin ?? "https://example.org");
     return u.protocol === "https:" || u.protocol === "http:";
   } catch {
@@ -301,6 +302,20 @@ type AllowedGlyph = GlyphCredential & {
   label: string; // file name or user label
 };
 
+/* ───────────────────────── Kairos ms bridge (bigint → number) ───────────────────────── */
+
+const kairosEpochNowMs = (): number => {
+  const n = Number(kairosEpochNow());
+  // Epoch ms is safely within JS integer range, but keep it hardened.
+  if (!Number.isSafeInteger(n)) throw new Error("kairosEpochNow out of safe integer range");
+  return n;
+};
+
+// No-op marker to keep intent explicit (and stop accidental Date.* re-intros).
+function reminderIgnoreChronos(): void {
+  // intentional empty
+}
+
 /* ───────────────────────── Non-hanging encode (REAL Module Worker file) ───────────────────────── */
 
 type EncodeWorkerRequest = { id: string; payload: FeedPostPayload };
@@ -322,7 +337,7 @@ type EncodeDiag = {
 };
 
 const nowMs = (): number =>
-  typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+  typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : kairosEpochNowMs();
 
 const nextPaint = async (): Promise<void> => {
   await new Promise<void>((r) => requestAnimationFrame(() => r()));
@@ -343,7 +358,8 @@ const withTimeout = async <T,>(p: Promise<T>, ms: number, label: string): Promis
 const makeId = (): string => {
   const c: Crypto | undefined = typeof crypto !== "undefined" ? crypto : undefined;
   if (c && "randomUUID" in c && typeof c.randomUUID === "function") return c.randomUUID();
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  // Avoid Date.now() (Chronos). Use perf time + random for uniqueness.
+  return `${Math.floor(nowMs()).toString(36)}-${Math.random().toString(36).slice(2)}`;
 };
 
 // Singleton worker plumbing (module-scope; not React state)
@@ -426,7 +442,6 @@ async function encodeTokenWorkerFirst(payload: FeedPostPayload): Promise<EncodeW
       // If fallback succeeds, prefer it. If it also fails, return worker error.
       return fallback.ok ? fallback : res;
     }
-    
 
     return res;
   } catch {
@@ -434,7 +449,6 @@ async function encodeTokenWorkerFirst(payload: FeedPostPayload): Promise<EncodeW
     return mainThread();
   }
 }
-
 
 /* ───────────────────────── Component ───────────────────────── */
 
@@ -872,8 +886,10 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
     }
 
     let pulse: number;
+    let tsMs: number;
     try {
-      pulse = momentFromUTC(new Date()).pulse;
+      tsMs = kairosEpochNowMs();
+      pulse = momentFromUTC(new Date(tsMs)).pulse;
     } catch {
       setErr("Failed to compute Kai pulse.");
       return;
@@ -911,7 +927,7 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
         sigilId,
         phiKey: hasVerifiedSigil && phiKey ? phiKey : undefined,
         kaiSignature: hasVerifiedSigil && kaiSignature ? kaiSignature : undefined,
-        ts: Date.now(),
+        ts: tsMs, // ✅ number (ms), no bigint, no Date.now()
         attachments: mergedAttachments,
         parentUrl,
         originUrl,
@@ -1201,7 +1217,7 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
       {privateOn && (
         <>
           <div className="composer-hint">
-            Private (Sealed) encrypts <span className="mono">body + attachments</span> inside the token. The outer post remains verifiable (ΦKey/ΣSig)
+            Private (Sealed) encrypts <span className="mono">body + seals</span> inside the token. The outer post remains verifiable (ΦKey/ΣSig)
             but does not contain plaintext content.
           </div>
 
@@ -1216,7 +1232,7 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
               maxLength={240}
             />
             <div className="composer-hint">
-              If empty, the public caption becomes <span className="mono">Sealed Memory</span>.
+              If empty, the public message becomes <span className="mono">Sealed Memory</span>.
             </div>
           </div>
 
@@ -1245,9 +1261,9 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
                       /* ignore */
                     }
                   }}
-                  title="Copy salt"
+                  title="remember salt"
                 >
-                  Copy
+                  Remember
                 </button>
               </div>
 
@@ -1271,7 +1287,7 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
                         }}
                         title="Copy derived signature"
                       >
-                        Copy derived ΣSig
+                        Remember derived ΣSig
                       </button>
                       <span className="dim" style={{ marginLeft: 8 }}>
                         (secret-equivalent; only for issuer export workflows)
@@ -1303,7 +1319,7 @@ export default function KaiVoh({ initialCaption = "", initialAuthor = "", onExha
                       await addAllowedGlyphSvgs(list);
                     }}
                   />
-                  Add allowed glyphs…
+                  Seal allowed glyphs…
                 </label>
 
                 {allowedGlyphs.length > 0 && (

@@ -1,15 +1,60 @@
+// src/glyph/glyphUtils.ts
 // 🜁 Glyph Utilities — Recursive Harmonic Tools for Eternal Memory
 // Crafted in alignment with Divine Law — no mutation, no incoherence
 
-import type { Glyph, SentTransfer } from "./types";
 import { XMLParser } from "fast-xml-parser";
+import type { Glyph, SentTransfer } from "./types";
+
+// ─────────────────────────────────────────────────────────────
+// 🔒 Deterministic helpers (NO Math.random, NO Date.now, NO bigint leakage)
+// ─────────────────────────────────────────────────────────────
+
+/** 32-bit FNV-1a → stable hex (deterministic, fast, pure) */
+function fnv1a32Hex(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+/** Deterministic signature for send: stable for (source, pulse, recipient, message, amount). */
+function deriveKaiSignature(args: {
+  sourceHash: string;
+  pulse: number;
+  amount: number;
+  recipientHash?: string;
+  message?: string;
+}): string {
+  const seed = [
+    "send",
+    `src=${args.sourceHash}`,
+    `p=${args.pulse}`,
+    `amt=${args.amount}`,
+    `to=${args.recipientHash ?? ""}`,
+    `msg=${args.message ?? ""}`,
+  ].join("|");
+  return `glyph::${args.pulse}::${fnv1a32Hex(seed)}`;
+}
+
+/**
+ * kairosEpochNow() returns bigint elsewhere in your codebase.
+ * GlyphMetadata.timestamp expects number.
+ *
+ * Canon choice here: treat "timestamp" as a Kai-native stamp (pulse).
+ * If you later want epoch-ms, pass/convert upstream and set it explicitly.
+ */
+function stampTimestampNumber(pulse: number): number {
+  return pulse;
+}
 
 // ─────────────────────────────────────────────────────────────
 // 🪞 Deep clone a glyph (safe memory separation)
 // Used before mutation or recursive transfer
 // ─────────────────────────────────────────────────────────────
 export function cloneGlyph(original: Glyph): Glyph {
-  return JSON.parse(JSON.stringify(original));
+  return JSON.parse(JSON.stringify(original)) as Glyph;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -55,7 +100,7 @@ export function mergeGlyphs(target: Glyph, source: Glyph): Glyph {
 // 📦 Send a new glyph from a source glyph
 // - Deducts Φ from source
 // - Records transfer trail
-// - Generates new kaiSignature
+// - Generates new kaiSignature (deterministic)
 // - Resets inhaled memory
 // ─────────────────────────────────────────────────────────────
 export function sendGlyphFromSource(
@@ -68,7 +113,15 @@ export function sendGlyphFromSource(
   if (amount <= 0) throw new Error("Amount must be positive.");
   if (source.value < amount) throw new Error("Insufficient glyph balance.");
 
-  const newKaiSignature = `glyph::${pulse}::${Math.random().toString(36).slice(2, 10)}`;
+  // ✅ deterministic signature (no Math.random)
+  const newKaiSignature = deriveKaiSignature({
+    sourceHash: source.hash,
+    pulse,
+    amount,
+    recipientHash,
+    message,
+  });
+
   const newHash = newKaiSignature;
 
   const newGlyph: Glyph = {
@@ -77,27 +130,24 @@ export function sendGlyphFromSource(
     parentHash: source.hash,
     sentFrom: source.hash,
     value: amount,
-    sentTo: recipientHash
-      ? [{ recipientHash, amount, pulseSent: pulse }]
-      : [],
+    sentTo: recipientHash ? [{ recipientHash, amount, pulseSent: pulse }] : [],
     note: message ?? "",
     inhaled: {},
     metadata: {
       ...(source.metadata ?? {}),
       kaiSignature: newKaiSignature,
-      timestamp: Date.now(),
+      // ✅ number, not bigint
+      timestamp: stampTimestampNumber(pulse),
     },
   };
 
+  // NOTE: this function historically mutates `source`. Keeping behavior,
+  // but doing it at the end (single, explicit mutation point).
   source.value -= amount;
 
   if (!source.sentTo) source.sentTo = [];
   if (recipientHash) {
-    const transfer: SentTransfer = {
-      recipientHash,
-      amount,
-      pulseSent: pulse,
-    };
+    const transfer: SentTransfer = { recipientHash, amount, pulseSent: pulse };
     source.sentTo.push(transfer);
   }
 
@@ -126,7 +176,7 @@ export function isValidGlyph(obj: unknown): obj is Glyph {
 // ─────────────────────────────────────────────────────────────
 export function parseImportedGlyph(fileText: string): Glyph {
   try {
-    const json = JSON.parse(fileText);
+    const json = JSON.parse(fileText) as unknown;
     if (isValidGlyph(json)) return json;
   } catch {
     // Not JSON — continue to SVG fallback
@@ -138,20 +188,31 @@ export function parseImportedGlyph(fileText: string): Glyph {
       attributeNamePrefix: "",
     });
 
-    const parsed = parser.parse(fileText);
-    const svg = parsed.svg;
+    const parsed = parser.parse(fileText) as unknown;
+    const root = parsed as Record<string, unknown>;
+    const svg = root.svg as Record<string, unknown> | undefined;
 
-    const hash = svg["data-hash"] ?? svg["hash"];
-    const pulseCreated = parseInt(svg["data-pulse"] ?? svg["pulseCreated"], 10);
-    const value = parseFloat(svg["data-value"] ?? "0");
+    if (!svg) throw new Error("Missing <svg> root.");
 
-    if (!hash || isNaN(pulseCreated) || isNaN(value)) {
+    const hashU = svg["data-hash"] ?? svg["hash"];
+    const pulseU = svg["data-pulse"] ?? svg["pulseCreated"];
+    const valueU = svg["data-value"] ?? "0";
+
+    const hash = typeof hashU === "string" ? hashU : String(hashU ?? "");
+    const pulseCreated = Number.parseInt(typeof pulseU === "string" ? pulseU : String(pulseU ?? ""), 10);
+    const value = Number.parseFloat(typeof valueU === "string" ? valueU : String(valueU ?? "0"));
+
+    if (!hash || !Number.isFinite(pulseCreated) || !Number.isFinite(value)) {
       throw new Error("Missing or invalid glyph data in SVG.");
     }
 
+    const metaU = svg.metadata;
+    const meta = (typeof metaU === "object" && metaU !== null ? metaU : {}) as Record<string, unknown>;
+
+    // ✅ ensure timestamp is a number, not bigint
     const metadata = {
-      ...svg.metadata,
-      timestamp: Date.now(),
+      ...meta,
+      timestamp: stampTimestampNumber(pulseCreated),
     };
 
     const glyph: Glyph = {
@@ -176,7 +237,7 @@ export function loadStoredGlyphs(): Glyph[] {
     const raw = localStorage.getItem("kai_glyph_vault");
     if (!raw) return [];
 
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
 
     return parsed.filter(isValidGlyph);

@@ -15,6 +15,12 @@
  * ✅ Sealed chakraDay (moment-of-sealing) is canonical
  * ✅ verifierUrl is never null and is bound at embed time
  * ✅ MultiShareDispatcher receives the canonical proof capsule (verifierData)
+ *
+ * Determinism patch (THIS FILE):
+ * ✅ Live Kai Pulse HUD is Chronos-free and matches SigilModal indexing:
+ *    - NO new Date(), NO Date.now(), NO fetchKaiOrLocal(), NO epochMsFromPulse() math
+ *    - Uses kai_pulse.ts kairosEpochNow() (μpulses since GENESIS) + PULSE_MS to compute:
+ *        livePulse (0-based pulse index, same as SigilModal) and msToNextPulse (to next φ boundary)
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -50,10 +56,80 @@ import {
 import { derivePhiKeyFromSig } from "../VerifierStamper/sigilUtils";
 
 /* Kai-Klok φ-engine (KKS v1) */
-import { fetchKaiOrLocal, epochMsFromPulse, type ChakraDay } from "../../utils/kai_pulse";
+import type { ChakraDay } from "../../utils/kai_pulse";
+import * as KaiSpec from "../../utils/kai_pulse";
 
 /* Types */
 import type { PostEntry, SessionData } from "../session/sessionTypes";
+
+/* -------------------------------------------------------------------------- */
+/*                       Kai-Spec Live Pulse Helpers                          */
+/* -------------------------------------------------------------------------- */
+
+function isFn(v: unknown): v is (...args: never[]) => unknown {
+  return typeof v === "function";
+}
+
+function asFiniteNumber(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  return null;
+}
+
+function readPulseMsFromKaiSpec(): number {
+  const rec = KaiSpec as unknown as Record<string, unknown>;
+  const pulseMs = asFiniteNumber(rec["PULSE_MS"]);
+  if (pulseMs !== null && pulseMs > 0) return pulseMs;
+
+  // φ fallback (stable): (3 + √5)s
+  const fallback = (3 + Math.sqrt(5)) * 1000;
+  return Number.isFinite(fallback) && fallback > 0 ? fallback : 5236;
+}
+
+function readMicroPulsesNow(): bigint | null {
+  const rec = KaiSpec as unknown as Record<string, unknown>;
+
+  // Canonical spec export: kairosEpochNow() -> bigint μpulses since GENESIS
+  const f = rec["kairosEpochNow"];
+  if (isFn(f)) {
+    const out = (f as () => unknown)();
+    if (typeof out === "bigint") return out;
+    if (typeof out === "number" && Number.isFinite(out)) return BigInt(Math.floor(out));
+  }
+
+  // Optional alternates (if you ever rename)
+  for (const k of ["microPulsesNow", "kaiMicroNow", "kaiNowMicroPulses"]) {
+    const fn = rec[k];
+    if (isFn(fn)) {
+      const out = (fn as () => unknown)();
+      if (typeof out === "bigint") return out;
+      if (typeof out === "number" && Number.isFinite(out)) return BigInt(Math.floor(out));
+    }
+  }
+
+  return null;
+}
+
+function microToPulse0BasedInt(micro: bigint): number {
+  // Match SigilModal: pulse index = floor(μ / 1e6)  (Genesis pulse = 0)
+  const p0 = micro / 1_000_000n;
+  const max = BigInt(Number.MAX_SAFE_INTEGER);
+  if (p0 > max) return Number.MAX_SAFE_INTEGER;
+  if (p0 < 0n) return 0;
+  return Number(p0);
+}
+
+function delayToNextPulseBoundaryMs(micro: bigint, pulseMs: number): number {
+  // μ remainder within current pulse
+  const r = micro % 1_000_000n; // 0..999999 (or negative; but we clamp below)
+  const rr = r < 0n ? 0n : r;
+
+  const remainingMicro = rr === 0n ? 1_000_000n : 1_000_000n - rr; // μ until next boundary
+  const rem = Number(remainingMicro); // <= 1e6 safe
+  const raw = (rem / 1_000_000) * pulseMs;
+
+  // clamp to avoid busy loops or stalls
+  return Math.ceil(Math.max(25, Math.min(60_000, raw)));
+}
 
 /* -------------------------------------------------------------------------- */
 /*                               Helper Types                                 */
@@ -118,12 +194,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 function isPostEntry(v: unknown): v is PostEntry {
-  return (
-    isRecord(v) &&
-    typeof v.pulse === "number" &&
-    typeof v.platform === "string" &&
-    typeof v.link === "string"
-  );
+  return isRecord(v) && typeof v.pulse === "number" && typeof v.platform === "string" && typeof v.link === "string";
 }
 
 function toPostLedger(v: unknown): PostEntry[] {
@@ -227,9 +298,7 @@ async function embedMetadataIntoSvgBlob(svgBlob: Blob, metadata: unknown): Promi
 
     const metas = doc.getElementsByTagName("metadata");
     const metaEl: SVGMetadataElement =
-      metas.length > 0
-        ? (metas.item(0) as SVGMetadataElement)
-        : (doc.createElementNS(SVG_NS, "metadata") as SVGMetadataElement);
+      metas.length > 0 ? (metas.item(0) as SVGMetadataElement) : (doc.createElementNS(SVG_NS, "metadata") as SVGMetadataElement);
 
     if (metas.length === 0) root.appendChild(metaEl);
 
@@ -349,12 +418,7 @@ function SessionHud({
           </div>
 
           <div className="kv-session-status-block">
-            <span
-              className={[
-                "kv-accounts-pill",
-                hasConnectedAccounts ? "kv-accounts-pill--ok" : "kv-accounts-pill--warn",
-              ].join(" ")}
-            >
+            <span className={["kv-accounts-pill", hasConnectedAccounts ? "kv-accounts-pill--ok" : "kv-accounts-pill--warn"].join(" ")}>
               {hasConnectedAccounts ? "Accounts linked" : "Connect accounts"}
             </span>
             <span className="kv-step-current-label">{FLOW_LABEL[step] ?? "Flow"}</span>
@@ -431,36 +495,47 @@ function KaiVohFlow(): ReactElement {
 
   const [flowError, setFlowError] = useState<string | null>(null);
 
-  /* Live Kai pulse + countdown (KKS v1) */
+  /* Live Kai pulse + countdown (KKS v1 — Chronos-free, SigilModal pulse indexing) */
   const [livePulse, setLivePulse] = useState<number | null>(null);
   const [msToNextPulse, setMsToNextPulse] = useState<number | null>(null);
 
+  const pulseMs = useMemo(() => readPulseMsFromKaiSpec(), []);
+
   useEffect(() => {
     let cancelled = false;
+    let t: number | null = null;
 
-    const tick = async (): Promise<void> => {
-      const now = new Date();
-      const kai = await fetchKaiOrLocal(undefined, now);
+    const tick = (): void => {
       if (cancelled) return;
 
-      const pulseNow = kai.pulse;
-      const nextPulseMsBI = epochMsFromPulse(pulseNow + 1);
+      const micro = readMicroPulsesNow();
 
-      let remaining = Number(nextPulseMsBI - BigInt(now.getTime()));
-      if (!Number.isFinite(remaining) || remaining < 0) remaining = 0;
+      // Allow micro === 0n (Genesis) — it is valid and should display pulse 0.
+      if (micro === null || micro < 0n) {
+        setLivePulse(null);
+        setMsToNextPulse(null);
+        t = window.setTimeout(tick, 500);
+        return;
+      }
 
-      setLivePulse(pulseNow);
+      const p = microToPulse0BasedInt(micro);
+      const remaining = delayToNextPulseBoundaryMs(micro, pulseMs);
+
+      setLivePulse(p);
       setMsToNextPulse(remaining);
+
+      // Update frequently, but always snap exactly at boundary when close.
+      const next = Math.min(250, remaining);
+      t = window.setTimeout(tick, Math.max(25, next));
     };
 
-    void tick();
-    const timer = window.setInterval(() => void tick(), 250);
+    tick();
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (t !== null) window.clearTimeout(t);
     };
-  }, []);
+  }, [pulseMs]);
 
   const hasConnectedAccounts = useMemo(() => {
     if (!session || !session.connectedAccounts) return false;

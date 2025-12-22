@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useKaiPulse } from './KaiPulseEngine';
+import { getLiveKaiPulse } from '../../utils/kai_pulse';
 
 type Mission = {
   id: string;
@@ -45,7 +46,7 @@ const MissionRunner: React.FC<Props> = ({ onSuccess, onFail }) => {
         if (!current || !current.active || current.id === lastHit) return;
 
         // Simulate precision timing success (within 1 pulse window)
-        const nowPulse = Math.floor((Date.now() - 1715323541888) / 5236);
+        const nowPulse = getLiveKaiPulse();
         const diff = Math.abs(current.pulseIndex - nowPulse);
 
         if (diff <= 1) {

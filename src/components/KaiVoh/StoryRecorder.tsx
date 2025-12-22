@@ -16,6 +16,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./styles/StoryRecorder.css";
+import { kairosEpochNow } from "../../utils/kai_pulse";
 
 export type CapturedStory = {
   blob: Blob;
@@ -96,6 +97,14 @@ export default function StoryRecorder(props: StoryRecorderProps) {
   const rafRef = useRef<number | null>(null);
 
   const supportedMime = useMemo(() => pickSupportedMime(), []);
+function epochMsNow(): number {
+  const p = typeof performance !== "undefined" ? performance : null;
+  const origin = p && typeof p.timeOrigin === "number" ? p.timeOrigin : NaN;
+  const now = p ? p.now() : NaN;
+  const ms = origin + now;
+  if (Number.isFinite(ms)) return Math.floor(ms);
+  return Date.now();
+}
 
   useEffect(() => {
     if (!isOpen) return;
@@ -296,20 +305,25 @@ export default function StoryRecorder(props: StoryRecorderProps) {
     chunksRef.current = [];
     if (!chunks.length) return;
 
-    const dMs = Math.max(0, durationMs);
+    const dMs = Math.max(0, Math.min(maxDurationMs, performance.now() - startTsRef.current));
     const mimeType = recRef.current?.mimeType || supportedMime || "video/webm";
 
     const blob = new Blob(chunks, { type: mimeType });
-    const createdAt = Date.now();
 
-    // Generate thumbnail by loading video and drawing first frame
+    // ✅ createdAt must be epoch-ms number (File.lastModified expects number)
+    const createdAt = epochMsNow();
+
+    // ✅ Kai μpulses for deterministic Kai timestamping / naming
+    const createdAtKaiMicro = kairosEpochNow(BigInt(createdAt));
+
+    // Generate thumbnail
     const { width, height, thumbnailDataUrl } = await extractThumb(blob);
 
     // SHA-256
     const buf = await blob.arrayBuffer();
     const sha256 = await sha256Hex(buf);
 
-    const fileName = `story_${createdAt}.${mimeType.includes("mp4") ? "mp4" : "webm"}`;
+    const fileName = `story_${createdAtKaiMicro.toString()}.${mimeType.includes("mp4") ? "mp4" : "webm"}`;
     const file = new File([blob], fileName, { type: mimeType, lastModified: createdAt });
 
     const captured: CapturedStory = {
@@ -326,6 +340,7 @@ export default function StoryRecorder(props: StoryRecorderProps) {
 
     onCaptured(captured);
   }
+
 
   async function extractThumb(blob: Blob): Promise<{ width: number; height: number; thumbnailDataUrl: string }> {
     const url = URL.createObjectURL(blob);

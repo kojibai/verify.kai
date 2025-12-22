@@ -1,6 +1,7 @@
 // src/pages/SigilPage/registry.ts
 import { putMetadata } from "../../utils/svgMeta";
 import type { SigilPayload } from "../../types/sigil";
+import { kairosEpochNow } from "../../utils/kai_pulse";
 
 /**
  * The attestation claim we sign & verify.
@@ -21,6 +22,7 @@ const CLAIM_KEYS: Array<keyof Claim> = [
   "issuedAt",
   "version",
 ];
+const epochSecondsNow = (): number => Number(kairosEpochNow() / 1000n);
 
 /**
  * Produce a canonical JSON string with a stable key order.
@@ -115,7 +117,7 @@ export function buildClaim(meta: SigilPayload, canonicalHash: string, token: str
     canonicalHash: canonicalHash.toLowerCase(),
     token,
     expiresAtPulse: meta.expiresAtPulse ?? null,
-    issuedAt: Math.floor(Date.now() / 1000),
+    issuedAt: epochSecondsNow(),
     version: 1,
   };
 }

@@ -7,6 +7,7 @@ import {
   type UsernameClaimGlyphEvidence,
 } from "../types/usernameClaim";
 import { normalizeClaimGlyphRef, normalizeUsername } from "./usernameClaim";
+import { kairosEpochNow } from "./kai_pulse";
 
 export type UsernameClaimRegistry = Record<string, UsernameClaimRegistryEntry>;
 
@@ -20,6 +21,21 @@ let memoryRegistry: UsernameClaimRegistry = {};
 
 function cloneRegistry(reg: UsernameClaimRegistry): UsernameClaimRegistry {
   return Object.fromEntries(Object.entries(reg)) as UsernameClaimRegistry;
+}
+
+/**
+ * kairosEpochNow() returns bigint epoch-ms.
+ * Registry types use number epoch-ms for updatedAt (UI sort / JSON / storage).
+ */
+function bigintToSafeNumber(b: bigint): number {
+  const max = BigInt(Number.MAX_SAFE_INTEGER);
+  if (b > max) return Number.MAX_SAFE_INTEGER;
+  if (b < -max) return -Number.MAX_SAFE_INTEGER;
+  return Number(b);
+}
+
+function nowMs(): number {
+  return bigintToSafeNumber(kairosEpochNow());
 }
 
 /** Canonicalize URL to absolute when possible for explorer surfaces. */
@@ -37,6 +53,41 @@ function canonicalizeUrl(raw: string): string | null {
   }
 }
 
+function coerceUpdatedAt(v: unknown): number {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  if (typeof v === "bigint") return bigintToSafeNumber(v);
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return 0;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
+function normalizeEntryUnsafe(v: unknown): UsernameClaimRegistryEntry | null {
+  if (!v || typeof v !== "object") return null;
+  const rr = v as Record<string, unknown>;
+
+  const normalized = typeof rr.normalized === "string" ? rr.normalized : "";
+  const claimHash = typeof rr.claimHash === "string" ? rr.claimHash : "";
+  if (!normalized || !claimHash) return null;
+
+  const entry: UsernameClaimRegistryEntry = {
+    username: typeof rr.username === "string" ? rr.username : normalized,
+    normalized,
+    claimHash,
+    claimUrl: typeof rr.claimUrl === "string" ? rr.claimUrl : "",
+    originHash: typeof rr.originHash === "string" ? rr.originHash : "",
+    ownerHint:
+      rr.ownerHint === null || typeof rr.ownerHint === "string" ? (rr.ownerHint as string | null) : null,
+    updatedAt: coerceUpdatedAt(rr.updatedAt),
+  };
+
+  if (!entry.claimUrl || !entry.originHash) return null;
+  return entry;
+}
+
 function readRegistry(): UsernameClaimRegistry {
   if (!hasWindow) return cloneRegistry(memoryRegistry);
   try {
@@ -47,12 +98,12 @@ function readRegistry(): UsernameClaimRegistry {
     }
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== "object") return {};
-    const rec = parsed as Record<string, UsernameClaimRegistryEntry>;
+    const rec = parsed as Record<string, unknown>;
     const out: UsernameClaimRegistry = {};
     for (const [k, v] of Object.entries(rec)) {
-      if (!v || typeof v !== "object") continue;
-      if (typeof v.normalized !== "string" || typeof v.claimHash !== "string") continue;
-      out[k] = v as UsernameClaimRegistryEntry;
+      const entry = normalizeEntryUnsafe(v);
+      if (!entry) continue;
+      out[k] = entry;
     }
     memoryRegistry = cloneRegistry(out);
     return cloneRegistry(out);
@@ -80,8 +131,15 @@ function getBroadcastChannel(): BroadcastChannel | null {
   return _bc;
 }
 
-function mergeEntry(entry: UsernameClaimRegistryEntry): boolean {
+function mergeEntry(entryIn: UsernameClaimRegistryEntry): boolean {
   const registry = readRegistry();
+
+  // Coerce updatedAt defensively in case a wire/store payload carries bigint/string.
+  const entry: UsernameClaimRegistryEntry = {
+    ...entryIn,
+    updatedAt: coerceUpdatedAt((entryIn as unknown as Record<string, unknown>)?.updatedAt),
+  };
+
   const existing = registry[entry.normalized];
   if (existing && existing.claimHash !== entry.claimHash) return false;
 
@@ -90,7 +148,8 @@ function mergeEntry(entry: UsernameClaimRegistryEntry): boolean {
     existing.claimHash === entry.claimHash &&
     existing.claimUrl === entry.claimUrl &&
     existing.originHash === entry.originHash &&
-    existing.ownerHint === entry.ownerHint;
+    existing.ownerHint === entry.ownerHint &&
+    existing.updatedAt === entry.updatedAt;
 
   if (unchanged) return true;
 
@@ -150,6 +209,7 @@ function upsertEntry(
   if (!claimUrl) return { updated: false, reason: "missing claim url" };
 
   const ownerHint = ref.ownerHint ?? payload.ownerHint ?? null;
+
   const entry: UsernameClaimRegistryEntry = {
     username: payload.username,
     normalized,
@@ -157,7 +217,7 @@ function upsertEntry(
     claimUrl,
     originHash: payload.originHash,
     ownerHint,
-    updatedAt: Date.now(),
+    updatedAt: nowMs(), // ✅ number, derived from Kairos bigint
   };
 
   const unchanged =
@@ -229,9 +289,10 @@ export function subscribeUsernameClaimRegistry(
   const onStorage = (ev: StorageEvent) => {
     if (ev.key !== LS_KEY || typeof ev.newValue !== "string") return;
     try {
-      const parsed = JSON.parse(ev.newValue) as UsernameClaimRegistry;
-      for (const entry of Object.values(parsed)) {
-        if (entry && typeof entry === "object" && mergeEntry(entry)) handler(entry, "storage");
+      const parsed = JSON.parse(ev.newValue) as Record<string, unknown>;
+      for (const entryRaw of Object.values(parsed)) {
+        const entry = normalizeEntryUnsafe(entryRaw);
+        if (entry && mergeEntry(entry)) handler(entry, "storage");
       }
     } catch {
       /* ignore */
@@ -248,4 +309,3 @@ export function subscribeUsernameClaimRegistry(
     window.removeEventListener("storage", onStorage);
   };
 }
-

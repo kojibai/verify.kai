@@ -7,6 +7,9 @@
    • Keeps: strict TS timer handles (window.setTimeout/clearTimeout), no NodeJS.Timeout
    • Change: REMOVE 3-button FAB dock, Verifier overlay, Stargate link
    • Change: ONE obvious action button: “MINT MOMENT” (opens SealMomentModal)
+   • Kai-Klok spec alignment:
+     - “NOW” comes ONLY from kai_pulse.ts (kairosEpochNow), never Date.now()
+     - All live boundaries derived from Kai “now” and canonical GENESIS_TS / PULSE_MS
 ────────────────────────────────────────────────────────────────── */
 
 import {
@@ -20,6 +23,7 @@ import {
 import { createPortal } from "react-dom";
 import html2canvas from "html2canvas";
 import JSZip from "jszip";
+import { GENESIS_TS, PULSE_MS, kairosEpochNow } from "../utils/kai_pulse";
 
 /* Moment row */
 import SigilMomentRow from "./SigilMomentRow";
@@ -115,9 +119,7 @@ interface KaiApiResponseLike {
 }
 
 /* ═════════════ canon constants (offline Eternal-Klok) ═════════════ */
-const GENESIS_TS = Date.UTC(2024, 4, 10, 6, 45, 41, 888); // 2024-05-10 06:45:41.888 UTC
-const KAI_PULSE_SEC = 3 + Math.sqrt(5); // φ-exact breath (≈ 5.236067977 s)
-const PULSE_MS = KAI_PULSE_SEC * 1000;
+const KAI_PULSE_SEC = PULSE_MS / 1000;
 
 /* Exact day pulses (float, for % display in moment row) */
 const DAY_PULSES = 17_491.270_421;
@@ -231,15 +233,70 @@ function roundTiesToEvenBigInt(x: number): bigint {
   return BigInt(s * (i % 2 === 0 ? i : i + 1));
 }
 
-/* Chronos → μpulses since Genesis (bridge uses φ-exact T) */
-function microPulsesSinceGenesis(date: Date): bigint {
-  const deltaSec = (date.getTime() - GENESIS_TS) / 1000;
-  const pulses = deltaSec / KAI_PULSE_SEC;
-  const micro = pulses * 1_000_000;
-  return roundTiesToEvenBigInt(micro);
+/* Kai epoch ms → μpulses since Genesis (bridge uses canonical PULSE_MS) */
+function microPulsesSinceGenesisMs(msUTC: number): bigint {
+  const deltaMs = msUTC - GENESIS_TS;
+  const pulses = deltaMs / PULSE_MS;
+  return roundTiesToEvenBigInt(pulses * 1_000_000);
 }
 
-/* ── SVG metadata helpers ─────────── */
+/* ────────────────────────────────────────────────────────────────
+   kairosEpochNow() normalization (FIX)
+   Some builds may accidentally route an epoch-microseconds value here.
+   We normalize to “μpulses since Genesis” for this module only.
+────────────────────────────────────────────────────────────────── */
+function normalizeKaiEpochRawToMicroPulses(raw: bigint): bigint {
+  // If raw is already μpulses since Genesis, pulses = raw/1e6 should be "reasonable".
+  const pulseGuess = floorDiv(raw, ONE_PULSE_MICRO);
+
+  // Genesis is 2024 — anything hundreds of millions+ pulses is almost certainly a unit mismatch
+  // (common culprit: epoch microseconds being misread as μpulses).
+  if (pulseGuess >= 0n && pulseGuess < 500_000_000n) return raw;
+
+  // Fallback: treat raw as epoch microseconds → convert to epoch ms → convert to μpulses since Genesis.
+  const epochMsBI = raw / 1000n;
+
+  const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+  const minSafe = BigInt(Number.MIN_SAFE_INTEGER);
+  if (epochMsBI > maxSafe || epochMsBI < minSafe) return raw;
+
+  const epochMs = Number(epochMsBI);
+  if (!Number.isFinite(epochMs)) return raw;
+
+  return microPulsesSinceGenesisMs(epochMs);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Kai “now” bridge (FIX)
+   kairosEpochNow() returns μpulses since Genesis (BigInt).
+   This file sometimes needs epoch-ms for Date/DOM/CSS, but it MUST be derived
+   ONLY from μpulses + canonical GENESIS_TS/PULSE_MS (no Date.now()).
+────────────────────────────────────────────────────────────────── */
+function epochMsFromMicroPulses(pμ: bigint): number {
+  const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+  const minSafe = BigInt(Number.MIN_SAFE_INTEGER);
+  if (pμ > maxSafe || pμ < minSafe) return GENESIS_TS;
+
+  const pμN = Number(pμ);
+  if (!Number.isFinite(pμN)) return GENESIS_TS;
+
+  const deltaPulses = pμN / 1_000_000; // pulses since Genesis (float)
+  const msUTC = GENESIS_TS + deltaPulses * PULSE_MS; // epoch ms (float)
+  return Number.isFinite(msUTC) ? msUTC : GENESIS_TS;
+}
+
+function readKaiNow(): { pμ: bigint; ms: number } {
+  const raw = kairosEpochNow();
+  const pμ = normalizeKaiEpochRawToMicroPulses(raw); // ✅ always μpulses since Genesis
+  return { pμ, ms: epochMsFromMicroPulses(pμ) };
+}
+
+/* Kai “now” in epoch ms (number) — derived ONLY from kairosEpochNow() */
+const epochNowMs = (): number => readKaiNow().ms;
+
+/* ────────────────────────────────────────────────────────────────
+   SVG metadata helpers
+────────────────────────────────────────────────────────────────── */
 const SVG_NS = "http://www.w3.org/2000/svg";
 function ensureXmlns(svg: SVGSVGElement) {
   if (!svg.getAttribute("xmlns")) svg.setAttribute("xmlns", SVG_NS);
@@ -355,8 +412,8 @@ type LocalKai = {
   _pμ_in_beat: bigint;
 };
 
-function computeLocalKai(date: Date): LocalKai {
-  const pμ_total = microPulsesSinceGenesis(date);
+function computeLocalKaiFromMs(msUTC: number): LocalKai {
+  const pμ_total = microPulsesSinceGenesisMs(msUTC);
 
   const pμ_in_day = imod(pμ_total, N_DAY_MICRO);
   const dayIndex = floorDiv(pμ_total, N_DAY_MICRO);
@@ -437,8 +494,8 @@ function computeLocalKai(date: Date): LocalKai {
   };
 }
 
-function buildLocalKairosLike(now: Date): KaiApiResponseLike {
-  const k = computeLocalKai(now);
+function buildLocalKairosLikeFromMs(msUTC: number): KaiApiResponseLike {
+  const k = computeLocalKaiFromMs(msUTC);
 
   const kairos_seal_day_month = `${k.chakraStepString} — D${k.dayOfMonth}/M${k.monthIndex1}`;
 
@@ -536,17 +593,15 @@ function buildLocalKairosLike(now: Date): KaiApiResponseLike {
 }
 
 /* ═════════════ aligned time helpers ═════════════ */
-const epochNow = (): number => {
-  if (typeof performance !== "undefined" && typeof performance.now === "function") {
-    return performance.timeOrigin + performance.now();
-  }
-  return Date.now();
-};
+const computeNextBoundaryFromMicro = (pμNow: bigint): number => {
+  const pulseIdx = floorDiv(pμNow, ONE_PULSE_MICRO); // current pulse (floor)
+  const nextPulseIdx = pulseIdx + 1n;
 
-const computeNextBoundary = (nowMs: number): number => {
-  const elapsed = nowMs - GENESIS_TS;
-  const periods = Math.ceil(elapsed / PULSE_MS);
-  return GENESIS_TS + periods * PULSE_MS;
+  // Safe for “human time” ranges; if it ever overflows, fall back to GENESIS_TS.
+  const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+  if (nextPulseIdx > maxSafe) return GENESIS_TS;
+
+  return GENESIS_TS + Number(nextPulseIdx) * PULSE_MS;
 };
 
 /* ═════════════ deterministic datetime-local parsing ═════════════ */
@@ -596,10 +651,11 @@ function useKaiPulseCountdown(active: boolean) {
       document.documentElement.style.setProperty("--kai-pulse", `${PULSE_MS}ms`);
     }
 
-    nextRef.current = computeNextBoundary(epochNow());
+    nextRef.current = computeNextBoundaryFromMicro(readKaiNow().pμ);
 
     const tick = () => {
-      const now = epochNow();
+      const snap = readKaiNow();
+      const now = snap.ms;
 
       if (now >= nextRef.current) {
         const missed = Math.floor((now - nextRef.current) / PULSE_MS) + 1;
@@ -621,7 +677,9 @@ function useKaiPulseCountdown(active: boolean) {
         }
         if (intRef.current === null) {
           intRef.current = window.setInterval(() => {
-            const now = epochNow();
+            const snap = readKaiNow();
+            const now = snap.ms;
+
             if (now >= nextRef.current) {
               const missed = Math.floor((now - nextRef.current) / PULSE_MS) + 1;
               nextRef.current += missed * PULSE_MS;
@@ -638,7 +696,7 @@ function useKaiPulseCountdown(active: boolean) {
           cancelAnimationFrame(rafRef.current);
           rafRef.current = null;
         }
-        nextRef.current = computeNextBoundary(epochNow());
+        nextRef.current = computeNextBoundaryFromMicro(readKaiNow().pμ);
         rafRef.current = requestAnimationFrame(tick);
       }
     };
@@ -715,156 +773,6 @@ const getArkColor = (label?: string): string => {
   return ARK_COLORS[key] ?? ARK_COLORS[normalized] ?? "#ffd600";
 };
 
-/* ═════════════ sticky MINT dock styles ═════════════ */
-const MintDockStyles = () => (
-  <style>{`
-    .sigil-modal { position: relative; isolation: isolate; }
-
-    .sigil-modal .close-btn {
-      z-index: 99999 !important;
-      pointer-events: auto;
-      touch-action: manipulation;
-    }
-    .sigil-modal .close-btn svg { pointer-events: none; }
-
-    .modal-bottom-spacer { height: clamp(96px, 14vh, 140px); }
-
-.mint-dock{
-  position: sticky;
-  bottom: max(10px, env(safe-area-inset-bottom));
-  z-index: 6;
-
-  /* 🔒 NOT a bar */
-  display: grid;          /* centers child without creating a row bar */
-  place-items: center;
-  width: fit-content;     /* shrink-wrap to the button */
-  max-width: 100%;
-  margin: 0 auto;         /* center the shrink-wrapped dock */
-  padding: 0;             /* remove bar padding */
-  background: transparent;/* no bar surface */
-  border: 0;
-  box-shadow: none;
-
-  contain: layout paint style;
-  -webkit-transform: translateZ(0);
-          transform: translateZ(0);
-}
-
-/* hard stop: prevent child from stretching wide */
-.mint-dock > *{
-  width: auto;
-  max-width: 100%;
-  flex: 0 0 auto;
-}
-
-/* if your button is an <a> or <button> and inherits block styles elsewhere */
-.mint-dock button,
-.mint-dock a{
-  display: inline-flex;
-}
-
-
-    .mint-btn {
-      width: min(520px, calc(100% - 2px));
-      display: grid;
-      grid-template-columns: 54px 1fr;
-      gap: 12px;
-      align-items: center;
-
-      border: 0;
-      cursor: pointer;
-      color: inherit;
-      padding: 12px 14px;
-      border-radius: 18px;
-
-      background:
-        radial-gradient(900px 220px at 30% 0%, rgba(255,230,150,.18), rgba(0,0,0,0) 60%),
-        radial-gradient(900px 280px at 80% 10%, rgba(120,220,255,.16), rgba(0,0,0,0) 55%),
-        linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.06));
-      backdrop-filter: blur(10px) saturate(140%);
-      -webkit-backdrop-filter: blur(10px) saturate(140%);
-
-      box-shadow:
-        0 10px 34px rgba(0,0,0,.45),
-        inset 0 0 0 1px rgba(255,255,255,.22),
-        0 0 44px rgba(255, 215, 120, .12);
-
-      transition: transform .18s ease, box-shadow .18s ease, filter .18s ease, opacity .18s ease;
-      will-change: transform;
-      touch-action: manipulation;
-    }
-
-    .mint-btn::before {
-      content: "";
-      position: absolute;
-      inset: -1px;
-      border-radius: 19px;
-      background:
-        linear-gradient(90deg,
-          rgba(255,215,140,.0),
-          rgba(255,215,140,.55),
-          rgba(120,220,255,.35),
-          rgba(155, 91, 255, .35),
-          rgba(255,215,140,.0)
-        );
-      filter: blur(10px);
-      opacity: .55;
-      pointer-events: none;
-    }
-
-    .mint-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 44px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.28), 0 0 60px rgba(255, 215, 120, .16); }
-    .mint-btn:active { transform: translateY(0px) scale(.99); }
-
-    .mint-btn__icon {
-      width: 54px;
-      height: 54px;
-      border-radius: 999px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-
-      background:
-        radial-gradient(120% 120% at 50% 0%, rgba(255,255,255,.16), rgba(255,255,255,.06)),
-        linear-gradient(180deg, rgba(12, 20, 48, .62), rgba(3, 6, 16, .72));
-      box-shadow:
-        inset 0 0 0 1px rgba(255,255,255,.22),
-        0 10px 26px rgba(0,0,0,.35);
-    }
-
-    .mint-btn__icon img,
-    .mint-btn__icon svg {
-      width: 56%;
-      height: 56%;
-      display: block;
-      user-select: none;
-      -webkit-user-drag: none;
-    }
-
-    .mint-btn__text { text-align: left; line-height: 1.1; }
-    .mint-btn__title {
-      font-weight: 800;
-      letter-spacing: .06em;
-      text-transform: uppercase;
-      font-size: 13px;
-      opacity: .98;
-    }
-    .mint-btn__sub {
-      margin-top: 4px;
-      font-size: 12px;
-      opacity: .78;
-    }
-
-    @media (pointer: coarse) {
-      .mint-btn { padding: 14px 14px; }
-      .mint-btn__icon { width: 58px; height: 58px; }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .mint-btn { transition: none; }
-      .mint-btn:hover { transform: none; }
-    }
-  `}</style>
-);
 
 /* ═════════════ init state builder (PURE: no “now” during render) ═════════════ */
 type InitState = {
@@ -877,12 +785,12 @@ type InitState = {
 };
 
 function makeInitState(initialPulse?: number): InitState {
-  const dt =
+  const ms =
     typeof initialPulse === "number" && initialPulse > 0
-      ? new Date(GENESIS_TS + initialPulse * PULSE_MS)
-      : new Date(GENESIS_TS);
+      ? GENESIS_TS + initialPulse * PULSE_MS
+      : GENESIS_TS;
 
-  const local = computeLocalKai(dt);
+  const local = computeLocalKaiFromMs(ms);
 
   return {
     pulse: local.pulse,
@@ -890,7 +798,7 @@ function makeInitState(initialPulse?: number): InitState {
     stepPct: local.stepPct,
     stepIdx: local.step,
     chakraDay: local.chakraDay,
-    kairos: buildLocalKairosLike(dt),
+    kairos: buildLocalKairosLikeFromMs(ms),
   };
 }
 
@@ -1013,17 +921,17 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
     root.style.setProperty("--pulse-offset", `-${Math.round(lag)}ms`);
   }, []);
 
-  const applyKaiFromDate = useCallback(
-    (dt: Date, nowMsForCss?: number) => {
-      const local = computeLocalKai(dt);
+  const applyKaiFromMs = useCallback(
+    (msUTC: number, nowMsForCss?: number) => {
+      const local = computeLocalKaiFromMs(msUTC);
       setPulse(local.pulse);
       setBeat(local.beat);
       setStepPct(local.stepPct);
       setStepIdx(local.step);
       setChakraDay(local.chakraDay);
-      setKairos(buildLocalKairosLike(dt));
+      setKairos(buildLocalKairosLikeFromMs(msUTC));
 
-      const cssNow = typeof nowMsForCss === "number" ? nowMsForCss : dt.getTime();
+      const cssNow = typeof nowMsForCss === "number" ? nowMsForCss : msUTC;
       syncGlobalPulseVars(cssNow);
       syncCloseBtn(cssNow);
     },
@@ -1041,11 +949,13 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
   const scheduleAlignedTick = useCallback(() => {
     clearAlignedTimer();
 
-    const startNow = epochNow();
-    targetBoundaryRef.current = computeNextBoundary(startNow);
+    const snap0 = readKaiNow();
+    const startNowMs = snap0.ms;
+    targetBoundaryRef.current = computeNextBoundaryFromMicro(snap0.pμ);
 
     const fire = () => {
-      const nowMs = epochNow();
+      const snap = readKaiNow();
+      const nowMs = snap.ms;
       const nextBoundary = targetBoundaryRef.current;
 
       if (nowMs < nextBoundary) {
@@ -1056,7 +966,8 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
       const missed = Math.floor((nowMs - nextBoundary) / PULSE_MS) + 1;
       const lastBoundary = nextBoundary + (missed - 1) * PULSE_MS;
 
-      applyKaiFromDate(new Date(lastBoundary), lastBoundary);
+      // ✅ tick ONLY on boundary timestamps
+      applyKaiFromMs(lastBoundary, lastBoundary);
 
       targetBoundaryRef.current = nextBoundary + missed * PULSE_MS;
 
@@ -1065,13 +976,19 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
     };
 
     timeoutRef.current = window.setTimeout(() => {
-      const nowMs = epochNow();
-      applyKaiFromDate(new Date(nowMs), nowMs);
+      // First paint sync (not a boundary tick)
+      applyKaiFromMs(startNowMs, startNowMs);
+
+      const snap = readKaiNow();
+      const nowMs = snap.ms;
+
+      // Re-assert boundary from current μpulse (hard coherence after first paint)
+      targetBoundaryRef.current = computeNextBoundaryFromMicro(snap.pμ);
 
       const delay = Math.max(0, targetBoundaryRef.current - nowMs);
       timeoutRef.current = window.setTimeout(fire, delay);
     }, 0);
-  }, [applyKaiFromDate, clearAlignedTimer]);
+  }, [applyKaiFromMs, clearAlignedTimer]);
 
   /* LIVE mode start/stop (boundaries) */
   useEffect(() => {
@@ -1098,9 +1015,9 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
       const base = parseDateTimeLocal(val);
       if (!base) return;
       const dt = addBreathOffset(base, bIdx);
-      applyKaiFromDate(dt, dt.getTime());
+      applyKaiFromMs(dt.getTime(), dt.getTime());
     },
-    [applyKaiFromDate]
+    [applyKaiFromMs]
   );
 
   const onDateChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -1133,13 +1050,16 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
     }
     setDateISO("");
     setBreathIdx(1);
-    const now = epochNow();
-    applyKaiFromDate(new Date(now), now);
+
+    const now = epochNowMs();
+    applyKaiFromMs(now, now);
   };
 
   const secsLeft = useKaiPulseCountdown(!dateISO);
 
-  const copy = (txt: string) => fireAndForget(copyText(txt));
+  const copy = (txt: string) => {
+    fireAndForget(copyText(txt));
+  };
   const copyJSON = (obj: unknown) => copy(JSON.stringify(obj, null, 2));
 
   const getSVGElement = (): SVGSVGElement | null =>
@@ -1203,7 +1123,8 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
       chakraDay,
       stepsPerBeat,
       canonicalHash,
-      exportedAt: new Date().toISOString(),
+      // ✅ exportedAt derived from Kai epoch “now”, not Date.now()
+      exportedAt: new Date(epochNowMs()).toISOString(),
       expiresAtPulse: pulse + 11,
     };
   };
@@ -1281,7 +1202,6 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
 
   return createPortal(
     <>
-      <MintDockStyles />
 
       <div
         ref={overlayRef}
@@ -1363,8 +1283,8 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
               hashMode="deterministic"
               origin=""
               onReady={(payload: { hash?: string; pulse?: number }) => {
-                const hash = payload.hash ? String(payload.hash).toLowerCase() : "";
-                if (hash) setLastHash(hash);
+                const h = payload.hash ? String(payload.hash).toLowerCase() : "";
+                if (h) setLastHash(h);
 
                 if (typeof payload.pulse === "number" && payload.pulse !== pulse) {
                   setPulse(payload.pulse);
@@ -1472,6 +1392,13 @@ const SigilModal: FC<Props> = ({ initialPulse = 0, onClose }) => {
                 ) : (
                   <MintIcon />
                 )}
+              </span>
+
+              <span className="mint-btn__text">
+                <span className="mint-btn__title">MINT MOMENT</span>
+                <span className="mint-btn__sub">
+                  Pulse {pulse.toLocaleString()} • {beatStepDisp}
+                </span>
               </span>
             </button>
           </div>

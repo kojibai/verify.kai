@@ -3,29 +3,30 @@
 
 /**
  * EternalKlock — FULL FILE (SunCalc removed; Sovereign Solar engine/hook)
- * v10.2.1 — INSTANT OPEN (no fade/animated entrance) + NO LOADING FLASH
- * 100% OFFLINE: computes the exact API-equivalent payload locally (no fetch), identical display.
+ * v10.3.0 — HARD LOCK (μpulse boundary scheduler + SigilModal parity)
  *
- * Refactor goals:
- * - ✅ Same look + same UI structure + same classes
- * - ✅ No TDZ / no hook-order traps
- * - ✅ No `any`
- * - ✅ Correct effect cleanup (no leaked listeners)
- * - ✅ Pulse-boundary scheduler + Worker fallback without double-ticking spam
- * - ✅ Solar override + cross-tab sync stays instant
+ * ✅ Determinism upgrades (this file):
+ * - μpulse truth source: normalize(kairosEpochNow()) → μpulses since Genesis
+ * - NO ms→μpulse recompute loops: buildOfflinePayload consumes μpulse override
+ * - Pulse boundary scheduler is μpulse-space (not ms-space)
+ * - Worker NEVER becomes primary scheduler; it is a heartbeat only
+ * - Tick gate is pulse-index aware (prevents “one pulse behind” + spam)
  *
- * Week Kalendar fixes (this file):
- * - ✅ Manual open ALWAYS works (no session-dismiss gate on button tap)
- * - ✅ Escape/backdrop closes TOPMOST first (Week Kalendar → then Details)
- * - ✅ Removed doc-level “mousedown outside” closer (it was nuking WeekKalendar portals)
- * - ✅ WeekKalendar mounts with a container inside the overlay (better stacking + click safety)
+ * Preserved:
+ * - Same UI/structure/classes
+ * - No `any`
+ * - Correct effect cleanup
+ * - Solar override + cross-tab sync stays instant
+ * - BigInt(ms) → number(ms) bridge ONLY at UI edges (Date/timers)
  *
- * Instant-open change (this file):
- * - ✅ No "Loading…" flash: initial klock state is computed synchronously (baseline offline payload)
- * - ✅ No styled opening: overlay/card explicitly disable animation + transition via inline style
+ * SigilModal parity (this file):
+ * - Portal root preference
+ * - Backdrop pointerdown gate
+ * - Focus restore + basic focus trap
+ * - html/body modal-open classes
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "./EternalKlock.css";
 
@@ -33,14 +34,140 @@ import KaiKlock from "./KaiKlock";
 import SigilGlyphButton from "./SigilGlyphButton";
 import WeekKalendarModal from "./WeekKalendarModal";
 import SolarAnchoredDial from "./SolarAnchoredDial";
+import { GENESIS_TS, PULSE_MS, kairosEpochNow } from "../utils/kai_pulse";
 
 // ⬇️ Sovereign Solar imports (offline, no geolocation / suncalc)
 import useSovereignSolarClock from "../utils/useSovereignSolarClock";
 import { getSolarAlignedCounters, getSolarWindow } from "../SovereignSolar";
 
 /* ────────────────────────────────────────────────
+   μpulse canonical layer (SigilModal parity)
+   ──────────────────────────────────────────────── */
+
+const ONE_PULSE_MICRO = 1_000_000n;
+
+// closure: 17,491.270421 pulses/day (exact, millionths) => integer μpulses/day
+const UPULSES_PER_DAY_BI = 17_491_270_421n;
+
+/* ties-to-even rounding Number→BigInt (canonical bridge) */
+function roundTiesToEvenBigInt(x: number): bigint {
+  if (!Number.isFinite(x)) return 0n;
+  const s = x < 0 ? -1 : 1;
+  const ax = Math.abs(x);
+  const i = Math.trunc(ax);
+  const frac = ax - i;
+  if (frac < 0.5) return BigInt(s * i);
+  if (frac > 0.5) return BigInt(s * (i + 1));
+  return BigInt(s * (i % 2 === 0 ? i : i + 1));
+}
+
+/* Kai epoch ms → μpulses since Genesis (bridge uses canonical PULSE_MS + GENESIS_TS) */
+function microPulsesSinceGenesisMs(msUTC: number): bigint {
+  const deltaMs = msUTC - GENESIS_TS;
+  const pulses = deltaMs / PULSE_MS;
+  return roundTiesToEvenBigInt(pulses * 1_000_000);
+}
+
+/* exact helpers for BigInt math */
+const imod = (n: bigint, m: bigint) => ((n % m) + m) % m;
+function floorDiv(n: bigint, d: bigint): bigint {
+  const q = n / d;
+  const r = n % d;
+  return r !== 0n && (r > 0n) !== (d > 0n) ? q - 1n : q;
+}
+
+/**
+ * Some builds route:
+ *  - epoch microseconds  (~1e15)
+ *  - epoch milliseconds (~1e12)
+ *  - μpulses since Genesis (~1e12–1e13)
+ * Normalize to μpulses since Genesis.
+ */
+function normalizeKaiEpochRawToMicroPulses(raw: bigint): bigint {
+  const abs = raw < 0n ? -raw : raw;
+
+  // Heuristic: epoch microseconds
+  if (abs > 100_000_000_000_000n) {
+    const ms = raw / 1000n;
+    return microPulsesSinceGenesisMs(Number(ms));
+  }
+
+  // Heuristic: epoch milliseconds (close to GENESIS_TS within 10 years)
+  if (abs > 100_000_000_000n && abs < 20_000_000_000_000n) {
+    const ms = Number(raw);
+    const TEN_YEARS_MS = 10 * 366 * 24 * 60 * 60 * 1000;
+    if (Math.abs(ms - GENESIS_TS) < TEN_YEARS_MS) {
+      return microPulsesSinceGenesisMs(ms);
+    }
+  }
+
+  // Otherwise: already μpulses since Genesis
+  return raw;
+}
+
+function msFromMicroPulsesSinceGenesis(mu: bigint): number {
+  // μpulses → pulses → ms (safe in current era: pulses ~ 1e7)
+  const pulses = Number(mu) / 1_000_000;
+  return GENESIS_TS + pulses * PULSE_MS;
+}
+
+/** Canonical “now” in μpulse space (truth source) */
+const kairosNowMu = (): bigint => normalizeKaiEpochRawToMicroPulses(kairosEpochNow());
+
+/** Canonical “now” at UI edge: number(ms) */
+const kairosNowMs = (): number => msFromMicroPulsesSinceGenesis(kairosNowMu());
+
+/* ────────────────────────────────────────────────
+   EXACT partition helpers (no rounding, O(1))
+   Split total into N segments: q=floor(total/N), r=total%N segments get +1.
+   Deterministic: first r segments are (q+1), remaining are q.
+   ──────────────────────────────────────────────── */
+
+type PartitionResult = {
+  index: bigint; // 0..parts-1
+  offset: bigint; // 0..partLen-1
+  partLen: bigint; // q or q+1
+};
+
+function partitionIndexAndOffset(pos: bigint, total: bigint, parts: bigint): PartitionResult {
+  const p = parts <= 0n ? 1n : parts;
+  const L = total < 0n ? -total : total;
+
+  const q = L / p;
+  const r = L % p;
+
+  // Degenerate (should never happen with this model)
+  if (q === 0n) {
+    const idx = pos % p;
+    return { index: idx, offset: 0n, partLen: 1n };
+  }
+
+  const threshold = (q + 1n) * r; // μpulses covered by first r segments
+
+  const x = imod(pos, L);
+
+  if (r === 0n) {
+    const idx = x / q;
+    const start = idx * q;
+    return { index: idx, offset: x - start, partLen: q };
+  }
+
+  if (x < threshold) {
+    const idx = x / (q + 1n);
+    const start = idx * (q + 1n);
+    return { index: idx, offset: x - start, partLen: q + 1n };
+  }
+
+  const y = x - threshold;
+  const idx = r + y / q;
+  const start = threshold + (idx - r) * q;
+  return { index: idx, offset: x - start, partLen: q };
+}
+
+/* ────────────────────────────────────────────────
    Types (no `any`)
    ──────────────────────────────────────────────── */
+
 type SolarAlignedTime = {
   solarAlignedDay: number; // 1-indexed
   solarAlignedMonth: number; // 1–8  (42-day months)
@@ -172,26 +299,18 @@ const hasWakeLock = (n: Navigator): n is Navigator & { wakeLock: WakeLockLike } 
 /* ────────────────────────────────────────────────
    Constants (mirror engine/API)
    ──────────────────────────────────────────────── */
+
 const ARC_BEAT_PULSES = 6;
 const MICRO_CYCLE_PULSES = 60;
 const CHAKRA_LOOP_PULSES = 360;
 
-const HARMONIC_DAY_PULSES = 17_491.270421; // exact
+const HARMONIC_DAY_PULSES = 17_491.270421; // exact (millionths)
 const HARMONIC_YEAR_DAYS = 336;
-const HARMONIC_YEAR_PULSES = HARMONIC_DAY_PULSES * HARMONIC_YEAR_DAYS;
 
 const HARMONIC_MONTH_DAYS = 42;
-const HARMONIC_MONTH_PULSES = HARMONIC_MONTH_DAYS * HARMONIC_DAY_PULSES;
-
-const KAI_PULSE_DURATION = 3 + Math.sqrt(5); // 5.236067977...
-const UPULSES_PER_PULSE = 1_000_000;
 
 // Genesis anchors (UTC)
-const ETERNAL_GENESIS_PULSE = Date.UTC(2024, 4, 10, 6, 45, 41, 888);
 const GENESIS_SUNRISE = Date.UTC(2024, 4, 11, 4, 13, 26, 0);
-
-// Exact μpulses per harmonic day
-const UPULSES_PER_DAY = 17_491_270_421;
 
 // Harmonic day duration in ms (≈ 91584.291s)
 const MS_PER_DAY = 91_584_291;
@@ -285,15 +404,13 @@ const KAI_TURAH_PHRASES = [
   "Sha Vehl Dorrah",
 ] as const;
 
-// Steps/Beats grid (exact integers)
-const CHAKRA_BEATS_PER_DAY = 36;
-const PULSES_PER_STEP = 11;
 const STEPS_PER_BEAT = 44;
-const PULSES_PER_BEAT = HARMONIC_DAY_PULSES / CHAKRA_BEATS_PER_DAY;
+const CHAKRA_BEATS_PER_DAY = 36;
 
 /* ────────────────────────────────────────────────
    Phi Spiral Progress Computation
    ──────────────────────────────────────────────── */
+
 const PHI = (1 + Math.sqrt(5)) / 2;
 function getSpiralLevelData(kaiPulseEternal: number) {
   const safe = kaiPulseEternal > 0 ? kaiPulseEternal : 1;
@@ -315,6 +432,7 @@ function getSpiralLevelData(kaiPulseEternal: number) {
 /* ────────────────────────────────────────────────
    Utility: computeChakraResonance
    ──────────────────────────────────────────────── */
+
 function computeChakraResonance(chakraArc: string): {
   chakraZone: string;
   frequencies: number[];
@@ -394,22 +512,17 @@ const CHAKRA_ARC_DESCRIPTIONS: Record<string, string> = {
 };
 
 /* ────────────────────────────────────────────────
-   OFFLINE Kai-Klock math (mirrors backend API fields)
+   OFFLINE Kai-Klock math (μpulse exact, mirrors API fields)
    ──────────────────────────────────────────────── */
-function muSinceGenesis(atMs: number): number {
-  const sec = (atMs - ETERNAL_GENESIS_PULSE) / 1000;
-  const pulses = sec / KAI_PULSE_DURATION;
-  return Math.floor(pulses * UPULSES_PER_PULSE);
-}
 
-function solarWindowMu(nowMs: number) {
-  const muNow = muSinceGenesis(nowMs);
-  const muSunrise0 = muSinceGenesis(GENESIS_SUNRISE);
-  const muSinceSunrise = muNow - muSunrise0;
-  const solarDayIndex = Math.floor(muSinceSunrise / UPULSES_PER_DAY);
-  const muLast = muSunrise0 + solarDayIndex * UPULSES_PER_DAY;
-  const muNext = muLast + UPULSES_PER_DAY;
-  return { muLast, muNext, muNow, solarDayIndex };
+const GENESIS_SUNRISE_MICRO = microPulsesSinceGenesisMs(GENESIS_SUNRISE);
+
+function solarWindowMicro(muNow: bigint) {
+  const muSinceSunrise = muNow - GENESIS_SUNRISE_MICRO;
+  const solarDayIndex = Number(floorDiv(muSinceSunrise, UPULSES_PER_DAY_BI));
+  const muLast = GENESIS_SUNRISE_MICRO + BigInt(solarDayIndex) * UPULSES_PER_DAY_BI;
+  const muNext = muLast + UPULSES_PER_DAY_BI;
+  return { muLast, muNext, solarDayIndex };
 }
 
 function ordinalSuffix(n: number): string {
@@ -423,6 +536,7 @@ const mod6 = (v: number) => ((v % 6) + 6) % 6;
 /* ────────────────────────────────────────────────
    Override helpers (UTC, deterministic)
    ──────────────────────────────────────────────── */
+
 function windowFromOverride(now: Date, sec: number) {
   const nowMs = now.getTime();
   const midUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0);
@@ -468,56 +582,57 @@ function countersFromOverride(now: Date, sec: number, dowOffset: number): SolarA
 }
 
 /* ────────────────────────────────────────────────
-   Build Offline Payload (baseline, then solar-overlay applied)
+   Build Offline Payload (μpulse truth, no ms→μ recompute)
    ──────────────────────────────────────────────── */
-function buildOfflinePayload(now: Date = new Date()): KlockData {
-  const nowMs = now.getTime();
-  const { muLast, muNow, solarDayIndex } = solarWindowMu(nowMs);
 
-  const muSpan = UPULSES_PER_DAY;
+function buildOfflinePayload(now: Date, muNow: bigint): KlockData {
+  const { solarDayIndex, muLast } = solarWindowMicro(muNow);
+
   const muIntoSolarDay = muNow - muLast;
 
-  const muDaysSinceGenesis = Math.floor(muNow / muSpan);
-  const muIntoEternalDay = muNow - muDaysSinceGenesis * muSpan;
+  const eternalDayIndex = floorDiv(muNow, UPULSES_PER_DAY_BI);
+  const muIntoEternalDay = muNow - eternalDayIndex * UPULSES_PER_DAY_BI;
 
-  const kaiPulseEternal = Math.floor(muNow / UPULSES_PER_PULSE);
-  const kaiPulseToday = Math.floor(muIntoSolarDay / UPULSES_PER_PULSE);
-  const eternalKaiPulseToday = Math.floor(muIntoEternalDay / UPULSES_PER_PULSE);
+  // Pulse count is derived from μpulses (SigilModal parity)
+  const kaiPulseEternal = Number(muNow / ONE_PULSE_MICRO);
 
-  // Beats
-  const beatSize = HARMONIC_DAY_PULSES / CHAKRA_BEATS_PER_DAY;
+  // Baseline solar “today” (μpulse anchored at GENESIS_SUNRISE; refreshKlock may override to real sunrise)
+  const kaiPulseToday = Number(muIntoSolarDay) / 1_000_000;
 
-  const solarBeatIdx = Math.floor(kaiPulseToday / beatSize);
-  const solarPulseInBeat = kaiPulseToday - solarBeatIdx * beatSize;
+  // Eternal-day beat/step via exact integer partition (no rounding)
+  const beatPart = partitionIndexAndOffset(muIntoEternalDay, UPULSES_PER_DAY_BI, BigInt(CHAKRA_BEATS_PER_DAY));
+  const eternalBeatIdx = Number(beatPart.index);
+  const muPosInBeat = beatPart.offset;
+  const muBeatLen = beatPart.partLen;
 
-  const eternalBeatIdx = Math.floor(eternalKaiPulseToday / beatSize);
-  const eternalPulseInBeat = eternalKaiPulseToday - eternalBeatIdx * beatSize;
+  const stepPart = partitionIndexAndOffset(muPosInBeat, muBeatLen, BigInt(STEPS_PER_BEAT));
+  const stepIndex = Number(stepPart.index);
+  const muPosInStep = stepPart.offset;
+  const muStepLen = stepPart.partLen;
 
-  // μpulse-exact step math (Eternal-day grid)
-  const muPerBeat = Math.round(beatSize * UPULSES_PER_PULSE);
-  const muPerStep = PULSES_PER_STEP * UPULSES_PER_PULSE;
-
-  const muPosInDay = muIntoEternalDay % Math.round(HARMONIC_DAY_PULSES * UPULSES_PER_PULSE);
-  const muPosInBeat = muPosInDay % muPerBeat;
-
-  const stepIndex = Math.floor(muPosInBeat / muPerStep);
-  const muPosInStep = muPosInBeat % muPerStep;
-
-  const percentToNext = (muPosInBeat / muPerBeat) * 100;
-  const percentIntoStep = (muPosInStep / muPerStep) * 100;
+  const percentToNext = (Number(muPosInBeat) / Math.max(1, Number(muBeatLen))) * 100;
+  const percentIntoStep = (Number(muPosInStep) / Math.max(1, Number(muStepLen))) * 100;
 
   const chakraStepString = `${eternalBeatIdx}:${String(stepIndex).padStart(2, "0")}`;
 
-  const solarStepIndex = Math.floor(solarPulseInBeat / PULSES_PER_STEP);
-  const solarStepProgress = solarPulseInBeat - solarStepIndex * PULSES_PER_STEP;
-  const solarPercentIntoStep = (solarStepProgress / PULSES_PER_STEP) * 100;
+  // Solar-day beat/step baseline from μpulse into solar day (exact, anchored to GENESIS_SUNRISE)
+  const solarBeatPart = partitionIndexAndOffset(muIntoSolarDay, UPULSES_PER_DAY_BI, BigInt(CHAKRA_BEATS_PER_DAY));
+  const solarBeatIdx = Number(solarBeatPart.index);
+  const solarMuPosInBeat = solarBeatPart.offset;
+  const solarMuBeatLen = solarBeatPart.partLen;
+
+  const solarStepPart = partitionIndexAndOffset(solarMuPosInBeat, solarMuBeatLen, BigInt(STEPS_PER_BEAT));
+  const solarStepIndex = Number(solarStepPart.index);
+  const solarMuPosInStep = solarStepPart.offset;
+  const solarMuStepLen = solarStepPart.partLen;
+
+  const solarPercentIntoStep = (Number(solarMuPosInStep) / Math.max(1, Number(solarMuStepLen))) * 100;
   const solarChakraStepString = `${solarBeatIdx}:${String(solarStepIndex).padStart(2, "0")}`;
 
-  // Harmonic day/month/year
-  const harmonicDayCount = Math.floor(kaiPulseEternal / HARMONIC_DAY_PULSES);
-  const harmonicYearIdx = Math.floor(kaiPulseEternal / (HARMONIC_MONTH_PULSES * 8));
-  const harmonicMonthRaw = Math.floor(kaiPulseEternal / HARMONIC_MONTH_PULSES);
+  // Harmonic day/month/year (integer day index from μpulse, exact)
+  const harmonicDayCount = Number(eternalDayIndex);
 
+  const harmonicYearIdx = Math.floor(harmonicDayCount / HARMONIC_YEAR_DAYS);
   const eternalYearName =
     harmonicYearIdx === 0
       ? "Year of Eternal Restoration"
@@ -527,18 +642,16 @@ function buildOfflinePayload(now: Date = new Date()): KlockData {
 
   const kaiTurahPhrase = KAI_TURAH_PHRASES[harmonicYearIdx % KAI_TURAH_PHRASES.length];
 
-  const eternalMonthIndex1 = (harmonicMonthRaw % 8) + 1;
-  const eternalMonth = ETERNAL_MONTH_NAMES[eternalMonthIndex1 - 1];
+  const monthIndex0 = Math.floor((harmonicDayCount % HARMONIC_YEAR_DAYS) / HARMONIC_MONTH_DAYS); // 0..7
+  const eternalMonthIndex1 = monthIndex0 + 1;
+  const eternalMonth = ETERNAL_MONTH_NAMES[monthIndex0];
 
   const harmonicDay = HARMONIC_DAYS[harmonicDayCount % HARMONIC_DAYS.length];
 
-  // Arks (divide day into 6 arcs)
-  const arcDiv = HARMONIC_DAY_PULSES / 6;
-  const arcIdx = Math.min(5, Math.floor(kaiPulseToday / arcDiv));
-  const chakraArcKey = CHAKRA_ARCS[arcIdx];
-
-  const eternalArcIdx = Math.min(5, Math.floor(eternalKaiPulseToday / arcDiv));
-  const eternalChakraArcKey = CHAKRA_ARCS[eternalArcIdx];
+  // Arks (solar arc from baseline solar beat index; overridden later by refreshKlock)
+  const arcIndex = Math.floor(((((solarBeatIdx % CHAKRA_BEATS_PER_DAY) + CHAKRA_BEATS_PER_DAY) % CHAKRA_BEATS_PER_DAY) / 6) % 6);
+  const chakraArcKey = CHAKRA_ARCS[Math.min(5, Math.max(0, arcIndex))] ?? "Ignite";
+  const chakraArc = CHAKRA_ARC_NAME_MAP[chakraArcKey];
 
   // Solar calendar pieces (naive; corrected later by solar-aligned attachment)
   const solarDayOfMonth = (solarDayIndex % HARMONIC_MONTH_DAYS) + 1;
@@ -552,18 +665,21 @@ function buildOfflinePayload(now: Date = new Date()): KlockData {
   // Phi spiral level
   const { spiralLevel } = getSpiralLevelData(kaiPulseEternal);
 
-  // Cycle positions
+  // Cycles
   const arcPos = kaiPulseEternal % ARC_BEAT_PULSES;
   const microPos = kaiPulseEternal % MICRO_CYCLE_PULSES;
   const chakraPos = kaiPulseEternal % CHAKRA_LOOP_PULSES;
-  const dayPos = eternalKaiPulseToday;
 
-  // Month progress
-  const pulsesIntoMonth = kaiPulseEternal % HARMONIC_MONTH_PULSES;
-  const daysElapsed = Math.floor(pulsesIntoMonth / HARMONIC_DAY_PULSES);
-  const hasPartialDay = pulsesIntoMonth % HARMONIC_DAY_PULSES > 0;
-  const daysRemaining = Math.max(0, HARMONIC_MONTH_DAYS - daysElapsed - (hasPartialDay ? 1 : 0));
-  const monthPercent = (pulsesIntoMonth / HARMONIC_MONTH_PULSES) * 100;
+  const dayPercent = (Number(muIntoEternalDay) / Number(UPULSES_PER_DAY_BI)) * 100;
+  const dayPos = Number(muIntoEternalDay) / 1_000_000;
+
+  // Month progress (exact in μpulse)
+  const MU_PER_MONTH = UPULSES_PER_DAY_BI * BigInt(HARMONIC_MONTH_DAYS);
+  const muIntoMonth = imod(muNow, MU_PER_MONTH);
+
+  const daysElapsed = Number(floorDiv(muIntoMonth, UPULSES_PER_DAY_BI));
+  const daysRemaining = Math.max(0, HARMONIC_MONTH_DAYS - daysElapsed - 1);
+  const monthPercent = (Number(muIntoMonth) / Number(MU_PER_MONTH)) * 100;
 
   const weekIdxRaw = Math.floor(daysElapsed / 6);
   const weekIdx = weekIdxRaw + 1;
@@ -571,27 +687,36 @@ function buildOfflinePayload(now: Date = new Date()): KlockData {
   const eternalWeekDescription = ETERNAL_WEEK_DESCRIPTIONS[weekName];
   const dayOfMonth = daysElapsed + 1;
 
-  // Seals + descriptions
+  // Beat counts for display
+  const beatPulseCount = Number(muBeatLen) / 1_000_000;
+  const pulsesIntoBeat = Number(muPosInBeat) / 1_000_000;
+
+  // Seal + description
   const seal = `${chakraStepString} ${percentIntoStep.toFixed(6)}% • D${dayOfMonth}/M${eternalMonthIndex1}`;
   const kairos = `Kairos: ${chakraStepString}`;
 
   const timestamp =
     `↳${kairos}` +
     `🕊️ ${harmonicDay}(D${(weekIdxRaw % 6) + 1}/6) • ${eternalMonth}(M${eternalMonthIndex1}/8) • ` +
-    `${CHAKRA_ARC_NAME_MAP[eternalChakraArcKey]} Ark(${eternalArcIdx + 1}/6)\n • ` +
+    `${chakraArc} Ark(${Math.floor(eternalBeatIdx / 6) + 1}/6)\n • ` +
     `Day:${dayOfMonth}/42 • Week:(${weekIdx}/7)\n` +
-    ` | Kai-Pulse (Today): ${eternalKaiPulseToday}\n`;
+    ` | Kai-Pulse (Today): ${dayPos.toFixed(6)}\n`;
 
   const harmonicTimestampDescription =
     `Today is ${harmonicDay}, ${HARMONIC_DAY_DESCRIPTIONS[harmonicDay]} ` +
     `It is the ${dayOfMonth}${ordinalSuffix(dayOfMonth)} Day of ${eternalMonth}, ` +
     `${ETERNAL_MONTH_DESCRIPTIONS[eternalMonth]} We are in Week ${weekIdx}, ` +
     `${weekName}. ${eternalWeekDescription} The Eternal Spiral Beat is ${eternalBeatIdx} (` +
-    `${CHAKRA_ARC_NAME_MAP[eternalChakraArcKey]} ark) and we are ${percentToNext.toFixed(6)}% through it. This korresponds ` +
+    `${chakraArc} ark) and we are ${percentToNext.toFixed(6)}% through it. This korresponds ` +
     `to Step ${stepIndex} of ${STEPS_PER_BEAT} (~${percentIntoStep.toFixed(6)}% into the step). ` +
     `This is the ${eternalYearName.toLowerCase()}, resonating at Phi Spiral Level ${spiralLevel}.`;
 
-  const resonance = computeChakraResonance(CHAKRA_ARC_NAME_MAP[chakraArcKey]);
+  const resonance = computeChakraResonance(chakraArc);
+
+  // Year completions (μpulse exact)
+  const MU_PER_YEAR = UPULSES_PER_DAY_BI * BigInt(HARMONIC_YEAR_DAYS);
+  const muIntoYear = imod(muNow, MU_PER_YEAR);
+  const harmonicYearCompletions = Number(muNow) / Number(MU_PER_YEAR);
 
   return {
     timestamp,
@@ -621,7 +746,7 @@ function buildOfflinePayload(now: Date = new Date()): KlockData {
       arcBeat: { pulseInCycle: arcPos, cycleLength: ARC_BEAT_PULSES, percent: (arcPos / ARC_BEAT_PULSES) * 100 },
       microCycle: { pulseInCycle: microPos, cycleLength: MICRO_CYCLE_PULSES, percent: (microPos / MICRO_CYCLE_PULSES) * 100 },
       chakraLoop: { pulseInCycle: chakraPos, cycleLength: CHAKRA_LOOP_PULSES, percent: (chakraPos / CHAKRA_LOOP_PULSES) * 100 },
-      harmonicDay: { pulseInCycle: dayPos, cycleLength: HARMONIC_DAY_PULSES, percent: (dayPos / HARMONIC_DAY_PULSES) * 100 },
+      harmonicDay: { pulseInCycle: dayPos, cycleLength: HARMONIC_DAY_PULSES, percent: dayPercent },
     },
 
     eternalMonthProgress: { daysElapsed, daysRemaining, percent: monthPercent },
@@ -639,16 +764,16 @@ function buildOfflinePayload(now: Date = new Date()): KlockData {
 
     eternalChakraBeat: {
       beatIndex: eternalBeatIdx,
-      pulsesIntoBeat: eternalPulseInBeat,
-      beatPulseCount: PULSES_PER_BEAT,
+      pulsesIntoBeat,
+      beatPulseCount,
       totalBeats: CHAKRA_BEATS_PER_DAY,
       percentToNext,
-      eternalMonthIndex: Math.floor((harmonicDayCount % HARMONIC_YEAR_DAYS) / HARMONIC_MONTH_DAYS),
+      eternalMonthIndex: monthIndex0,
       eternalDayInMonth: daysElapsed,
       dayOfMonth,
     },
 
-    chakraArc: CHAKRA_ARC_NAME_MAP[chakraArcKey],
+    chakraArc,
     chakraZone: resonance.chakraZone,
     harmonicFrequencies: resonance.frequencies,
     harmonicInputs: resonance.inputs,
@@ -657,8 +782,8 @@ function buildOfflinePayload(now: Date = new Date()): KlockData {
     arcBeatCompletions: Math.floor(kaiPulseEternal / ARC_BEAT_PULSES),
     microCycleCompletions: Math.floor(kaiPulseEternal / MICRO_CYCLE_PULSES),
     chakraLoopCompletions: Math.floor(kaiPulseEternal / CHAKRA_LOOP_PULSES),
-    harmonicDayCompletions: kaiPulseEternal / HARMONIC_DAY_PULSES,
-    harmonicYearCompletions: kaiPulseEternal / HARMONIC_DAY_PULSES / HARMONIC_YEAR_DAYS,
+    harmonicDayCompletions: Number(muNow) / Number(UPULSES_PER_DAY_BI),
+    harmonicYearCompletions,
 
     weekIndex: weekIdx,
     weekName,
@@ -673,39 +798,61 @@ function buildOfflinePayload(now: Date = new Date()): KlockData {
     solarWeekDay: solarDayName,
 
     weekDayPercent: undefined,
-    yearPercent: undefined,
-    daysIntoYear: undefined,
+    yearPercent: (Number(muIntoYear) / Number(MU_PER_YEAR)) * 100,
+    daysIntoYear: Number(floorDiv(muIntoYear, UPULSES_PER_DAY_BI)),
   };
 }
 
 /* ────────────────────────────────────────────────
-   Pulse scheduler helpers
+   Pulse scheduler helpers (HARD LOCK: μpulse-space)
    ──────────────────────────────────────────────── */
-const MS_PER_PULSE = KAI_PULSE_DURATION * 1000;
 
-function msToNextPulse(nowMs: number): number {
-  const elapsed = nowMs - ETERNAL_GENESIS_PULSE;
-  const nextIndex = Math.floor(elapsed / MS_PER_PULSE) + 1;
-  const nextMs = ETERNAL_GENESIS_PULSE + nextIndex * MS_PER_PULSE;
-  const dt = nextMs - nowMs;
+const MS_PER_PULSE = PULSE_MS;
+
+function msToNextPulseFromMu(muNow: bigint): number {
+  const muIntoPulse = imod(muNow, ONE_PULSE_MICRO);
+  const muToNext = muIntoPulse === 0n ? ONE_PULSE_MICRO : ONE_PULSE_MICRO - muIntoPulse;
+  const dt = (Number(muToNext) / 1_000_000) * MS_PER_PULSE;
   return Math.max(0, Math.min(dt, MS_PER_PULSE));
 }
 
 type PulseWorkerHandle = { worker: Worker; url: string };
 
+// Worker is a heartbeat only. It never owns boundary alignment.
+type WorkerMsgIn = { cmd: "start" | "sync"; delay: number; dur: number } | { cmd: "stop" };
+type WorkerMsgOut = { t: 0 };
+
 function makePulseWorker(): PulseWorkerHandle | null {
   try {
     const code = `
-      const GEN=${ETERNAL_GENESIS_PULSE};
-      const DUR=${MS_PER_PULSE};
-      function sched(){
-        const now=Date.now();
-        const elapsed=now-GEN;
-        const next=GEN+Math.ceil(elapsed/DUR)*DUR;
-        const delay=Math.max(0, next-now);
-        setTimeout(()=>{ postMessage({ t: Date.now() }); sched(); }, delay);
+      let timer = null;
+      let dur = 0;
+
+      function clear() {
+        if (timer !== null) { clearTimeout(timer); timer = null; }
       }
-      sched();
+
+      function sched(delay) {
+        clear();
+        timer = setTimeout(() => {
+          try { postMessage({ t: 0 }); } catch {}
+          // continue roughly at dur (main thread still owns hard boundary)
+          sched(dur);
+        }, Math.max(0, delay));
+      }
+
+      onmessage = (e) => {
+        const d = e && e.data ? e.data : null;
+        if (!d || typeof d.cmd !== "string") return;
+
+        if (d.cmd === "stop") { clear(); return; }
+
+        if (d.cmd === "start" || d.cmd === "sync") {
+          dur = typeof d.dur === "number" ? d.dur : dur;
+          const delay = typeof d.delay === "number" ? d.delay : dur;
+          sched(delay);
+        }
+      };
     `;
     const blob = new Blob([code], { type: "application/javascript" });
     const url = URL.createObjectURL(blob);
@@ -719,25 +866,50 @@ function makePulseWorker(): PulseWorkerHandle | null {
 /* ────────────────────────────────────────────────
    Solar sync broadcast
    ──────────────────────────────────────────────── */
+
 const SOLAR_BROADCAST_KEY = "SOVEREIGN_SOLAR_LAST_UPDATE";
 const SOLAR_BC_NAME = "SOVEREIGN_SOLAR_SYNC";
-
 type SolarBroadcastMessage = { type: "solar:updated"; t: number };
 
 /* ────────────────────────────────────────────────
    Instant-open style (kills fade/entrance animation)
    ──────────────────────────────────────────────── */
+
 const INSTANT_OPEN_STYLE: React.CSSProperties = {
   animation: "none",
   transition: "none",
 };
 
 /* ────────────────────────────────────────────────
+   SigilModal parity helpers
+   ──────────────────────────────────────────────── */
+
+const FOCUSABLE_SEL =
+  'a[href],area[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),iframe,[tabindex]:not([tabindex="-1"]),[contenteditable="true"]';
+
+function getPreferredPortalTarget(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  return (
+    document.getElementById("kk-modal-root") ??
+    document.getElementById("modal-root") ??
+    document.getElementById("portal-root") ??
+    document.body
+  );
+}
+
+/* ────────────────────────────────────────────────
    Main Component
    ──────────────────────────────────────────────── */
+
+type TickReason = "pulse" | "worker" | "focus" | "init" | "solar" | "event" | "ui";
+
 export const EternalKlock: React.FC = () => {
-  // ✅ No loading flash: start with a baseline offline payload immediately.
-  const [klock, setKlock] = useState<KlockData>(() => buildOfflinePayload(new Date()));
+  // ✅ No loading flash: compute synchronously using μpulse truth.
+  const [klock, setKlock] = useState<KlockData>(() => {
+    const mu = kairosNowMu();
+    const now = new Date(msFromMicroPulsesSinceGenesis(mu));
+    return buildOfflinePayload(now, mu);
+  });
 
   const [showDetails, setShowDetails] = useState<boolean>(false);
   const [glowPulse, setGlowPulse] = useState<boolean>(false);
@@ -746,8 +918,8 @@ export const EternalKlock: React.FC = () => {
   // 🟢 Sovereign Solar (no SunCalc)
   const solarHook = useSovereignSolarClock();
 
-  // Portal target (no state, no effect)
-  const portalTarget = typeof document !== "undefined" ? document.body : null;
+  // Portal target (SigilModal parity: prefer modal root, fallback to body)
+  const portalTarget = useMemo(() => getPreferredPortalTarget(), []);
 
   // Refs (DOM)
   const detailRef = useRef<HTMLDivElement | null>(null);
@@ -755,6 +927,11 @@ export const EternalKlock: React.FC = () => {
   const toggleRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const closeBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // SigilModal parity: focus restore + backdrop pointerdown gate + focus trap
+  const lastActiveElRef = useRef<HTMLElement | null>(null);
+  const backdropDownRef = useRef<boolean>(false);
 
   // Anti-sleep + schedulers + solar sync
   const wakeRef = useRef<WakeLockSentinelLike | null>(null);
@@ -765,8 +942,9 @@ export const EternalKlock: React.FC = () => {
   const workerRef = useRef<PulseWorkerHandle | null>(null);
   const runningRef = useRef<boolean>(false);
 
-  // One de-dupe gate for ALL tick sources
-  const lastTickRef = useRef<number>(0);
+  // Hard pulse gate + soft de-dupe
+  const lastPulseTickRef = useRef<bigint>(-1n);
+  const lastAnyTickMsRef = useRef<number>(0);
 
   const lastSolarVersionRef = useRef<string | null>(null);
   const solarBcRef = useRef<BroadcastChannel | null>(null);
@@ -781,15 +959,41 @@ export const EternalKlock: React.FC = () => {
     solarOverrideRef.current = solarOverrideSec;
   }, [solarOverrideSec]);
 
-  // Body lock class for overlay
+  // Body lock + focus mgmt (SigilModal parity)
   useEffect(() => {
+    if (typeof document === "undefined") return;
+
     if (showDetails) {
+      lastActiveElRef.current = (document.activeElement as HTMLElement | null) ?? null;
+
       document.body.classList.add("eternal-overlay-open");
-      overlayRef.current?.focus();
+      document.body.classList.add("kk-modal-open");
+      document.documentElement.classList.add("kk-modal-open");
+
+      requestAnimationFrame(() => {
+        if (closeBtnRef.current) {
+          closeBtnRef.current.focus();
+          return;
+        }
+        overlayRef.current?.focus();
+      });
     } else {
       document.body.classList.remove("eternal-overlay-open");
+      document.body.classList.remove("kk-modal-open");
+      document.documentElement.classList.remove("kk-modal-open");
+
+      const prev = lastActiveElRef.current;
+      lastActiveElRef.current = null;
+      if (prev && typeof prev.focus === "function") {
+        requestAnimationFrame(() => prev.focus());
+      }
     }
-    return () => document.body.classList.remove("eternal-overlay-open");
+
+    return () => {
+      document.body.classList.remove("eternal-overlay-open");
+      document.body.classList.remove("kk-modal-open");
+      document.documentElement.classList.remove("kk-modal-open");
+    };
   }, [showDetails]);
 
   // WakeLock: release
@@ -851,17 +1055,17 @@ export const EternalKlock: React.FC = () => {
   }, []);
 
   /* ────────────────────────────────────────────────────────────────
-     Offline refresh (single source of truth)
-     - buildOfflinePayload baseline
+     Offline refresh (μpulse truth)
+     - baseline: buildOfflinePayload(now, muNow)
      - apply solar-aligned counters + sunrise window (override or engine)
-     - compute solar Kai pulse/step from active sunrise window
-     - recompute arc/resonance from solar-aligned beat
+     - compute solar Kai pulse/step from active sunrise window (fractional)
+     - recompute ark/resonance from solar beat
      ──────────────────────────────────────────────────────────────── */
-  const refreshKlock = useCallback((forcedSec?: number): void => {
-    const now = new Date();
+  const refreshKlock = useCallback((muNow: bigint, forcedSec?: number): void => {
+    const now = new Date(msFromMicroPulsesSinceGenesis(muNow));
 
-    // baseline payload
-    const data = buildOfflinePayload(now);
+    // baseline payload (μpulse exact)
+    const data = buildOfflinePayload(now, muNow);
 
     // Calibrate weekday offset from engine so override path matches engine mapping
     try {
@@ -924,9 +1128,12 @@ export const EternalKlock: React.FC = () => {
     const solarBeatIdx = Math.floor(solarKaiPulseToday / beatSize);
     const solarPulseInBeat = solarKaiPulseToday - solarBeatIdx * beatSize;
 
-    const solarStepIndex = Math.floor(solarPulseInBeat / PULSES_PER_STEP);
-    const solarStepProgress = solarPulseInBeat - solarStepIndex * PULSES_PER_STEP;
-    const solarPercentIntoStep = (solarStepProgress / PULSES_PER_STEP) * 100;
+    // Preserve your existing solar step mapping semantics (11-pulse intuition),
+    // while the eternal grid remains μpulse-exact.
+    const PULSES_PER_STEP_APPROX = 11;
+    const solarStepIndex = Math.floor(solarPulseInBeat / PULSES_PER_STEP_APPROX);
+    const solarStepProgress = solarPulseInBeat - solarStepIndex * PULSES_PER_STEP_APPROX;
+    const solarPercentIntoStep = (solarStepProgress / PULSES_PER_STEP_APPROX) * 100;
 
     data.solarChakraStep = {
       beatIndex: solarBeatIdx,
@@ -937,9 +1144,7 @@ export const EternalKlock: React.FC = () => {
     data.solarChakraStepString = `${solarBeatIdx}:${String(solarStepIndex).padStart(2, "0")}`;
 
     // Ark from solar beat (0..35 → 0..5)
-    const arcIndex = Math.floor(
-      (((((solarBeatIdx % CHAKRA_BEATS_PER_DAY) + CHAKRA_BEATS_PER_DAY) % CHAKRA_BEATS_PER_DAY) / 6) % 6)
-    );
+    const arcIndex = Math.floor(((((solarBeatIdx % CHAKRA_BEATS_PER_DAY) + CHAKRA_BEATS_PER_DAY) % CHAKRA_BEATS_PER_DAY) / 6) % 6);
     const arcKey =
       ["Ignition Ark", "Integration Ark", "Harmonization Ark", "Reflection Ark", "Purification Ark", "Dream Ark"][arcIndex] ??
       "Ignition Ark";
@@ -953,10 +1158,11 @@ export const EternalKlock: React.FC = () => {
     data.sigilFamily = resonance.sigilFamily;
     data.kaiTurahArcPhrase = resonance.arcPhrase;
 
-    // Year progress extras (UI uses these)
-    const pulsesIntoYear = data.kaiPulseEternal % HARMONIC_YEAR_PULSES;
-    data.yearPercent = (pulsesIntoYear / HARMONIC_YEAR_PULSES) * 100;
-    data.daysIntoYear = Math.floor(pulsesIntoYear / HARMONIC_DAY_PULSES);
+    // Year progress extras (μpulse exact already computed in baseline; keep UI helpers)
+    const MU_PER_YEAR = UPULSES_PER_DAY_BI * BigInt(HARMONIC_YEAR_DAYS);
+    const muIntoYear = imod(muNow, MU_PER_YEAR);
+    data.yearPercent = (Number(muIntoYear) / Number(MU_PER_YEAR)) * 100;
+    data.daysIntoYear = Number(floorDiv(muIntoYear, UPULSES_PER_DAY_BI));
 
     // Keep eternalMonthIndex consistent with day-in-year
     const monthIndex0 = Math.floor((data.daysIntoYear ?? 0) / HARMONIC_MONTH_DAYS);
@@ -971,19 +1177,22 @@ export const EternalKlock: React.FC = () => {
   }, []);
 
   // ✅ Solar version gate (declared BEFORE effects that reference it)
-  const checkSolarVersionAndRefresh = useCallback((): void => {
-    try {
-      const v = localStorage.getItem(SOLAR_BROADCAST_KEY);
-      if (v && v !== lastSolarVersionRef.current) {
-        lastSolarVersionRef.current = v;
-        refreshKlock();
-        return;
+  const checkSolarVersionAndRefresh = useCallback(
+    (muNow: bigint): void => {
+      try {
+        const v = localStorage.getItem(SOLAR_BROADCAST_KEY);
+        if (v && v !== lastSolarVersionRef.current) {
+          lastSolarVersionRef.current = v;
+          refreshKlock(muNow);
+          return;
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
-    }
-    refreshKlock();
-  }, [refreshKlock]);
+      refreshKlock(muNow);
+    },
+    [refreshKlock]
+  );
 
   const [sealCopied, setSealCopied] = useState<boolean>(false);
   const sealToastTimer = useRef<number | null>(null);
@@ -1000,20 +1209,30 @@ export const EternalKlock: React.FC = () => {
   }, []);
 
   /* ────────────────────────────────────────────────────────────────
-     Single tick gate (prevents double-ticking spam across:
-     - worker boundary ticks
-     - timeout boundary ticks
-     - focus/visibility/pageshow
-     - storage/broadcast updates
-     - solar hook emissions
+     Single tick gate (pulse-aware, prevents “one behind”)
+     - pulse ticks: only refresh when pulse index advances
+     - non-pulse events: allow refresh (throttled) for instant solar/UI sync
      ──────────────────────────────────────────────────────────────── */
   const fireTick = useCallback(
-    (forcedSec?: number) => {
-      const now = Date.now();
-      if (now - lastTickRef.current < 180) return; // global de-dupe window
-      lastTickRef.current = now;
+    (reason: TickReason, forcedSec?: number) => {
+      const muNow = kairosNowMu();
+      const msNow = msFromMicroPulsesSinceGenesis(muNow);
+      const pulseNow = muNow / ONE_PULSE_MICRO;
 
-      refreshKlock(forcedSec);
+      const isPulseSource = reason === "pulse" || reason === "worker";
+
+      if (isPulseSource) {
+        // Hard gate: one refresh per pulse unless forcedSec is provided
+        if (pulseNow === lastPulseTickRef.current && typeof forcedSec !== "number") return;
+        lastPulseTickRef.current = pulseNow;
+      } else {
+        // Soft throttle for storms (storage/bc/focus/etc.)
+        if (msNow - lastAnyTickMsRef.current < 120) return;
+      }
+
+      lastAnyTickMsRef.current = msNow;
+
+      refreshKlock(muNow, forcedSec);
 
       setGlowPulse(true);
       if (glowOffTimerRef.current !== null) window.clearTimeout(glowOffTimerRef.current);
@@ -1033,34 +1252,64 @@ export const EternalKlock: React.FC = () => {
     return () => window.clearInterval(interval);
   }, []);
 
-  /* Pulse-aligned scheduler (ticks at every Kai pulse boundary).
-     Worker fallback is de-duped via fireTick gate (prevents double firing). */
+  /* Pulse-aligned scheduler (HARD LOCK: μpulse boundary).
+     Worker heartbeat is de-duped by pulse gate. */
   useEffect(() => {
     runningRef.current = true;
 
     const scheduleNext = () => {
       if (!runningRef.current) return;
-      const delay = msToNextPulse(Date.now());
+
+      const muNow = kairosNowMu();
+      const delay = msToNextPulseFromMu(muNow);
+
+      if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
       timeoutRef.current = window.setTimeout(() => {
-        fireTick();
+        fireTick("pulse");
         scheduleNext();
       }, delay);
+
+      // Keep worker roughly synced (still not primary scheduler)
+      if (workerRef.current) {
+        try {
+          const msg: WorkerMsgIn = { cmd: "sync", delay, dur: MS_PER_PULSE };
+          workerRef.current.worker.postMessage(msg);
+        } catch {
+          void 0;
+        }
+      }
     };
 
     const wk = makePulseWorker();
     workerRef.current = wk;
+
     if (wk) {
-      wk.worker.onmessage = () => {
-        fireTick();
-      };
+      wk.worker.onmessage = (e: MessageEvent<WorkerMsgOut>) => {
+  // touch payload so eslint sees it as used
+  if (e.data?.t === 0) fireTick("worker");
+};
+
+
+      // Start worker aligned to *next boundary* (main thread computed)
+      try {
+        const muNow = kairosNowMu();
+        const delay = msToNextPulseFromMu(muNow);
+        const msg: WorkerMsgIn = { cmd: "start", delay, dur: MS_PER_PULSE };
+        wk.worker.postMessage(msg);
+      } catch {
+        void 0;
+      }
     }
 
     scheduleNext();
 
     const onShow = () => {
-      checkSolarVersionAndRefresh();
+      const muNow = kairosNowMu();
+      checkSolarVersionAndRefresh(muNow);
+
       if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
+
       scheduleNext();
       void acquireWakeLock();
     };
@@ -1073,10 +1322,17 @@ export const EternalKlock: React.FC = () => {
 
     return () => {
       runningRef.current = false;
+
       if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
 
       if (workerRef.current) {
+        try {
+          const stop: WorkerMsgIn = { cmd: "stop" };
+          workerRef.current.worker.postMessage(stop);
+        } catch {
+          void 0;
+        }
         try {
           workerRef.current.worker.terminate();
         } catch {
@@ -1117,14 +1373,14 @@ export const EternalKlock: React.FC = () => {
     };
   }, [acquireWakeLock, releaseWakeLock]);
 
-  // Initial load + solar version snapshot (schedule tick, don’t sync-set in effect body)
+  // Initial load snapshot + first tick
   useEffect(() => {
     try {
       lastSolarVersionRef.current = localStorage.getItem(SOLAR_BROADCAST_KEY);
     } catch {
       // ignore
     }
-    const id = window.setTimeout(() => fireTick(), 0);
+    const id = window.setTimeout(() => fireTick("init"), 0);
     return () => window.clearTimeout(id);
   }, [fireTick]);
 
@@ -1133,12 +1389,12 @@ export const EternalKlock: React.FC = () => {
     const onStorage = (e: StorageEvent) => {
       if (!e.key) return;
       if (e.key === SOLAR_BROADCAST_KEY || e.key.startsWith("SOVEREIGN_SOLAR")) {
-        fireTick();
+        fireTick("solar");
       }
     };
 
     const onSolarEvent = () => {
-      fireTick();
+      fireTick("solar");
     };
 
     window.addEventListener("storage", onStorage);
@@ -1146,7 +1402,7 @@ export const EternalKlock: React.FC = () => {
 
     try {
       const bc = new BroadcastChannel(SOLAR_BC_NAME);
-      bc.onmessage = () => fireTick();
+      bc.onmessage = () => fireTick("solar");
       solarBcRef.current = bc;
     } catch {
       // ignore (Safari private, etc.)
@@ -1164,9 +1420,9 @@ export const EternalKlock: React.FC = () => {
     };
   }, [fireTick]);
 
-  // Reactively rebuild when the sovereign hook emits a new step/arc (schedule, don’t sync-set in effect body)
+  // Reactively rebuild when the sovereign hook emits a new step/arc
   useEffect(() => {
-    const id = window.setTimeout(() => fireTick(), 0);
+    const id = window.setTimeout(() => fireTick("solar"), 0);
     return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [solarHook?.solarStepString, solarHook?.solarArcName, solarHook?.sunriseOffsetSec, solarOverrideSec]);
@@ -1190,13 +1446,14 @@ export const EternalKlock: React.FC = () => {
     const detailNode = detailRef.current;
 
     const markInteractionInside = () => {
-      suppressScrollCloseUntil.current = Date.now() + 800;
+      suppressScrollCloseUntil.current = kairosNowMs() + 800;
     };
 
     const handleScroll = () => {
       const ae = document.activeElement as HTMLElement | null;
       const focusedInside = !!ae && !!overlayNode?.contains(ae);
-      const inCooldown = Date.now() < suppressScrollCloseUntil.current;
+      const inCooldown = kairosNowMs() < suppressScrollCloseUntil.current;
+
       if (focusedInside || inCooldown) return;
       closeDetails();
     };
@@ -1221,11 +1478,15 @@ export const EternalKlock: React.FC = () => {
       closeDetails();
       return;
     }
-    suppressScrollCloseUntil.current = Date.now() + 800;
+    suppressScrollCloseUntil.current = kairosNowMs() + 800;
+
     if ("vibrate" in navigator && typeof navigator.vibrate === "function") navigator.vibrate(10);
     audioRef.current?.play().catch(() => void 0);
     setShowDetails(true);
-  }, [closeDetails, showDetails]);
+
+    // UI-triggered refresh (instant, de-duped)
+    fireTick("ui");
+  }, [closeDetails, fireTick, showDetails]);
 
   // Arc → CSS variables (mirrored onto modal)
   useEffect(() => {
@@ -1245,7 +1506,6 @@ export const EternalKlock: React.FC = () => {
     containerRef.current.style.setProperty("--chakra-hue", String(hue));
     containerRef.current.style.setProperty("--chakra", `hsl(${hue} 100% 55%)`);
 
-    // Mirror onto overlay/detail for perfect tint parity (no layout changes)
     overlayRef.current?.style.setProperty("--chakra-hue", String(hue));
     overlayRef.current?.style.setProperty("--chakra", `hsl(${hue} 100% 55%)`);
     detailRef.current?.style.setProperty("--chakra-hue", String(hue));
@@ -1260,8 +1520,7 @@ export const EternalKlock: React.FC = () => {
 
   const daysToNextSpiral = Number.isFinite(spiralData.pulsesRemaining) ? spiralData.pulsesRemaining / HARMONIC_DAY_PULSES : NaN;
 
-  const yearPercent =
-    typeof klock.yearPercent === "number" ? klock.yearPercent : (((klock.harmonicYearCompletions ?? 0) % 1) * 100);
+  const yearPercent = typeof klock.yearPercent === "number" ? klock.yearPercent : (((klock.harmonicYearCompletions ?? 0) % 1) * 100);
 
   const beatPulseCount = HARMONIC_DAY_PULSES / 36;
   const currentBeat = Math.floor(
@@ -1271,12 +1530,15 @@ export const EternalKlock: React.FC = () => {
   const percentToNextBeat =
     (((((klock.kaiPulseToday % beatPulseCount) + beatPulseCount) % beatPulseCount) / beatPulseCount) * 100);
 
-  // Manual open ALWAYS works (no dismiss gate on button tap)
+  // Manual open ALWAYS works
   const openWeekModal = useCallback(() => {
-    suppressScrollCloseUntil.current = Date.now() + 800;
+    suppressScrollCloseUntil.current = kairosNowMs() + 800;
+
     setShowWeekModal(true);
     if ("vibrate" in navigator && typeof navigator.vibrate === "function") navigator.vibrate(8);
-  }, []);
+
+    fireTick("ui");
+  }, [fireTick]);
 
   // Canonical weekday order
   const SOLAR_DAY_NAMES = ["Solhara", "Aquaris", "Flamora", "Verdari", "Sonari", "Kaelith"] as const;
@@ -1309,8 +1571,39 @@ export const EternalKlock: React.FC = () => {
   const arkIndexForKey = Math.floor(((((klock.solarChakraStep?.beatIndex ?? 0) % 36) + 36) % 36) / 6) % 6;
   const kaiKey = `ark-${arkIndexForKey}-${klock.solarChakraStepString}`;
 
-  // Week modal container (keeps portals inside overlay hierarchy for better stacking/click safety)
+  // Week modal container
   const weekModalContainer = detailRef.current ?? overlayRef.current ?? portalTarget;
+
+  // Focus trap (SigilModal parity)
+  const trapFocus = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab") return;
+
+    const root = detailRef.current;
+    if (!root) return;
+
+    const nodes = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SEL)).filter((el) => el.tabIndex !== -1);
+    if (nodes.length === 0) {
+      e.preventDefault();
+      closeBtnRef.current?.focus();
+      return;
+    }
+
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    const active = (document.activeElement as HTMLElement | null) ?? null;
+
+    if (!e.shiftKey) {
+      if (!active || active === last || !root.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
+    } else {
+      if (!active || active === first || !root.contains(active)) {
+        e.preventDefault();
+        last.focus();
+      }
+    }
+  }, []);
 
   return (
     <div ref={containerRef} className="eternal-klock-container">
@@ -1344,15 +1637,21 @@ export const EternalKlock: React.FC = () => {
         portalTarget &&
         createPortal(
           <div
-            className="eternal-overlay"
+            className="eternal-overlay kk-modal-overlay"
             role="dialog"
             aria-modal="true"
             aria-label="Eternal Klock Details"
             ref={overlayRef}
             tabIndex={-1}
             style={INSTANT_OPEN_STYLE}
+            data-kk-modal="eternal-klock"
+            onPointerDown={(e) => {
+              backdropDownRef.current = e.target === overlayRef.current;
+            }}
             onClick={(e) => {
               if (e.target !== overlayRef.current) return;
+              if (!backdropDownRef.current) return;
+
               if (showWeekModal) {
                 closeWeekFirst();
                 return;
@@ -1360,27 +1659,36 @@ export const EternalKlock: React.FC = () => {
               closeDetails();
             }}
             onKeyDown={(e) => {
-              if (e.key !== "Escape") return;
-              if (showWeekModal) {
-                e.stopPropagation();
-                closeWeekFirst();
+              if (e.key === "Escape") {
+                if (showWeekModal) {
+                  e.stopPropagation();
+                  closeWeekFirst();
+                  return;
+                }
+                closeDetails();
                 return;
               }
-              closeDetails();
+              trapFocus(e);
             }}
           >
             <div
-              className="eternal-modal-card"
+              className="eternal-modal-card kk-modal-card"
               ref={detailRef}
               style={INSTANT_OPEN_STYLE}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
-              {/* ✅ CLEAR CLOSE X (CSS will position + style) */}
-              <button type="button" className="ek-close-btn" aria-label="Close" title="Close" onClick={closeDetails}>
+              <button
+                ref={closeBtnRef}
+                type="button"
+                className="ek-close-btn"
+                aria-label="Close"
+                title="Close"
+                onClick={closeDetails}
+              >
                 ×
               </button>
 
-              {/* GRAND DISPLAY CONTROLS */}
               <div className="ek-display-controls" aria-label="Display scale controls">
                 <div className="ek-scale-row">
                   <div className="ek-scale-readout" />
@@ -1544,29 +1852,19 @@ export const EternalKlock: React.FC = () => {
 
                 <div>
                   <strong>Kai-Pulses (Breathes) Into Month:</strong>{" "}
-                  {(klock.kaiPulseEternal % HARMONIC_MONTH_PULSES).toFixed(2)}
+                  {(klock.kaiPulseEternal % (HARMONIC_DAY_PULSES * HARMONIC_MONTH_DAYS)).toFixed(2)}
                 </div>
 
                 <div>
-                  <strong>Kai-Pulses (Breathes) Remaining:</strong>{" "}
-                  {(HARMONIC_MONTH_PULSES - (klock.kaiPulseEternal % HARMONIC_MONTH_PULSES)).toFixed(2)}
-                </div>
-
-                <div>
-                  <strong>% Komplete:</strong>{" "}
-                  {(((klock.kaiPulseEternal % HARMONIC_MONTH_PULSES) / HARMONIC_MONTH_PULSES) * 100).toFixed(2)}%
+                  <strong>% Komplete:</strong> {klock.eternalMonthProgress.percent.toFixed(2)}%
                 </div>
 
                 <div className="month-progress-bar">
                   <div
                     className={`month-progress-fill ${glowPulse ? "sync-pulse" : ""}`}
-                    style={{ width: `${((klock.kaiPulseEternal % HARMONIC_MONTH_PULSES) / HARMONIC_MONTH_PULSES) * 100}%` }}
-                    title={`${(((klock.kaiPulseEternal % HARMONIC_MONTH_PULSES) / HARMONIC_MONTH_PULSES) * 100).toFixed(2)}% of month`}
+                    style={{ width: `${klock.eternalMonthProgress.percent}%` }}
+                    title={`${klock.eternalMonthProgress.percent.toFixed(2)}% of month`}
                   />
-                </div>
-
-                <div>
-                  <strong>Total Breathes in Month:</strong> {HARMONIC_MONTH_PULSES.toFixed(2)}
                 </div>
 
                 <div className="eternal-klock-section-title" />
@@ -1625,35 +1923,15 @@ export const EternalKlock: React.FC = () => {
                 </div>
 
                 <div>
-                  <strong>% of Year Komplete:</strong>{" "}
-                  {typeof klock.yearPercent === "number" ? klock.yearPercent.toFixed(2) : "—"}%
+                  <strong>% of Year Komplete:</strong> {typeof klock.yearPercent === "number" ? klock.yearPercent.toFixed(2) : "—"}%
                 </div>
 
                 <div>
-                  <strong>Days Into Year:</strong> {typeof klock.daysIntoYear === "number" ? klock.daysIntoYear : "—"} /{" "}
-                  {HARMONIC_YEAR_DAYS}
-                </div>
-
-                <div>
-                  <strong>Kai-Pulses (Breathes) Into Year:</strong>{" "}
-                  {(klock.kaiPulseEternal % HARMONIC_YEAR_PULSES).toFixed(0)}
-                </div>
-
-                <div>
-                  <strong>Kai-Pulses (Breathes) Remaining:</strong>{" "}
-                  {(HARMONIC_YEAR_PULSES - (klock.kaiPulseEternal % HARMONIC_YEAR_PULSES)).toFixed(0)}
+                  <strong>Days Into Year:</strong> {typeof klock.daysIntoYear === "number" ? klock.daysIntoYear : "—"} / {HARMONIC_YEAR_DAYS}
                 </div>
 
                 <div className="year-progress-bar">
-                  <div
-                    className={`year-progress-fill ${glowPulse ? "sync-pulse" : ""}`}
-                    style={{ width: `${yearPercent}%` }}
-                    title={`${yearPercent.toFixed(2)}% of year`}
-                  />
-                </div>
-
-                <div>
-                  <strong>Total Kai-Pulses (Breathes) in Year:</strong> {HARMONIC_YEAR_PULSES.toFixed(2)}
+                  <div className={`year-progress-fill ${glowPulse ? "sync-pulse" : ""}`} style={{ width: `${yearPercent}%` }} title={`${yearPercent.toFixed(2)}% of year`} />
                 </div>
 
                 <div className="eternal-klock-section-title" />
@@ -1669,8 +1947,7 @@ export const EternalKlock: React.FC = () => {
                   <strong>Kai-Pulses (Breathes) Remaining:</strong> {spiralData.pulsesRemaining}
                 </div>
                 <div>
-                  <strong>Days to Next Spiral:</strong>{" "}
-                  {Number.isFinite(daysToNextSpiral) ? daysToNextSpiral.toFixed(4) : "—"}
+                  <strong>Days to Next Spiral:</strong> {Number.isFinite(daysToNextSpiral) ? daysToNextSpiral.toFixed(4) : "—"}
                 </div>
                 <div>
                   <strong>Next Spiral Threshold:</strong> {spiralData.nextSpiralPulse}
@@ -1682,11 +1959,7 @@ export const EternalKlock: React.FC = () => {
 
                 <div className="eternal-klock-section-title" />
                 <div className="eternal-klock-section-title embodied-section-title">
-                  <img
-                    src="/assets/embodied_solar_aligned.svg"
-                    alt="Embodied Solar-Aligned Title"
-                    className="embodied-section-icon"
-                  />
+                  <img src="/assets/embodied_solar_aligned.svg" alt="Embodied Solar-Aligned Title" className="embodied-section-icon" />
                 </div>
 
                 <strong>Date (Solar):</strong> D{klock.solarDayOfMonth ?? "—"} / M{klock.solarMonthIndex ?? "—"}{" "}
@@ -1720,24 +1993,12 @@ export const EternalKlock: React.FC = () => {
                 </div>
 
                 <div>
-                  <strong>% into Step:</strong>{" "}
-                  {klock.solarChakraStep ? klock.solarChakraStep.percentIntoStep.toFixed(1) : "—"}%
+                  <strong>% into Step:</strong> {klock.solarChakraStep ? klock.solarChakraStep.percentIntoStep.toFixed(1) : "—"}%
                 </div>
 
                 <div>
                   <strong>Step:</strong>{" "}
                   {klock.solarChakraStep ? `${klock.solarChakraStep.stepIndex} / ${klock.solarChakraStep.stepsPerBeat}` : "—"}
-                </div>
-
-                <div>
-                  <strong>Kurrent Step Breathes:</strong>{" "}
-                  {klock.solarChakraStep
-                    ? (
-                        (klock.solarChakraStep.percentIntoStep / 100) *
-                        (HARMONIC_DAY_PULSES / 36 / klock.solarChakraStep.stepsPerBeat)
-                      ).toFixed(2)
-                    : "—"}{" "}
-                  / 11
                 </div>
 
                 <div>
@@ -1774,8 +2035,7 @@ export const EternalKlock: React.FC = () => {
 
                 <div style={{ marginTop: "0.25rem" }}>
                   <div>
-                    <strong>Breathes Into Beat:</strong> {(klock.kaiPulseToday % beatPulseCount).toFixed(2)} /{" "}
-                    {beatPulseCount.toFixed(2)}
+                    <strong>Breathes Into Beat:</strong> {(klock.kaiPulseToday % beatPulseCount).toFixed(2)} / {beatPulseCount.toFixed(2)}
                   </div>
                   <strong>To Next Beat:</strong> {percentToNextBeat.toFixed(2)}%
                 </div>
@@ -1797,8 +2057,7 @@ export const EternalKlock: React.FC = () => {
                   <strong>Ark Beat:</strong>
                 </div>
                 <div>
-                  {klock.harmonicLevels.arcBeat.pulseInCycle} / {klock.harmonicLevels.arcBeat.cycleLength} (
-                  {klock.harmonicLevels.arcBeat.percent.toFixed(2)}%)
+                  {klock.harmonicLevels.arcBeat.pulseInCycle} / {klock.harmonicLevels.arcBeat.cycleLength} ({klock.harmonicLevels.arcBeat.percent.toFixed(2)}%)
                 </div>
                 <div>
                   <small>Kompleted Sykles: {klock.arcBeatCompletions}</small>
@@ -1808,8 +2067,7 @@ export const EternalKlock: React.FC = () => {
                   <strong>Mikro Sykle:</strong>
                 </div>
                 <div>
-                  {klock.harmonicLevels.microCycle.pulseInCycle} / {klock.harmonicLevels.microCycle.cycleLength} (
-                  {klock.harmonicLevels.microCycle.percent.toFixed(2)}%)
+                  {klock.harmonicLevels.microCycle.pulseInCycle} / {klock.harmonicLevels.microCycle.cycleLength} ({klock.harmonicLevels.microCycle.percent.toFixed(2)}%)
                 </div>
                 <div>
                   <small>Kompleted Sykles: {klock.microCycleCompletions}</small>
@@ -1819,8 +2077,7 @@ export const EternalKlock: React.FC = () => {
                   <strong>Beat Loop:</strong>
                 </div>
                 <div>
-                  {klock.harmonicLevels.chakraLoop.pulseInCycle} / {klock.harmonicLevels.chakraLoop.cycleLength} (
-                  {klock.harmonicLevels.chakraLoop.percent.toFixed(2)}%)
+                  {klock.harmonicLevels.chakraLoop.pulseInCycle} / {klock.harmonicLevels.chakraLoop.cycleLength} ({klock.harmonicLevels.chakraLoop.percent.toFixed(2)}%)
                 </div>
                 <div>
                   <small>Kompleted Sykles: {klock.chakraLoopCompletions}</small>
@@ -1830,8 +2087,7 @@ export const EternalKlock: React.FC = () => {
                   <strong>Harmonik Day:</strong>
                 </div>
                 <div>
-                  {klock.harmonicLevels.harmonicDay.pulseInCycle} / {klock.harmonicLevels.harmonicDay.cycleLength} (
-                  {klock.harmonicLevels.harmonicDay.percent.toFixed(2)}%)
+                  {klock.harmonicLevels.harmonicDay.pulseInCycle} / {klock.harmonicLevels.harmonicDay.cycleLength} ({klock.harmonicLevels.harmonicDay.percent.toFixed(2)}%)
                 </div>
                 <div>
                   <small>Kompleted Sykles: {klock.harmonicDayCompletions}</small>
@@ -1857,7 +2113,7 @@ export const EternalKlock: React.FC = () => {
                   setSolarOverrideSec(sec);
 
                   try {
-                    localStorage.setItem(SOLAR_BROADCAST_KEY, String(Date.now()));
+                    localStorage.setItem(SOLAR_BROADCAST_KEY, String(kairosEpochNow()));
                   } catch {
                     void 0;
                   }
@@ -1867,16 +2123,14 @@ export const EternalKlock: React.FC = () => {
                     void 0;
                   }
                   try {
-                    const msg: SolarBroadcastMessage = { type: "solar:updated", t: Date.now() };
+                    const msg: SolarBroadcastMessage = { type: "solar:updated", t: kairosNowMs() };
                     solarBcRef.current?.postMessage(msg);
                   } catch {
                     void 0;
                   }
 
-                  fireTick(sec);
-
-                  // One extra frame ensures Safari paints with the new dial state (still de-duped).
-                  requestAnimationFrame(() => fireTick(sec));
+                  fireTick("solar", sec);
+                  requestAnimationFrame(() => fireTick("solar", sec));
                 }}
               />
             </div>

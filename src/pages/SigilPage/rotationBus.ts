@@ -1,5 +1,6 @@
 // src/pages/SigilPage/rotationBus.ts
 import { useEffect, useState } from "react";
+import { kairosEpochNow } from "../../utils/kai_pulse";
 import { ROTATE_CH, rotationKey } from "./constants";
 import type { RotationMsg } from "./constants";
 
@@ -8,7 +9,7 @@ export function publishRotation(keys: string[], token: string) {
   const uniq = Array.from(new Set(keys.map((k) => k.toLowerCase()).filter(Boolean)));
   uniq.forEach((canonical) => {
     try {
-      localStorage.setItem(rotationKey(canonical), `${token}@${Date.now()}`);
+      localStorage.setItem(rotationKey(canonical), `${token}@${kairosEpochNow()}`);
     } catch { /* noop */ }
     try {
       const bc = new BroadcastChannel(ROTATE_CH);

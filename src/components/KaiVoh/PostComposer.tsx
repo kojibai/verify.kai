@@ -3,6 +3,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./styles/PostComposer.css";
+import { kairosEpochNow } from "../../utils/kai_pulse";
 
 /* -------------------------------------------------------------------------- */
 /*                                   Types                                    */
@@ -119,7 +120,7 @@ function generateAttachmentId(file: File): string {
     file.name,
     file.size,
     file.lastModified,
-    Date.now(),
+    kairosEpochNow(),
     Math.random().toString(36).slice(2, 8),
   ].join("-");
 }

@@ -3,7 +3,11 @@
 
 /**
  * VerifierFrame — Kai-Sigil Verification Panel
- * v2.4 — KPV-1 Proof Hash (payload-bound proof capsule)
+ * v2.5 — SPEC-NOW Pulse (Kai-Klok source-of-truth) + KPV-1 Proof Hash
+ *
+ * Update:
+ * ✅ If `pulse` is missing/invalid (<=0), this component derives a LIVE pulse from kai_pulse.ts (spec NOW)
+ * ✅ If `pulse` is provided (>0), it is treated as the sealed/authoritative pulse (no live override)
  *
  * Guarantees:
  * ✅ Default verifier base is ALWAYS current app origin (+ Vite BASE_URL subpath) + "/verify"
@@ -25,6 +29,8 @@ import * as ReactQrCodeModule from "react-qr-code";
 import "./styles/VerifierFrame.css";
 
 import type { ChakraDay } from "../../utils/kai_pulse";
+import * as KaiPulseSpec from "../../utils/kai_pulse";
+
 import {
   buildVerifierSlug,
   buildVerifierUrl,
@@ -36,7 +42,9 @@ import {
 } from "./verifierProof";
 
 export interface VerifierFrameProps {
-  pulse: number;
+  /** If omitted/invalid (<=0), this component will use SPEC-NOW pulse */
+  pulse?: number;
+
   kaiSignature: string; // full signature (we will shorten for display + slug)
   phiKey: string;
   caption?: string;
@@ -64,6 +72,24 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 function isFn(v: unknown): v is (...args: never[]) => unknown {
   return typeof v === "function";
+}
+
+function asSafeNumber(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "bigint") {
+    const max = BigInt(Number.MAX_SAFE_INTEGER);
+    const min = BigInt(Number.MIN_SAFE_INTEGER);
+    if (v > max || v < min) return null;
+    return Number(v);
+  }
+  return null;
+}
+
+function toValidPulse(p: unknown): number | null {
+  const n = typeof p === "number" ? p : NaN;
+  if (!Number.isFinite(n)) return null;
+  const i = Math.floor(n);
+  return i > 0 ? i : null;
 }
 
 /** ESM/CJS interop-safe resolver */
@@ -100,6 +126,105 @@ function truncateHash(h: string, head = 10, tail = 10): string {
   return `${h.slice(0, head)}…${h.slice(-tail)}`;
 }
 
+/**
+ * SPEC-NOW pulse resolver (best-effort, no Chronos sampling here).
+ * Prefers a direct pulse-now function if present; otherwise derives from kairosEpochNow + constants.
+ */
+function readPulseNowFromSpec(): number | null {
+  const rec = KaiPulseSpec as unknown as Record<string, unknown>;
+
+  // 1) Direct pulse-now fn (preferred)
+  const directKeys = ["kaiPulseNow", "getKaiPulseNow", "pulseNow"];
+  for (const k of directKeys) {
+    const fn = rec[k];
+    if (isFn(fn)) {
+      const out = (fn as () => unknown)();
+      const n = asSafeNumber(out);
+      const p = toValidPulse(n);
+      if (p) return p;
+    }
+  }
+
+  // 2) Derive from kairosEpochNow (epoch-ms, deterministic) + GENESIS_TS + PULSE_MS if available
+  const epochFn = rec["kairosEpochNow"];
+  const genesis = asSafeNumber(rec["GENESIS_TS"]);
+  const pulseMs = asSafeNumber(rec["PULSE_MS"]);
+
+  if (isFn(epochFn) && genesis !== null && pulseMs !== null && Number.isFinite(pulseMs) && pulseMs > 0) {
+    const epochOut = (epochFn as () => unknown)();
+    const epochMs = asSafeNumber(epochOut);
+    if (epochMs !== null) {
+      const delta = epochMs - genesis;
+      if (Number.isFinite(delta)) {
+        // canonical UI pulse index: 1-based
+        const p = Math.floor(delta / pulseMs) + 1;
+        return p > 0 ? p : null;
+      }
+    }
+  }
+
+  return null;
+}
+
+function readNextPulseDelayMsFromSpec(): number | null {
+  const rec = KaiPulseSpec as unknown as Record<string, unknown>;
+
+  const epochFn = rec["kairosEpochNow"];
+  const genesis = asSafeNumber(rec["GENESIS_TS"]);
+  const pulseMs = asSafeNumber(rec["PULSE_MS"]);
+
+  if (!isFn(epochFn) || genesis === null || pulseMs === null || !(pulseMs > 0)) return null;
+
+  const epochOut = (epochFn as () => unknown)();
+  const epochMs = asSafeNumber(epochOut);
+  if (epochMs === null) return null;
+
+  const delta = epochMs - genesis;
+  if (!Number.isFinite(delta)) return null;
+
+  const idx0 = Math.max(0, Math.floor(delta / pulseMs)); // 0-based
+  const nextBoundary = genesis + (idx0 + 1) * pulseMs;
+  const raw = nextBoundary - epochMs;
+
+  // Keep it sane (no busy-loop, no giant stalls)
+  const delay = Math.ceil(Math.max(25, Math.min(60_000, raw)));
+  return Number.isFinite(delay) ? delay : null;
+}
+
+/**
+ * Live SPEC-NOW pulse (ticks on the next pulse boundary).
+ * Only used when the caller didn't provide an authoritative pulse.
+ */
+function useSpecNowPulse(enabled: boolean): number {
+  const [p, setP] = useState<number>(() => readPulseNowFromSpec() ?? 0);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    let cancelled = false;
+    let t: number | null = null;
+
+    const tick = (): void => {
+      if (cancelled) return;
+
+      const next = readPulseNowFromSpec();
+      if (next && next > 0) setP(next);
+
+      const delay = readNextPulseDelayMsFromSpec() ?? 1000;
+      t = window.setTimeout(tick, delay);
+    };
+
+    tick();
+
+    return () => {
+      cancelled = true;
+      if (t !== null) window.clearTimeout(t);
+    };
+  }, [enabled]);
+
+  return p;
+}
+
 export type ProofCopy = Readonly<{
   verifierUrl: string;
   verifierBaseUrl: string;
@@ -132,6 +257,10 @@ export default function VerifierFrame({
   const [copyProofStatus, setCopyProofStatus] = useState<"idle" | "ok" | "error">("idle");
   const [proofHash, setProofHash] = useState<string | null>(null);
 
+  const pulseProvided = toValidPulse(pulse);
+  const specPulse = useSpecNowPulse(pulseProvided === null);
+  const pulseEff = pulseProvided ?? specPulse;
+
   const proof = useMemo<ProofCopy>(() => {
     const baseRaw = verifierBaseUrl ?? defaultHostedVerifierBaseUrl();
     const base = String(baseRaw).replace(/\/+$/, "") || "/verify";
@@ -139,19 +268,23 @@ export default function VerifierFrame({
     const sigFull = typeof kaiSignature === "string" ? kaiSignature.trim() : "";
     const sigShort = shortKaiSig10(sigFull);
 
-    const slug = buildVerifierSlug(pulse, sigFull);
-    const url = buildVerifierUrl(pulse, sigFull, base);
+    const p = Number.isFinite(pulseEff) && pulseEff > 0 ? Math.floor(pulseEff) : 0;
+
+    const slug = buildVerifierSlug(p, sigFull);
+    const url = buildVerifierUrl(p, sigFull, base);
 
     const chakraNorm =
-      typeof chakraDay === "string" ? normalizeChakraDay(chakraDay) : normalizeChakraDay(String(chakraDay ?? ""));
+      typeof chakraDay === "string"
+        ? normalizeChakraDay(chakraDay)
+        : normalizeChakraDay(String(chakraDay ?? ""));
 
     const phiKeyClean = typeof phiKey === "string" ? phiKey.trim() : "";
 
     const capsule: ProofCapsuleV1 | null =
-      pulse > 0 && sigFull.length > 0 && phiKeyClean.length > 0 && chakraNorm
+      p > 0 && sigFull.length > 0 && phiKeyClean.length > 0 && chakraNorm
         ? {
             v: "KPV-1",
-            pulse,
+            pulse: p,
             chakraDay: chakraNorm,
             kaiSignature: sigFull,
             phiKey: phiKeyClean,
@@ -163,7 +296,7 @@ export default function VerifierFrame({
       verifierUrl: url,
       verifierBaseUrl: base,
       verifierSlug: slug,
-      pulse,
+      pulse: p,
       chakraDay: chakraNorm,
       kaiSignature: sigFull,
       kaiSignatureShort: sigShort,
@@ -171,7 +304,7 @@ export default function VerifierFrame({
       proofCapsule: capsule,
       proofHash: undefined,
     };
-  }, [chakraDay, kaiSignature, phiKey, pulse, verifierBaseUrl]);
+  }, [chakraDay, kaiSignature, phiKey, pulseEff, verifierBaseUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -236,7 +369,7 @@ export default function VerifierFrame({
   };
 
   const rootClass = compact ? "kv-verifier kv-verifier--compact" : "kv-verifier";
-  const pulseLabel = Number.isFinite(pulse) && pulse > 0 ? String(pulse) : "—";
+  const pulseLabel = Number.isFinite(proof.pulse) && proof.pulse > 0 ? String(proof.pulse) : "—";
   const captionClean = typeof caption === "string" ? caption.trim() : "";
   const truncatedPhiKey = truncateMiddle(proof.phiKey);
   const hashDisplay = proofHash ? truncateHash(proofHash) : "—";

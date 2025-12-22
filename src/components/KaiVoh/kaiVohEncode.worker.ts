@@ -9,7 +9,7 @@ type EncodeWorkerResponse =
   | { id: string; ok: false; error: string; ms: number };
 
 const nowMs = (): number =>
-  self.performance && typeof self.performance.now === "function" ? self.performance.now() : Date.now();
+  self.performance && typeof self.performance.now === "function" ? self.performance.now() : 0;
 
 self.onmessage = async (ev: MessageEvent<EncodeWorkerRequest>) => {
   const t0 = nowMs();
