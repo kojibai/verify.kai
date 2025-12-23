@@ -16,7 +16,28 @@ import {
   PULSES_STEP,
   STEPS_BEAT,
   BEATS_DAY,
+  microPulsesSinceGenesis,
 } from "./src/utils/kai_pulse";
+
+const cleanAnchor = (v: unknown): string | null => {
+  if (typeof v === "bigint") return v.toString();
+  if (typeof v === "number") {
+    if (!Number.isFinite(v)) return null;
+    return BigInt(Math.trunc(v)).toString();
+  }
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!/^[+-]?\d+$/.test(s)) return null;
+    return BigInt(s).toString();
+  }
+  return null;
+};
+
+const envAnchorRaw =
+  process.env.VITE_KAI_ANCHOR_MICRO ?? process.env.VITE_KAI_ANCHOR_PMICRO ?? null;
+
+const BUILD_ANCHOR_MICRO =
+  cleanAnchor(envAnchorRaw) ?? microPulsesSinceGenesis(Date.now()).toString();
 
 const SOVEREIGN_BUILD = {
   appVersion: BASE_APP_VERSION,
@@ -34,12 +55,7 @@ const SOVEREIGN_BUILD = {
   beatsPerDay: BEATS_DAY,
   nDayMicro: N_DAY_MICRO.toString(),
 
-  /**
-   * Optional “built-in” μpulse seed (string) — leave null unless you *intentionally*
-   * hard-code a sovereign anchor. Your runtime should still prefer:
-   *   checkpoint > signed anchor > localStorage anchor > RTC fallback
-   */
-  kaiAnchorMicro: null as string | null,
+  kaiAnchorMicro: BUILD_ANCHOR_MICRO,
 } as const;
 
 // https://vite.dev/config/
@@ -61,8 +77,9 @@ export default defineConfig({
     "import.meta.env.VITE_KAI_STEPS_BEAT": JSON.stringify(STEPS_BEAT),
     "import.meta.env.VITE_KAI_BEATS_DAY": JSON.stringify(BEATS_DAY),
 
-    // Optional built-in μpulse seed (string | null)
+    // Required build-baked μpulse seed (string; deterministic across all devices)
     "import.meta.env.VITE_KAI_ANCHOR_MICRO": JSON.stringify(SOVEREIGN_BUILD.kaiAnchorMicro),
+    "__KAI_ANCHOR_MICRO__": JSON.stringify(SOVEREIGN_BUILD.kaiAnchorMicro),
 
     // One sealed JSON blob for convenience (string)
     "import.meta.env.VITE_SOVEREIGN_BUILD_JSON": JSON.stringify(JSON.stringify(SOVEREIGN_BUILD)),
