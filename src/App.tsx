@@ -286,6 +286,12 @@ type BeatStepDMY = {
   month: number; // 1..MONTHS_PER_YEAR
   year: number; // 0-based
 };
+type NavLinkClassNameFn = Exclude<
+  React.ComponentProps<typeof NavLink>["className"],
+  string | undefined
+>;
+
+type NavLinkClassNameProps = Parameters<NavLinkClassNameFn>[0];
 
 /* ──────────────────────────────────────────────────────────────────────────────
    Kai anchor + deterministic clock helpers
@@ -1893,7 +1899,10 @@ export function AppChrome(): React.JSX.Element {
                       key={item.to}
                       to={item.to}
                       end={item.end}
-                      className={({ isActive }) => `nav-item ${isActive ? "nav-item--active" : ""}`}
+                      className={(p: NavLinkClassNameProps) =>
+  `nav-item ${p.isActive ? "nav-item--active" : ""}`
+}
+
                       aria-label={`${item.label}: ${item.desc}`}
                     >
                       <div className="nav-item__label">{item.label}</div>
