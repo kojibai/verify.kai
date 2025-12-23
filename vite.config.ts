@@ -16,6 +16,7 @@ import {
   PULSES_STEP,
   STEPS_BEAT,
   BEATS_DAY,
+  microPulsesSinceGenesis,
 } from "./src/utils/kai_pulse";
 
 const cleanAnchor = (v: unknown): string | null => {
@@ -35,12 +36,8 @@ const cleanAnchor = (v: unknown): string | null => {
 const envAnchorRaw =
   process.env.VITE_KAI_ANCHOR_MICRO ?? process.env.VITE_KAI_ANCHOR_PMICRO ?? null;
 
-const BUILD_ANCHOR_MICRO = cleanAnchor(envAnchorRaw);
-if (BUILD_ANCHOR_MICRO === null) {
-  throw new Error(
-    "Kairos build anchor missing: set VITE_KAI_ANCHOR_MICRO (μpulses since Genesis) to a deterministic value."
-  );
-}
+const BUILD_ANCHOR_MICRO =
+  cleanAnchor(envAnchorRaw) ?? microPulsesSinceGenesis(Date.now()).toString();
 
 const SOVEREIGN_BUILD = {
   appVersion: BASE_APP_VERSION,
