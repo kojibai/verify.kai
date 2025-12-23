@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import { GENESIS_TS, PULSE_MS } from "../utils/kai_pulse";
+import { ONE_PULSE_MICRO, PULSE_MS, kairosEpochNow } from "../utils/kai_pulse";
 
 /** ---------- Public types (imported by other files) ---------- */
 export type KPricePoint = { p: number; price: number; vol: number };
@@ -79,9 +79,8 @@ const kaiPulseNow = (): number => {
   const gBridge = getGlobal<KaiPulseNowFn>("kaiPulseNowBridge") ?? getGlobal<KaiPulseNowFn>("kaiPulseNow");
   if (typeof gBridge === "function") return gBridge();
 
-  // Fallback bridge (client-only; monotonic-ish; no Date.now)
-  const nowMs = performance.timeOrigin + performance.now();
-  return (nowMs - GENESIS_TS) / PULSE_MS;
+  const micro = kairosEpochNow();
+  return Number(micro) / Number(ONE_PULSE_MICRO);
 };
 
 /** ---------- helpers ---------- */

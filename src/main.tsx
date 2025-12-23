@@ -10,7 +10,7 @@ import { APP_VERSION, SW_VERSION_EVENT } from "./version";
 
 // ✅ REPLACE scheduler impl with your utils cadence file
 import { startKaiCadence } from "./utils/kai_cadence";
-import { GENESIS_TS, PULSE_MS, seedKaiNowMicroPulses } from "./utils/kai_pulse";
+import { microPulsesSinceGenesis, seedKaiNowMicroPulses } from "./utils/kai_pulse";
 
 
 /* ────────────────────────────────────────────────────────────────
@@ -41,25 +41,6 @@ const parseBigInt = (v: unknown): bigint | null => {
   }
 };
 
-const roundTiesToEvenBigInt = (x: number): bigint => {
-  if (!Number.isFinite(x)) return 0n;
-  const sign = x < 0 ? -1 : 1;
-  const ax = Math.abs(x);
-  const i = Math.trunc(ax);
-  const frac = ax - i;
-
-  if (frac < 0.5) return BigInt(sign * i);
-  if (frac > 0.5) return BigInt(sign * (i + 1));
-  // exactly .5 → ties-to-even
-  return BigInt(sign * (i % 2 === 0 ? i : i + 1));
-};
-
-const microPulsesSinceGenesisFromEpochMs = (epochMs: number): bigint => {
-  const deltaMs = epochMs - GENESIS_TS;
-  const pulses = deltaMs / PULSE_MS; // PULSE_MS may be fractional; OK
-  return roundTiesToEvenBigInt(pulses * 1_000_000);
-};
-
 const readSeedFromLocalStorage = (): bigint | null => {
   if (typeof window === "undefined") return null;
   try {
@@ -81,6 +62,17 @@ const readSeedFromEnv = (): bigint | null => {
   return parseBigInt(typeof raw === "string" ? raw : undefined);
 };
 
+const hostEpochMs = (): number => {
+  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+    const origin =
+      typeof performance.timeOrigin === "number" && Number.isFinite(performance.timeOrigin)
+        ? performance.timeOrigin
+        : Date.now() - performance.now();
+    return origin + performance.now();
+  }
+  return Date.now();
+};
+
 const pickSeedMicroPulses = (): bigint => {
   const fromLS = readSeedFromLocalStorage();
   if (fromLS !== null) return fromLS;
@@ -88,9 +80,8 @@ const pickSeedMicroPulses = (): bigint => {
   const fromEnv = readSeedFromEnv();
   if (fromEnv !== null) return fromEnv;
 
-  // final fallback: one-time bridge from perf-derived epoch ms
-  const epochMs = performance.timeOrigin + performance.now();
-  return microPulsesSinceGenesisFromEpochMs(epochMs);
+  // deterministic anchor derived from host epoch once at boot
+  return microPulsesSinceGenesis(hostEpochMs());
 };
 
 // 🔒 MUST happen before any component calls kairosEpochNow()

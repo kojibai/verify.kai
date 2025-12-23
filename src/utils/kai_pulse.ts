@@ -162,45 +162,57 @@ const chakraForWeekdayIndex = (idx: number): { weekday: Weekday; chakraDay: Chak
 
 // ─────────────────────────────────────────────────────────────
 // DETERMINISTIC “NOW” (μpulse provider)
-//   - NO Date.now / new Date defaults
-//   - Seed once with μpulses coordinate, then advance via monotonic time
-//   - v13.3.0: optional build-time hard-coded anchor (Vite define)
+//   - Seed once with μpulses coordinate, then advance via explicit tick counter
+//   - No Date.now / performance.now / process.hrtime sampling
+//   - Optional build-time hard-coded anchor (Vite define)
 // ─────────────────────────────────────────────────────────────
 export type KaiNowMicroProvider = () => bigint;
+export type KaiNowTick = { micro: bigint; pulse: number; microInPulse: bigint };
 
-type PerformanceLike = { now: () => number };
-type HrtimeLike = { bigint: () => bigint };
-type ProcessLike = { hrtime?: HrtimeLike };
-type GlobalLike = { performance?: PerformanceLike; process?: ProcessLike };
+export const ONE_PULSE_MICRO = 1_000_000n as const;
+export const KAI_NOW_TICK_MS = 16 as const;
+
+type KaiProviderKind = "deterministic" | "external";
+
+const KAI_TICK_MS_BI = BigInt(KAI_NOW_TICK_MS);
+const MICRO_PER_TICK = mulDivRoundHalfEven(KAI_TICK_MS_BI, INV_Tx1000_NUM, INV_Tx1000_DEN);
 
 let __nowProvider: KaiNowMicroProvider | null = null;
-let __seeded = false;
-let __seedMicro = 0n;
-let __seedMonoUs = 0n;
+let __providerKind: KaiProviderKind | null = null;
+let __currentMicro = 0n;
+let __tickHandle: number | null = null;
+const __listeners = new Set<(snap: KaiNowTick) => void>();
 
-function monotonicNowUs(): bigint {
-  const g = globalThis as unknown as GlobalLike;
-
-  const perf = g.performance;
-  if (perf && typeof perf.now === "function") {
-    // perf.now() is ms; convert to μs
-    return BigInt(Math.round(perf.now() * 1000));
+const stopKaiTicker = () => {
+  if (__tickHandle !== null && typeof window !== "undefined") {
+    window.clearInterval(__tickHandle);
   }
+  __tickHandle = null;
+};
 
-  const proc = g.process;
-  const hr = proc?.hrtime;
-  if (hr && typeof hr.bigint === "function") {
-    return hr.bigint() / 1_000n; // ns → μs
+const readKaiTick = (): KaiNowTick => {
+  const micro = __nowProvider ? __nowProvider() : 0n;
+  const pulseBI = floorDivE(micro, ONE_PULSE_MICRO);
+  const microInPulse = modE(micro, ONE_PULSE_MICRO);
+  return { micro, pulse: toSafeNumber(pulseBI), microInPulse };
+};
+
+const emitKaiTick = () => {
+  const snap = readKaiTick();
+  for (const l of __listeners) {
+    l(snap);
   }
+};
 
-  return 0n;
-}
-
-function hasMonotonicClock(): boolean {
-  const g = globalThis as unknown as GlobalLike;
-  return !!(g.performance && typeof g.performance.now === "function") ||
-         !!(g.process?.hrtime && typeof g.process.hrtime.bigint === "function");
-}
+const startKaiTicker = () => {
+  if (typeof window === "undefined" || __tickHandle !== null) return;
+  __tickHandle = window.setInterval(() => {
+    if (__providerKind === "deterministic") {
+      __currentMicro += MICRO_PER_TICK;
+    }
+    emitKaiTick();
+  }, KAI_NOW_TICK_MS);
+};
 
 /**
  * Build-time sovereign anchor injection (NO env files):
@@ -228,10 +240,7 @@ function parseBuildAnchorMicro(v: unknown): bigint | null {
 }
 
 function tryAutoSeedFromBuildAnchor(): void {
-  if (__seeded || __nowProvider) return;
-
-  // Only auto-seed when a monotonic clock exists; otherwise seeding at mono=0 would drift incorrectly later.
-  if (!hasMonotonicClock()) return;
+  if (__nowProvider) return;
 
   // `typeof` guard: if the symbol is not defined by bundler, referencing it would throw.
   // In Vite builds with `define`, it WILL be defined.
@@ -250,27 +259,30 @@ function tryAutoSeedFromBuildAnchor(): void {
   seedKaiNowMicroPulses(anchor);
 }
 
+const hostEpochMs = (): number => {
+  const g = globalThis as unknown as { performance?: { now?: () => number; timeOrigin?: number } };
+  const perf = g.performance;
+  if (perf && typeof perf.now === "function") {
+    const origin =
+      typeof perf.timeOrigin === "number" && Number.isFinite(perf.timeOrigin)
+        ? perf.timeOrigin
+        : Date.now() - perf.now();
+    return origin + perf.now();
+  }
+  return Date.now();
+};
+
+const defaultKaiAnchorMicro = (): bigint => {
+  return microPulsesSinceGenesis(hostEpochMs());
+};
+
 /** Seed deterministic NOW from a known μpulse coordinate. */
 export function seedKaiNowMicroPulses(pμ: bigint): void {
-  __seeded = true;
-  __seedMicro = pμ;
-  __seedMonoUs = monotonicNowUs();
-
-  if (!__nowProvider) {
-    __nowProvider = () => {
-      if (!__seeded) throw new Error("Kai NOW not seeded.");
-      const nowUs = monotonicNowUs();
-      const deltaUs = nowUs - __seedMonoUs;
-
-      // μs → ms (ties-to-even)
-      const deltaMs = mulDivRoundHalfEven(deltaUs, 1n, 1000n);
-
-      // ms → μpulses (ties-to-even), using φ-exact INV_Tx1000
-      const deltaMicro = mulDivRoundHalfEven(deltaMs, INV_Tx1000_NUM, INV_Tx1000_DEN);
-
-      return __seedMicro + deltaMicro;
-    };
-  }
+  __currentMicro = pμ;
+  __providerKind = "deterministic";
+  __nowProvider = () => __currentMicro;
+  startKaiTicker();
+  emitKaiTick();
 }
 
 /** Convenience: seed deterministic NOW from a single UTC input (one-time coordinate selection). */
@@ -281,6 +293,13 @@ export function seedKaiNowFromUTC(utc: string | number | Date | bigint): void {
 /** Override NOW provider (recommended: wire your PulseClock’s μpulse getter). */
 export function setKaiNowMicroProvider(provider: KaiNowMicroProvider | null): void {
   __nowProvider = provider;
+  __providerKind = provider ? "external" : null;
+  if (provider) {
+    __currentMicro = provider();
+    startKaiTicker();
+  } else {
+    stopKaiTicker();
+  }
 }
 
 /** Read deterministic NOW μpulses (requires seed/provider; auto-seeds if build anchor is present). */
@@ -289,21 +308,49 @@ function kaiNowMicroPulses(): bigint {
     tryAutoSeedFromBuildAnchor();
   }
   if (!__nowProvider) {
-    throw new Error(
-      "Kai NOW provider not set. Sovereign options:\n" +
-        "  1) Build-time define: __KAI_ANCHOR_MICRO__ (recommended)\n" +
-        "  2) Call seedKaiNowMicroPulses(anchorMicro) once on boot\n" +
-        "  3) Call setKaiNowMicroProvider(() => microPulses)\n"
-    );
+    seedKaiNowMicroPulses(defaultKaiAnchorMicro());
   }
-  return __nowProvider();
+  const fn = __nowProvider;
+  if (!fn) throw new Error("Kai NOW provider unavailable after seeding.");
+  return fn();
+}
+
+/** Subscribe to deterministic Kai ticks (fires immediately with current snapshot). */
+export function subscribeKaiNow(listener: (snap: KaiNowTick) => void): () => void {
+  const snap = readKaiTick();
+  listener(snap);
+  __listeners.add(listener);
+  startKaiTicker();
+  return () => {
+    __listeners.delete(listener);
+    if (__listeners.size === 0 && __providerKind !== "deterministic") {
+      stopKaiTicker();
+    }
+  };
 }
 
 /** Convert μpulses → epoch ms (deterministic, derived from Genesis + φ bridge). */
-function epochMsFromMicroPulses(pμ: bigint): bigint {
+export function epochMsFromMicroPulses(pμ: bigint): bigint {
   // ms = round( μpulses * (ms/pulse) / 1e6 )
   const deltaMs = mulDivRoundHalfEven(pμ, T_MS_NUM, T_MS_DEN * 1_000_000n);
   return BigInt(GENESIS_TS) + deltaMs;
+}
+
+/** Number helper for UI consumers. */
+export function epochMsFromKaiMicro(pμ: bigint): number {
+  return Number(epochMsFromMicroPulses(pμ));
+}
+
+/** Current epoch-ms derived solely from deterministic Kai μpulses. */
+export function epochMsFromKaiNow(): number {
+  return epochMsFromKaiMicro(kairosEpochNow());
+}
+
+let __kaiMonotonicBase: number | null = null;
+export function kaiMonotonicMs(): number {
+  const ms = epochMsFromKaiNow();
+  if (__kaiMonotonicBase === null) __kaiMonotonicBase = ms;
+  return ms - __kaiMonotonicBase;
 }
 
 // ─────────────────────────────────────────────────────────────
