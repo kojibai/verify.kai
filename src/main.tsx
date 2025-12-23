@@ -10,15 +10,14 @@ import { APP_VERSION, SW_VERSION_EVENT } from "./version";
 
 // ✅ REPLACE scheduler impl with your utils cadence file
 import { startKaiCadence } from "./utils/kai_cadence";
-import { microPulsesSinceGenesis, seedKaiNowMicroPulses } from "./utils/kai_pulse";
+import { seedKaiNowMicroPulses } from "./utils/kai_pulse";
 
 
 /* ────────────────────────────────────────────────────────────────
    Kai NOW seeding (μpulses) — one-time coordinate selection only.
    Priority:
      1) localStorage checkpoint (if present)
-     2) build-injected env anchor: VITE_KAI_ANCHOR_MICRO
-     3) performance.timeOrigin + performance.now() → bridged to μpulses
+     2) build-injected env anchor: VITE_KAI_ANCHOR_MICRO (required)
 ────────────────────────────────────────────────────────────────── */
 
 const KAI_SEED_KEYS: readonly string[] = [
@@ -62,17 +61,6 @@ const readSeedFromEnv = (): bigint | null => {
   return parseBigInt(typeof raw === "string" ? raw : undefined);
 };
 
-const hostEpochMs = (): number => {
-  if (typeof performance !== "undefined" && typeof performance.now === "function") {
-    const origin =
-      typeof performance.timeOrigin === "number" && Number.isFinite(performance.timeOrigin)
-        ? performance.timeOrigin
-        : Date.now() - performance.now();
-    return origin + performance.now();
-  }
-  return Date.now();
-};
-
 const pickSeedMicroPulses = (): bigint => {
   const fromLS = readSeedFromLocalStorage();
   if (fromLS !== null) return fromLS;
@@ -80,8 +68,7 @@ const pickSeedMicroPulses = (): bigint => {
   const fromEnv = readSeedFromEnv();
   if (fromEnv !== null) return fromEnv;
 
-  // deterministic anchor derived from host epoch once at boot
-  return microPulsesSinceGenesis(hostEpochMs());
+  throw new Error("Kairos anchor missing: build-time μpulse seed must be provided.");
 };
 
 // 🔒 MUST happen before any component calls kairosEpochNow()
