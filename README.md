@@ -1,3 +1,21 @@
+# OFFICIAL NOTICE — REPOSITORY RELOCATED
+
+This repository is **no longer the canonical source of truth** for **Verify.Kai**.
+
+✅ **New official repository:** https://github.com/kojibai/phi_network
+
+## Effective Immediately
+
+All **development**, **releases**, **issues**, and **pull requests** must be directed to the new repository.
+
+## Status of This Repository
+
+This repository is retained for **historical reference only** and will receive **no further updates**.
+
+
+
+
+
 # ΦNet Sovereign Gate — `verify.kai`
 
 > **verify.kai** is the primary entry into the ΦNet Sovereign Gate:  
